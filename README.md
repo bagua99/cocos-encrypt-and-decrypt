@@ -1,5 +1,5 @@
 # cocos-encrypt-and-decrypt
-cocos xxxtea
+
 解密：
 
 1、首先将闲来广东麻将guangdongmj.apk改名后缀闲来广东麻将guangdongmj.rar
@@ -19,7 +19,7 @@ cocos xxxtea
    input是载入目录,output输出目录,SQLLiteData签名,mXjv7U5dUl1aMTVV_xianlai密钥,1解密,.plist;.wav;.mp3;过滤文件
 
 
-加密解密不限lua文件,使用所有xxxtea加密算法
+加密解密不限lua文件,适用所有xxxtea加密算法
 
 
 签名查找方法：
