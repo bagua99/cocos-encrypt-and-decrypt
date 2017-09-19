@@ -1,0 +1,55 @@
+
+local gt = cc.exports.gt
+
+local GMCheckHistory = class("GMCheckHistory", function()
+	return cc.Layer:create()
+end)
+
+function GMCheckHistory:ctor()
+	self:registerScriptHandler(handler(self, self.onNodeEvent))
+
+	local csbNode = cc.CSLoader:createNode("GMCheckHistory.csb")
+	csbNode:setPosition(gt.winCenter)
+	self:addChild(csbNode)
+
+	local confirmBtn = gt.seekNodeByName(csbNode, "Btn_confirm")
+	gt.addBtnPressedListener(confirmBtn, function()
+		local uidTxtField = gt.seekNodeByName(csbNode, "TxtField_uid")
+		local uid = uidTxtField:getString()
+		self:enterHistoryRecord(uid)
+	end)
+
+	local cancelBtn = gt.seekNodeByName(csbNode, "Btn_cancel")
+	gt.addBtnPressedListener(cancelBtn, function()
+		self:removeFromParent()
+	end)
+end
+
+function GMCheckHistory:onNodeEvent(eventName)
+	if "enter" == eventName then
+		-- 触摸事件
+		local listener = cc.EventListenerTouchOneByOne:create()
+		listener:setSwallowTouches(true)
+		listener:registerScriptHandler(handler(self, self.onTouchBegan), cc.Handler.EVENT_TOUCH_BEGAN)
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:addEventListenerWithSceneGraphPriority(listener, self)
+	elseif "exit" == eventName then
+		-- 移除触摸事件
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:removeEventListenersForTarget(self)
+	end
+end
+
+function GMCheckHistory:onTouchBegan(touch, event)
+	gt.log("GMCheckHistory:onTouchBegan")
+	return true
+end
+
+function GMCheckHistory:enterHistoryRecord(uid)
+	self:removeFromParent()
+	
+	gt.dispatchEvent(gt.EventType.GM_CHECK_HISTORY, uid)
+end
+
+return GMCheckHistory
+

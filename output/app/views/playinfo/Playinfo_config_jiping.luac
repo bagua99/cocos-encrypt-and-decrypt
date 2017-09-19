@@ -1,0 +1,9 @@
+local PlayinfoConfigJiPing = class("PlayinfoConfigBase", require("app/views/playinfo/Playinfo_config_base"))
+
+function PlayinfoConfigJiPing:getShowList( )
+	return {
+		72, 70, 69
+	}
+end
+
+return PlayinfoConfigJiPing

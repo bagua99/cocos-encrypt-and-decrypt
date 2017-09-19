@@ -1,0 +1,27 @@
+local RcvStartGame = class("RcvStartGame", BaseRoomAgreement)
+
+-- 开始游戏 50
+function RcvStartGame:ctor()
+	self:registerMsgListener(gt.GC_START_GAME, self, self.onRcvStartGame)
+end
+
+function RcvStartGame:onRcvStartGame(msgTbl)
+	--设置房间状态
+	local room = self.m_scene:getRoom()
+	room:setRoomStatus(Room.Status.PLAY)
+
+	if(self.m_scene.m_outMjtileSignNode) then 
+		self.m_scene.m_outMjtileSignNode:setVisible(false);
+	end 
+
+	self.m_scene.m_startinitHorse = true;
+	local rcvSyncRoomState = self.m_scene:getArgeement("RcvSyncRoomState")
+	rcvSyncRoomState:onRcvSyncRoomState(msgTbl)
+
+
+	
+	--开始游戏  放开语音按钮
+	self.m_scene.m_yuyinButton:setVisible(true)
+end
+
+return RcvStartGame

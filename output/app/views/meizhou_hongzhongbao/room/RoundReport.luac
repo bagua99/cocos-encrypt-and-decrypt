@@ -1,0 +1,299 @@
+--region app.views.hongzhong.room.RoundReport
+--desc: hongzhong 的 一局结算界面
+--endregion
+
+local _mod = ...;
+_mod= string.gsub(_mod,"%/","%.");
+
+local config = import('..config',_mod);
+local RoundReport = class("RoundReport",  BaseRoundReport)
+local RuleType = config.RuleType;
+
+
+
+RoundReport.HUMSG = clone(BaseRoundReport.HUMSG)
+RoundReport.HUMSG[7] = "自摸"
+RoundReport.HUMSG[8] = "杠上开花加马"
+RoundReport.HUMSG[999] = "杠上开花"
+
+RoundReport.HUMSG[12] = "抢杠胡"
+RoundReport.HUMSG[14] = "门清"
+RoundReport.HUMSG[146] = "无红中"
+
+--胡牌类型和玩法ID之间的对应
+local _E_HU_PLAY_TYPY = {
+	-- [8] = 102,   	--杠上开花
+	--[9] = 103,   	--杠爆
+--	[12] = 17,   	--抢杠
+	-- [14] = 100,   	--门清
+	-- [146] = 101,   	--无红中
+}
+
+-- 玩法
+local _E_RULE ={
+    [100] = "门清加分", 
+    [101] = "无红中加分",
+    [37]  = "打出红中加分",
+    [15]  = "庄闲加分",
+    [5]   = "可胡七对",
+    [102] = "杠上开花加马",
+    [17]  = "抢杠全包",
+    [103] = "杠爆全包"
+}
+
+-- 扎马
+local _E_ZHAMA = {
+        [0] = "无马",
+        [2] = "买2马",
+        [4] = "买4马",
+        [6] = "买6马",
+        [67] = "买8马",
+    }
+--玩法
+local _E_WANFA = {
+	[69] = '无番起胡',
+	[72] = '三番起胡',
+	[73] = '五番起胡',
+	[106] = '四番起胡',
+	[35] = "马跟底分",
+}
+
+
+-- 是否有个这个玩法
+local function _isHavaPlayerID(nPlayerId)
+	for k ,var in pairs(gt.roomPlayData.m_playtype) do
+		if var == nPlayerId then
+			return true
+		end
+	end
+	return false
+end
+
+-- 是否是一马全中
+local function _isOneZhaMa() 
+	for k ,var in pairs(gt.roomPlayData.m_playtype) do
+		if var == 68 then
+			return true
+		end
+	end
+	return false
+end
+
+ -- 是否是不扎马
+local function _isNoZhama()
+	for k ,var in pairs(gt.roomPlayData.m_playtype) do
+		if var == 0 then
+			return true
+		end
+	end
+	return false
+end
+
+-- 获取中马次数 红中，1 5 9
+local function _getZhaMaNum(rptMsgTbl,seatIdx)  
+	local _nCnt = 0
+	if rptMsgTbl.m_bird_infos and #rptMsgTbl.m_bird_infos > 0 then
+		for i=1,#rptMsgTbl.m_bird_infos do
+			local _bird = rptMsgTbl.m_bird_infos[i]
+			if _bird[1] == seatIdx-1 then
+				_nCnt = _nCnt + 1 
+			end
+		end
+	end
+	return _nCnt
+end
+    
+function RoundReport:ctor()
+	self.super.ctor(self)
+end
+
+
+function RoundReport:init(roomPlayers, playerSeatIdx, rptMsgTbl, isLast)
+	
+	local Node_zhuaniao = gt.seekNodeByName(self.m_csbNode, "Node_zhuaniao")
+	RoundReport.super.init(self, roomPlayers, playerSeatIdx, rptMsgTbl, isLast)
+	--马牌
+	local Node_zhuaniao = gt.seekNodeByName(self.m_csbNode, "Node_zhuaniao")
+	if rptMsgTbl.m_bird_infos and #rptMsgTbl.m_bird_infos > 0 then
+		local ttf = gt.createTTFLabel("马牌", 30)
+		Node_zhuaniao:addChild(ttf)
+		table.foreach(rptMsgTbl.m_bird_infos, function(i, bird)
+			local color = bird[2][1]
+			local number = bird[2][2]
+			local mjTileName = string.format("p4s%d_%d.png", color, number)
+			local mjTileSpr = cc.Sprite:createWithSpriteFrameName(mjTileName)
+			if bird[1] < 0 then
+				mjTileSpr:setColor(cc.c3b(127,127,127))
+			end	
+			
+			if Tools.isGhost(color, number, self.m_gui) then
+				Tools.setMjTilesAngle( 4, mjTileSpr, gt.anglePngPath )
+			end
+
+			mjTileSpr:setScale(0.7)
+			mjTileSpr:setPosition(cc.p(20 + i * mjTileSpr:getContentSize().width * 0.7, 0))
+			Node_zhuaniao:addChild(mjTileSpr)
+		end)
+	end
+end
+
+function RoundReport:isLost(roundResult)
+	if roundResult == 0 or roundResult == 3 then
+		return true
+	end
+end
+
+function RoundReport:isWin(roundResult)
+	if roundResult == 1 or roundResult == 2 or roundResult == 4 or roundResult == 5 then
+		return true
+	end
+end
+
+
+--胡牌 详情
+function RoundReport:getDetailTxt(seatIdx, rptMsgTbl)
+
+	local detailTxt = ""
+	local roundResult = rptMsgTbl["m_hu" .. seatIdx]
+	
+	for k,v in pairs(roundResult) do
+		if self.HUMSG[v] and  v ~= 1 then
+			while 1 do
+				if v == 8 then    -- 杠上开花
+					local _nPlayerID = _E_HU_PLAY_TYPY[v]
+					if _isHavaPlayerID(_nPlayerID) then
+						detailTxt = detailTxt .. " " .. self.HUMSG[v]
+					else
+						detailTxt = detailTxt .. " " .. self.HUMSG[999]
+					end
+					break 
+				end
+
+				if _E_HU_PLAY_TYPY[v] ~= nil then
+					local _nPlayerID = _E_HU_PLAY_TYPY[v]
+					if _isHavaPlayerID(_nPlayerID) then
+						detailTxt = detailTxt .. " " .. self.HUMSG[v]
+					end
+					break 
+				end
+				detailTxt = detailTxt .. " " .. self.HUMSG[v]
+				break
+			end
+		end
+	end
+
+	if rptMsgTbl.m_mgang[seatIdx] > 0 then
+		detailTxt = detailTxt .. " 明杠x" .. rptMsgTbl.m_mgang[seatIdx]
+	end
+
+	if rptMsgTbl.m_agang[seatIdx] > 0 then
+		detailTxt = detailTxt .. " 暗杠x" .. rptMsgTbl.m_agang[seatIdx]
+	end
+
+	if rptMsgTbl.m_dgang[seatIdx] > 0 then
+		detailTxt = detailTxt .. " 点杠x" .. rptMsgTbl.m_dgang[seatIdx]
+	end
+
+	local _nRoundResult = rptMsgTbl.m_win[seatIdx] 
+	local _bIsWin = false
+	if _nRoundResult == 1 or _nRoundResult == 2 then  --胡了
+		_bIsWin = true 
+	end 
+	if _bIsWin == true and rptMsgTbl.m_playoutHongZhong[seatIdx] > 0 and _isHavaPlayerID(37) then
+		detailTxt = detailTxt .. " 打出红中x" .. rptMsgTbl.m_playoutHongZhong[seatIdx]
+
+	end
+ 
+
+	--扎马说明
+	local _nRoundResult = rptMsgTbl.m_win[seatIdx] 
+	if _nRoundResult == 1 or _nRoundResult == 2 or _nRoundResult == 4 or _nRoundResult == 5 then  --胡了
+		if _isHavaPlayerID(0) then  --不扎马
+
+		elseif _isHavaPlayerID(68) then -- 一马全中
+			detailTxt = string.format("%s %s", detailTxt,"一马全中" )	
+		else
+			dump(rptMsgTbl,"中马")
+			local _maNum = _getZhaMaNum(rptMsgTbl,seatIdx)
+			if _maNum > 0 then
+				detailTxt = string.format("%s 中马X%d ", detailTxt,_maNum)	
+			end
+		end
+	end
+
+	return detailTxt
+end
+
+
+-- 设置胡牌标识
+function RoundReport:setWinSign(seatIdx, rptMsgTbl, playerReportNode, referScale, referPos)
+	local ishu = rptMsgTbl.m_win[seatIdx]
+	if ishu == 1 or ishu == 2 or ishu == 4 or ishu == 5 then
+		if #rptMsgTbl.m_hucards ~= 0 then
+			local mjTileName = string.format("p4s%d_%d.png", rptMsgTbl.m_hucards[1][1], rptMsgTbl.m_hucards[1][2])
+			local mjTileSpr = cc.Sprite:createWithSpriteFrameName(mjTileName)
+			mjTileSpr:setScale(referScale)
+			mjTileSpr:setPosition(referPos.x + 16, referPos.y)
+			playerReportNode:addChild(mjTileSpr)
+
+			local huSpr = cc.Sprite:create("res/sd/images/otherImages/hudejiaobiao1.png")
+			huSpr:setAnchorPoint(cc.p(1, 1))
+			huSpr:setPosition(cc.p(mjTileSpr:getContentSize().width, mjTileSpr:getContentSize().height))
+			mjTileSpr:addChild(huSpr)
+
+			if Tools.isGhost(rptMsgTbl.m_hucards[1][1], rptMsgTbl.m_hucards[1][2], self.m_gui) then
+				Tools.setMjTilesAngle( 4, mjTileSpr, gt.anglePngPath )
+			end
+		end
+		return true
+	end
+	return false
+end
+
+
+function RoundReport:showFinal(  )
+	local runningScene = display.getRunningScene()
+	if runningScene:getChildren(Room.ZOrder.REPORT) then
+		runningScene:getChildren(Room.ZOrder.REPORT):setVisible(true)
+	end
+end
+
+function RoundReport:showPlayType(roomPlayers, playerSeatIdx, rptMsgTbl)
+	local typeNode = gt.seekNodeByName(self.m_csbNode, "Node_playType")
+
+	if not typeNode then
+		return
+	end
+	
+	local ruleDesc = ""
+	local quanbao = ""
+	local _sZhaMa = "" -- 扎马
+	local _sWanFa = "" -- 玩法
+
+	dump(gt.roomPlayData.m_playtype,"m_playtype___")
+
+	for i, v in pairs(gt.roomPlayData.m_playtype) do
+		if _E_WANFA[v] ~= nil then -- 
+			_sWanFa = _sWanFa .. "  ".. _E_WANFA[v]
+		elseif _E_ZHAMA[v] ~= nil then -- 买马
+			_sZhaMa = _E_ZHAMA[v]
+		else
+			if _E_RULE[v] ~= nil then
+				ruleDesc = ruleDesc .. _E_RULE[v] .. "  "  
+			end
+		end
+	end
+	
+	ruleDesc = ruleDesc .. _sWanFa .. "   " .. _sZhaMa
+
+	local descLable = gt.createTTFLabel(ruleDesc, 25)
+	descLable:setAnchorPoint(cc.p(0, 0.5))
+	typeNode:addChild(descLable)
+
+	if descLable:getContentSize().width > RoundReport.TTF_DES_MAX_WIDTH  then
+		descLable:setWidth(RoundReport.TTF_DES_MAX_WIDTH)
+		descLable:setLineBreakWithoutSpace(true)
+	end
+end
+
+return RoundReport

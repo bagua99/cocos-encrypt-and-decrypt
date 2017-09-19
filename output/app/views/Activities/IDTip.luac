@@ -1,0 +1,86 @@
+
+local gt = cc.exports.gt
+
+local IDTip = class("IDTip", function()
+	return cc.LayerColor:create(cc.c4b(85, 85, 85, 85), gt.winSize.width, gt.winSize.height)
+end)
+
+function IDTip:ctor()
+
+	local csbNode = cc.CSLoader:createNode("IDTip.csb")
+	csbNode:setPosition(gt.winCenter)
+	self:addChild(csbNode)
+	self.rootNode = csbNode
+
+	
+	self.id = gt.seekNodeByName(csbNode, "id")
+	self.name = gt.seekNodeByName(csbNode, "name")
+	-- 关闭按钮
+	local closeBtn = gt.seekNodeByName(csbNode, "Btn_close")
+	gt.addBtnPressedListener(closeBtn, function()
+		self:removeFromParent()
+	end)
+
+	local sendBtn = gt.seekNodeByName(csbNode, "Btn_send")
+	gt.addBtnPressedListener(sendBtn, handler(self, self.Check))
+
+	-- gt.socketClient:registerMsgListener(gt.GC_REAL_NAME, self, self.onRcv)
+	local listener = cc.EventListenerTouchOneByOne:create()
+	listener:setSwallowTouches(true)
+	listener:registerScriptHandler(handler(self, self.onTouchBegan), cc.Handler.EVENT_TOUCH_BEGAN)
+	local eventDispatcher = self:getEventDispatcher()
+	eventDispatcher:addEventListenerWithSceneGraphPriority(listener, self)
+end
+
+function IDTip:onTouchBegan(  )
+	return true
+end
+
+function IDTip:Check()
+	print("clicl")
+	local name = self.name:getString()
+	print("name:"..name.."  "..#name)
+	if string.match(name,"[\128-\254]+") ~= name then
+		require("app/views/NoticeTips"):create("提示", "姓名输入错误,请重新输入!", nil, nil, true)
+		return
+	end
+	
+	local id = self.id:getString()
+	print("id:"..id)
+	if string.match(id,"%d+[Xx]?") ~= id or (#id ~= 15 and #id ~= 18) then
+		require("app/views/NoticeTips"):create("提示", "身份证码号输入错误,请重新输入!", nil, nil, true)
+		return
+	end
+	
+	-- local msgToSend = {}
+	-- msgToSend.m_NameStr = name
+	-- msgToSend.m_IDNumberStr = id
+	-- msgToSend.m_msgId = gt.CG_REAL_NAME
+
+	-- gt.socketClient:sendMessage(msgToSend)
+	Tools.saveKeyValue("id_" .. gt.playerData.uid, name .. "," .. id)
+	self:Remove()
+	require("app/views/NoticeTips"):create("提示", "实名认证成功！", nil, nil, true)
+end
+
+function IDTip:onRcv(msgTbl)
+	print("请求实名认证结果："..msgTbl.m_nResult)
+	if msgTbl.m_nResult ~= 0 then
+		require("app/views/NoticeTips"):create("提示", "实名信息错误，请核对后重新输入！", nil, nil, true)
+		return
+	end
+	self:Remove()
+	gt.isRealID = true
+	require("app/views/NoticeTips"):create("提示", "实名认证成功！", nil, nil, true)
+end
+
+function IDTip:Remove()
+	-- gt.socketClient:unregisterMsgListener(gt.GC_REAL_NAME)
+	self:removeFromParent()
+	local runningScene = cc.Director:getInstance():getRunningScene()
+	if runningScene and runningScene.checkID then
+		runningScene:checkID()
+	end
+end
+
+return IDTip

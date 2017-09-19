@@ -1,0 +1,73 @@
+
+
+local gt = cc.exports.gt
+
+local mt =
+{
+	implement =
+	{
+		init = nil,
+		login = nil,
+		logout = nil,
+		messageHandler = nil,
+		channelID = "",
+		payWay = "IOS",
+		platformID = "AppStore",
+		infoList = {}
+	}
+}
+
+local function getPayHost(  )
+	if gt.isInReview then -- 审核服务器
+		return "http://test-payment.xlsxmj.com"
+	elseif gt.isDebugPackage then
+		if gt.debugInfo.YunDun then -- 线上服务器
+			return "http://payment-center.xianlaigame.com"
+		else  -- 测试服务器
+			return "http://114.215.173.164:7800"
+		end
+	else
+		return "http://payment-center.xianlaigame.com"
+	end
+end
+
+--mt.implement.infoList = infoList
+-- start --
+--------------------------------
+-- @class function init
+-- @description 登录
+-- end --
+local function init()
+	gt.log("AppStore init")
+	gt.serverCode = "guangdong_db"
+	--后台验证url	
+	local payHost = getPayHost()
+	gt.payUrl = payHost .. "/payment-center/core/ios/notifyIOS.json"
+	gt.checkLimitUrl = payHost .. "/payment-center/core/ios/checkPayStatus.json"
+	gt.createOrderUrl = payHost .. "/payment-center/core/ios/createPreOrder.json"
+	gt.searchOrderUrl = payHost .. "/payment-center/core/ios/queryPreOrder.json"
+	gt.deleteOrderUrl = payHost .. "/payment-center/core/ios/removePreOrder.json"
+
+	gt.chargeURL = ""  --充值验证
+end
+
+mt.implement.init = init
+
+-- start --
+--------------------------------
+-- @class function pay
+-- @description 支付
+-- end --
+local function pay(price, orderId, itemId)
+	gt.log("App store pay")
+	local luaBridge = require("cocos/cocos2d/luaoc")
+	luaBridge.callStaticMethod("AppController", "postMessage", {event = "PAY", productId = tostring(itemId)})
+	-- ApiBridge:postMessageToSdk(json.encode({ event = "PAY" ,_price = price ,_orderId = orderId ,_itemId = itemId}))
+end
+mt.implement.pay = pay
+
+
+
+-- mt.implement.messageHandler = messageHandler
+
+return mt.implement

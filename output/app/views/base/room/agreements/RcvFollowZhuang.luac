@@ -1,0 +1,19 @@
+local RcvFollowZhuang = class("RcvFollowZhuang", BaseRoomAgreement)
+
+-- 其他玩家进入房间 31
+function RcvFollowZhuang:ctor()
+	self:registerMsgListener(gt.GC_FOLLOWZHUANG, self, self.playZhuang)
+end
+
+function RcvFollowZhuang:playZhuang( msgTbl )
+	if not self.m_scene.followZhuangAnimateNode or  not self.m_scene.followZhuangAnimate then
+		local followZhuangAnimateNode, brightBarAnimate = gt.createCSAnimation("animation/genzhuang.csb")
+		followZhuangAnimateNode:setPosition(gt.winCenter)
+		self.m_scene.followZhuangAnimateNode = followZhuangAnimateNode
+		self.m_scene.followZhuangAnimate = brightBarAnimate
+		self.m_scene:addChild(followZhuangAnimateNode, Room.ZOrder.MJBAR_ANIMATION)
+	end
+	self.m_scene.followZhuangAnimate:play("genzhuang", false)
+end
+
+return RcvFollowZhuang

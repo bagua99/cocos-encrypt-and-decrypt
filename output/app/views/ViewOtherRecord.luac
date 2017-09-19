@@ -1,0 +1,173 @@
+
+local gt = cc.exports.gt
+
+local ViewOtherRecord = class("ViewOtherRecord", function()
+	return gt.createMaskLayer()
+end)
+
+function ViewOtherRecord:ctor(parent)
+	self.parent = parent
+
+	local csbNode = cc.CSLoader:createNode("ViewOtherRecord.csb")
+	csbNode:setAnchorPoint(0.5, 0.5)
+	csbNode:setPosition(gt.winCenter)
+	self:addChild(csbNode)
+	self.rootNode = csbNode
+
+	self.textField_code = gt.seekNodeByName(self.rootNode, "TxtField_code")
+	self.textField_code:setPlaceHolder("请输入他人分享的回放码")
+
+	-- 取消按钮
+	local cancelBtn = gt.seekNodeByName(self.rootNode, "Btn_cancel")
+	gt.addBtnPressedListener(cancelBtn, function()
+		self:destroy()
+	end)
+
+	-- 确定按钮
+	local okBtn = gt.seekNodeByName(self.rootNode, "Btn_ok")
+	gt.addBtnPressedListener(okBtn, function()
+		local codeStr = self.textField_code:getString()
+		local codeNum = tonumber(codeStr)
+		if codeNum then
+			-- 发送请求战绩消息
+			local msgToSend = {}
+			msgToSend.m_msgId = gt.CG_SHARE_REPLAY
+			msgToSend.m_shareID = codeNum
+			gt.socketClient:sendMessage(msgToSend)
+		else
+			gt.floatText("你输入的回放码有误，请重新输入")
+		end
+	end)
+
+	gt.socketClient:registerMsgListener(gt.GC_SHARE_REPLAY, self, self.onRcvShareReplay)
+	gt.socketClient:registerMsgListener(gt.GC_REPLAY, self, self.onRcvReplay)
+end
+
+function ViewOtherRecord:onRcvShareReplay(msgTbl)
+	if msgTbl.m_errorId == 1 then
+		self.m_ruleFlag = msgTbl.m_flag; -- 这个同样也是 RuleType ,same to HistoryRecord.lua 
+		self:historyItemClickEvent(msgTbl)
+	else
+		self.m_ruleFlag = 0;
+		gt.floatText("你查询的录像不存在")
+	end
+end
+
+function ViewOtherRecord:historyItemClickEvent(msgTbl)
+	--服务器定义消息msgTbl(m_errorId(0,1),m_match(m_nike(),m_score()[待定],m_time(),m_videoId()))
+	local detailPanel = cc.CSLoader:createNode(self:fixForThree("HistoryDetailSearch.csb"))
+	detailPanel:setAnchorPoint(0.5,0.5)
+	detailPanel:setPosition(gt.winCenter)
+	self:addChild(detailPanel)
+	-- 玩家昵称
+	local num = self:getPlayerNumber();
+	--print('ViewOtherRecord:getPlayerNumber() = '..num);
+	for i = 1 ,4 do 
+		local nicknameLabel = gt.seekNodeByName(detailPanel, "Label_nickname_" .. i)
+		if(nicknameLabel) then 
+			nicknameLabel:setVisible(false);
+		end 
+	end
+
+	for i=1,num do
+		local nicknameLabel = gt.seekNodeByName(detailPanel, "Label_nickname_" .. i)
+		nicknameLabel:setString("玩家" .. i)
+	end
+	local contentListVw = gt.seekNodeByName(detailPanel, "ListVw_content")
+
+	local closeBtn = gt.seekNodeByName(detailPanel, "Btn_close")
+	gt.addBtnPressedListener(closeBtn, function()
+		self:destroy()
+	end)
+
+	for i,v in ipairs(msgTbl.m_data) do
+		local detailCellNode = cc.CSLoader:createNode(self:fixForThree("HistoryDetailCell.csb"))
+		local player2 = gt.seekNodeByName(detailCellNode,"Label_score_2")
+		local player3 = gt.seekNodeByName(detailCellNode,"Label_score_3")
+		local player4 = gt.seekNodeByName(detailCellNode,"Label_score_4")
+        
+		player2:setPositionX(player2:getPositionX()+50)
+		player3:setPositionX(player3:getPositionX()+100)
+		player4:setPositionX(player4:getPositionX()+130)
+		-- 序号
+		local numLabel = gt.seekNodeByName(detailCellNode, "Label_num")
+		--numLabel:setTextColor(cc.YELLOW)
+		numLabel:setString(tostring(i))
+		-- 对战时间
+		local timeLabel = gt.seekNodeByName(detailCellNode, "Label_time")
+		--timeLabel:setTextColor(cc.YELLOW)
+		local timeTbl = os.date("*t", v.m_time)
+		timeLabel:setString(string.format("%d-%d %d:%d", timeTbl.month, timeTbl.day, timeTbl.hour, timeTbl.min))
+		--对战分数
+
+		for m = 1,4 do 
+			local widget = gt.seekNodeByName(detailCellNode, "Label_score_" .. m);
+			widget:setVisible(false);
+		end 
+		for j, m_nike in ipairs(v.m_nike) do
+			local scoreLabel = gt.seekNodeByName(detailCellNode, "Label_score_" .. j)
+			scoreLabel:setVisible(true);
+			scoreLabel:setString(Tools.getUTF8StrByLenth(m_nike, 6) or "")
+		end
+
+		-- 查牌按钮
+		local replayBtn = gt.seekNodeByName(detailCellNode, "Btn_replay")
+		replayBtn.videoId = v.m_videoId
+		replayBtn:setPositionX(replayBtn:getPositionX())
+		gt.addBtnPressedListener(replayBtn, function(sender)
+			local btnTag = sender.videoId
+			local msgToSend = {}
+			msgToSend.m_msgId = gt.GC_GET_VIDEO
+			msgToSend.m_videoId = btnTag
+			gt.socketClient:sendMessage(msgToSend)
+		end)
+
+		local shareBtn = gt.seekNodeByName(detailCellNode, "Btn_share")
+		shareBtn:setVisible(false)
+
+		local cellSize = detailCellNode:getContentSize()
+		local detailItem = ccui.Widget:create()
+		detailItem:setContentSize(cellSize)
+		detailItem:addChild(detailCellNode)
+		contentListVw:pushBackCustomItem(detailItem)
+	end
+end
+
+function ViewOtherRecord:onRcvReplay(msgTbl)
+	local layer = self:getChildByName("ViewReplayLayer")
+	if not layer then
+		local replayLayer = require("app/views/ReplayLayer"):create(msgTbl)
+		self:addChild(replayLayer, 6)
+	end
+end
+
+function ViewOtherRecord:destroy()
+	gt.socketClient:unregisterMsgListener(gt.GC_SHARE_REPLAY)
+	gt.socketClient:unregisterMsgListener(gt.GC_REPLAY)
+	gt.socketClient:registerMsgListener(gt.GC_REPLAY, self.parent, self.parent.onRcvReplay)
+	-- gt.socketClient:unregisterMsgListener(gt.GC_SHARE_BTN)
+	self:removeSelf()
+end
+
+	--local str = fileName..'Three'..".csb";
+function ViewOtherRecord:getPlayerNumber()
+	if(self.m_ruleFlag == gt.RoomType.ROOM_TUIDAOHU_THREE) then
+		return 3
+	elseif(self.m_ruleFlag == gt.RoomType.ROOM_TUIDAOHU_TWO) then 
+		return 2
+	end 
+	return 4;
+end 
+
+function ViewOtherRecord:fixForThree(fileName)
+	if(4 == self:getPlayerNumber()) then
+		return fileName;
+	end 
+	--3人的情况
+	local idx = fileName:find('.csb');
+	print(tostring(idx));
+	local ret = fileName:sub(0,idx-1);
+	return ret..'Three'..'.csb';	
+end 
+
+return ViewOtherRecord

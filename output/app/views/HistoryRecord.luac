@@ -1,0 +1,349 @@
+--region 历史记录页面
+--
+local gt = cc.exports.gt
+
+local HistoryRecord = class("HistoryRecord", function()
+	return gt.createMaskLayer()
+end)
+
+function HistoryRecord:ctor(uid)
+	-- 注册节点事件
+	self:registerScriptHandler(handler(self, self.onNodeEvent))
+
+	local csbNode = cc.CSLoader:createNode("HistoryRecord.csb")
+	csbNode:setAnchorPoint(0.5, 0.5)
+	csbNode:setPosition(gt.winCenter)
+	self:addChild(csbNode)
+	self.rootNode = csbNode
+
+	--查看他人回放
+	-- 查看他人战绩按钮
+	local replayBtn = gt.seekNodeByName(csbNode, "Btn_replay")
+	gt.addBtnPressedListener(replayBtn, function(sender)
+		local viewOtherRecord = require("app/views/ViewOtherRecord"):create(self)
+		self:addChild(viewOtherRecord)
+	end)
+	if gt.isInReview then
+		replayBtn:setVisible(false)
+	end
+
+	-- 战绩标题
+	local titleRoomNode = gt.seekNodeByName(csbNode, "Node_titleRoom")
+	titleRoomNode:setVisible(false)
+
+	-- 无战绩提示
+	local emptyLabel = gt.seekNodeByName(csbNode, "Label_empty")
+	emptyLabel:setVisible(false)
+
+	-- 返回按钮
+	local backBtn = gt.seekNodeByName(csbNode, "Btn_back")
+	gt.addBtnPressedListener(backBtn, function()
+		local historyListVw = gt.seekNodeByName(self.rootNode, "ListVw_content")
+		if historyListVw:isVisible() then
+			-- 移除消息回调
+			gt.socketClient:unregisterMsgListener(gt.GC_HISTORY_RECORD)
+			gt.socketClient:unregisterMsgListener(gt.GC_REPLAY)
+
+			-- 移除界面,返回主界面
+			self:removeFromParent()
+		else
+			-- 隐藏详细信息
+			local titleRoomNode = gt.seekNodeByName(csbNode, "Node_titleRoom")
+			titleRoomNode:setVisible(false)
+			historyListVw:setVisible(true)
+			local historyDetailNode = gt.seekNodeByName(self.rootNode, "Node_historyDetail")
+			historyDetailNode:removeAllChildren()
+		end
+	end)
+
+	--  底部背景条
+	local Spr_btmTips = gt.seekNodeByName(self, "Spr_btmTips")
+
+	-- 发送请求战绩消息
+	local msgToSend = {}
+	msgToSend.m_msgId = gt.CG_HISTORY_RECORD
+	msgToSend.m_time = 123456
+	if gt.isGM == 1 then
+		msgToSend.m_userId = tonumber(uid)
+	end
+	gt.socketClient:sendMessage(msgToSend)
+
+	-- 注册消息回调
+	gt.socketClient:registerMsgListener(gt.GC_HISTORY_RECORD, self, self.onRcvHistoryRecord)
+	gt.socketClient:registerMsgListener(gt.GC_REPLAY, self, self.onRcvReplay)
+
+	gt.socketClient:registerMsgListener(gt.GC_SHARE_BTN, self, self.onRcvShare)
+end
+
+function HistoryRecord:onNodeEvent(eventName)
+	if "enter" == eventName then
+		-- 触摸事件
+		local listener = cc.EventListenerTouchOneByOne:create()
+		listener:setSwallowTouches(true)
+		listener:registerScriptHandler(handler(self, self.onTouchBegan), cc.Handler.EVENT_TOUCH_BEGAN)
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:addEventListenerWithSceneGraphPriority(listener, self)
+	elseif "exit" == eventName then
+		-- 移除触摸事件
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:removeEventListenersForTarget(self)
+	end
+end
+
+function HistoryRecord:onTouchBegan(touch, event)
+	return true
+end
+
+function HistoryRecord:onRcvHistoryRecord(msgTbl)
+	if #msgTbl.m_data == 0 then
+		-- 没有战绩
+		local emptyLabel = gt.seekNodeByName(self.rootNode, "Label_empty")
+		emptyLabel:setVisible(true)
+	else
+		--存储的是规则, 比如说 15= 三人推倒胡,12 = 推倒胡
+		--self.m_ruleFlag = msgTbl.m_flag; -- 3 还是4人的标记 mark 所有的变量名也是服务器发过来的。。囧
+		-- 显示战绩列表
+		self.historyMsgTbl = msgTbl
+
+		local historyListVw = gt.seekNodeByName(self.rootNode, "ListVw_content")
+		for i, cellData in ipairs(msgTbl.m_data) do
+			local historyItem = self:createHistoryItem(i, cellData)
+			historyListVw:pushBackCustomItem(historyItem)
+		end
+	end
+end
+
+function HistoryRecord:onRcvReplay(msgTbl)
+	local layer = self:getChildByName("ViewReplayLayer")
+	if not layer then
+		local replayLayer = require("app/views/ReplayLayer"):create(msgTbl)
+		self:addChild(replayLayer, 6)
+	end
+end
+
+-- start --
+--------------------------------
+-- @class function
+-- @description 创建战绩条目
+-- @param cellData 条目数据
+-- end --
+function HistoryRecord:createHistoryItem(tag, cellData)
+	local cellNode = cc.CSLoader:createNode(self:fixForThree(cellData,"HistoryCell.csb"))
+	-- 序号
+	local numLabel = gt.seekNodeByName(cellNode, "Label_num")
+	numLabel:setString(tostring(tag))
+	-- 房间号
+	local roomIDLabel = gt.seekNodeByName(cellNode, "Label_roomID")
+	roomIDLabel:setString(gt.getLocationString("LTKey_0039", cellData.m_deskId))
+	-- 对战时间
+	local timeLabel = gt.seekNodeByName(cellNode, "Label_time")
+	local timeTbl = os.date("*t", cellData.m_time)
+	timeLabel:setString(gt.getLocationString("LTKey_0040", timeTbl.year, timeTbl.month, timeTbl.day, timeTbl.hour, timeTbl.min, timeTbl.sec))
+	-- 玩家昵称+分数
+	local num = self:getPlayerNumber(cellData);
+	for i, v in ipairs(cellData.m_nike) do
+		local nicknameLabel = gt.seekNodeByName(cellNode, "Label_nickname_" .. i)
+		if(nicknameLabel) then
+			nicknameLabel:setVisible(false);
+		end 
+		local scoreLabel = gt.seekNodeByName(cellNode, "Label_score_" .. i)
+		if(scoreLabel) then 
+			scoreLabel:setVisible(false);
+		end 
+	end
+	for i, v in ipairs(cellData.m_nike) do
+		if(i >num)then
+			break;
+		end 
+		local nicknameLabel = gt.seekNodeByName(cellNode, "Label_nickname_" .. i)
+		nicknameLabel:setString(v)
+		nicknameLabel:setVisible(true)
+		local scoreLabel = gt.seekNodeByName(cellNode, "Label_score_" .. i)
+		scoreLabel:setString(tostring(cellData.m_score[i]))
+		scoreLabel:setVisible(true)
+	end
+
+	local cellSize = cellNode:getContentSize()
+	local cellItem = ccui.Widget:create()
+	cellItem:setTag(tag)
+	cellItem:setTouchEnabled(true)
+	cellItem:setContentSize(cellSize)
+	cellItem:addChild(cellNode)
+	cellItem:addClickEventListener(handler(self, self.historyItemClickEvent))
+	-- cellItem:addClickEventListener(handler(self, self.sendHistoryOne))
+	return cellItem
+end
+
+function HistoryRecord:historyItemClickEvent(sender, eventType)
+	-- 隐藏历史记录
+	local historyListVw = gt.seekNodeByName(self.rootNode, "ListVw_content")
+	historyListVw:setVisible(false)
+	-- 切换标题
+	local titleRoomNode = gt.seekNodeByName(self.rootNode, "Node_titleRoom")
+	titleRoomNode:setVisible(true)
+
+	local itemTag = sender:getTag()
+	local cellData = self.historyMsgTbl.m_data[itemTag]
+	local historyDetailNode = gt.seekNodeByName(self.rootNode, "Node_historyDetail")
+	local detailPanel = cc.CSLoader:createNode(self:fixForThree(cellData,"HistoryDetail.csb"))
+	detailPanel:setAnchorPoint(0.5, 0.5)
+	historyDetailNode:addChild(detailPanel)
+
+	for i = 1,4 do 
+		local nicknameLabel = gt.seekNodeByName(detailPanel, "Label_nickname_" .. i)
+		nicknameLabel:setVisible(false)
+	end 
+	-- 玩家昵称
+	local num  = self:getPlayerNumber(cellData)
+	for i, v in ipairs(cellData.m_nike) do
+		if(i > num)then
+			break;
+		end 
+		local nicknameLabel = gt.seekNodeByName(detailPanel, "Label_nickname_" .. i)
+		nicknameLabel:setString(Tools.getUTF8StrByLenth(v, 4) or "")
+		nicknameLabel:setVisible(true);
+	end
+	-- 对应详细记录信息
+	local contentListVw = gt.seekNodeByName(detailPanel, "ListVw_content")
+	for i, v in ipairs(cellData.m_match) do
+		local detailCellNode = cc.CSLoader:createNode(self:fixForThree(cellData,"HistoryDetailCell.csb"))
+		--背景
+		if i%2 ~= 0 then
+			local small_bg = gt.seekNodeByName(detailCellNode, "Image_tiao_an")
+			small_bg:setVisible(false)
+		end
+
+		-- 序号
+		local numLabel = gt.seekNodeByName(detailCellNode, "Label_num")
+		numLabel:setString(tostring(i))
+		-- 对战时间
+		local timeLabel = gt.seekNodeByName(detailCellNode, "Label_time")
+		local timeTbl = os.date("*t", v.m_time)
+		timeLabel:setString(string.format("%d-%d %d:%d", timeTbl.month, timeTbl.day, timeTbl.hour, timeTbl.min))
+
+		for m = 1,4 do 
+			local widget = gt.seekNodeByName(detailCellNode, "Label_score_" .. m);
+			widget:setVisible(false);
+		end 
+		-- 对战分数
+		for j, score in ipairs(v.m_score) do
+			if(j >num)then
+				break;
+			end 
+			local scoreLabel = gt.seekNodeByName(detailCellNode, "Label_score_" .. j)
+			scoreLabel:setString(tostring(score))
+			scoreLabel:show();
+		end
+
+		-- 查牌按钮
+		local replayBtn = gt.seekNodeByName(detailCellNode, "Btn_replay")
+		-- replayBtn:setVisible(false)
+		replayBtn:setTag(v.m_videoId)
+		gt.addBtnPressedListener(replayBtn, function(sender)
+			local btnTag = sender:getTag()
+
+			-- 请求打牌回放数据
+			local msgToSend = {}
+			msgToSend.m_msgId = gt.CG_REPLAY
+			msgToSend.m_videoId = v.m_videoId--btnTag
+			gt.socketClient:sendMessage(msgToSend)
+		end)
+
+		-- 分享按钮
+		local shareBtn = gt.seekNodeByName(detailCellNode, "Btn_share")
+		shareBtn.data = v
+		gt.addBtnPressedListener(shareBtn, function(sender)
+			local data = sender.data
+			local msgToSend = {}
+			msgToSend.m_msgId = gt.CG_SHARE_BTN
+			msgToSend.m_videoId = data.m_videoId
+			gt.socketClient:sendMessage(msgToSend)
+		end)
+
+		if gt.isInReview then
+			shareBtn:setVisible(false)
+		end
+
+		local cellSize = detailCellNode:getContentSize()
+		local detailItem = ccui.Widget:create()
+		detailItem:setContentSize(cellSize)
+		detailItem:addChild(detailCellNode)
+		contentListVw:pushBackCustomItem(detailItem)
+	end
+end
+
+--接受到服务器返回的回放码
+function HistoryRecord:onRcvShare(msgTbl)
+	if msgTbl.m_errorId == 0 then
+		self.m_shareId = msgTbl.m_shareId
+		if self.m_shareId and self.m_shareId ~= "" then
+			if gt.isIOSPlatform() then
+				self.luaBridge = require("cocos/cocos2d/luaoc")
+			elseif gt.isAndroidPlatform() then
+				self.luaBridge = require("cocos/cocos2d/luaj")
+			end
+
+			local nickName = ""
+			local tab = {}
+			for uchar in string.gfind(gt.wxNickName, "[%z\1-\127\194-\244][\128-\191]*") do 
+				tab[#tab+1] = uchar
+				if #tab <= 6 then
+					nickName = nickName .. uchar
+				end
+			end
+			if #tab > 6 then
+				nickName = nickName .. "..."
+			end
+			self.description = "玩家【"..nickName.."】分享了一个回放码："..self.m_shareId.."，在大厅点击进入战绩页面，然后点击查看回放按钮，输入回放码点击确定后即可查看。"
+			self.title = "【" .. gt.getLocationString("LTKey_0050") .. "】"
+			self.url = string.format(gt.getLocationString("LTKey_0056"), gt.OpenAppAction.REPLAYVIEW, tostring(self.m_shareId))
+			--gt.getLocationString("LTKey_0051")
+			self.androidParam = "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V"
+			
+			if gt.isIOSPlatform() then
+				print("self.description:" .. self.description)
+				local ok = self.luaBridge.callStaticMethod("AppController", "shareURLToWX",
+					{url = self.url, title = self.title, description = self.description})
+			elseif gt.isAndroidPlatform() then
+				local ok = self.luaBridge.callStaticMethod("org/cocos2dx/lua/AppActivity", "shareURLToWX",
+					{self.url, self.title, self.description},
+					self.androidParam)
+			end
+		else
+			gt.floatText("回放码不存在")
+		end
+	else
+		gt.floatText("录像不存在")
+	end
+end
+
+function HistoryRecord:getPlayerNumber(cellDB)
+	if(cellDB.m_flag == gt.RoomType.ROOM_TUIDAOHU_THREE) then
+		print('HistoryRecord:getPlayerNumber()= '..cellDB.m_flag);
+		return 3
+	elseif(cellDB.m_flag == gt.RoomType.ROOM_TUIDAOHU_TWO) then 
+		return 2;
+	end 
+	return 4;
+end 
+function HistoryRecord:fixForThree(cellDB,fileName)
+	--local str = fileName..'Three'..".csb";
+	-- local function getPlayerNumber()
+	-- 	if(self.m_ruleFlag == gt.RoomType.ROOM_TUIDAOHU_THREE) then
+	-- 		return 3
+	-- 	end 
+	-- 	return 4;
+	-- end 
+
+	if(4 == self:getPlayerNumber(cellDB)) then
+		return fileName;
+	end 
+	--3人的情况
+	local idx = fileName:find('.csb');
+	print(tostring(idx));
+	local ret = fileName:sub(0,idx-1);
+	return ret..'Three'..'.csb';	
+end 
+
+return HistoryRecord
+

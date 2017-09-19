@@ -1,0 +1,25 @@
+local RcvFeedCard = class("RcvFeedCard", BaseRoomAgreement)
+
+-- 通知抓马
+function RcvFeedCard:ctor()
+	self:registerMsgListener(gt.GC_FEED_CARD, self, self.onFeedCard)
+end
+
+--
+-- msg = {
+-- 	m_cardNum, --number => 桌子剩余牌数量
+-- 	m_horseCar = { --马牌
+-- 		m_color,
+-- 		m_number,
+-- 	},
+-- }
+function RcvFeedCard:onFeedCard(msgTbl)
+	print("RcvFeedCard:onFeedCard");
+	self.m_scene:feedCard(msgTbl);
+
+    
+
+end
+
+
+return RcvFeedCard

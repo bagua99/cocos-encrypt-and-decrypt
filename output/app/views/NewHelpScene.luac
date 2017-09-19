@@ -1,0 +1,61 @@
+
+local gt = cc.exports.gt
+
+local NewHelpScene = class("NewHelpScene", function()
+	return gt.createMaskLayer()
+end)
+
+function NewHelpScene:ctor()
+	local csbNode = cc.CSLoader:createNode("NewHelpScene.csb")
+	csbNode:setAnchorPoint(0.5, 0.5)
+	csbNode:setPosition(gt.winCenter)
+	self:addChild(csbNode)
+	self.csbNode = csbNode
+
+	--ttf
+	self.label = gt.seekNodeByName(csbNode, "Text")
+	self.label:setVisible(false)
+
+	--bg
+	self.scrollView_bg = gt.seekNodeByName(self.csbNode, "Image_scrollView_bg")
+	-- 返回按键
+	local backBtn = gt.seekNodeByName(self, "Btn_back")
+	gt.addBtnPressedListener(backBtn, function()
+		self:removeFromParent()
+	end)
+	self.backBtn = backBtn
+
+	self:onWebView()
+end
+
+--调webView
+function NewHelpScene:onWebView()
+	local scrollX = 0
+	local scrollY = 0
+	local url = gt.getLocationString("LTKey_0061")
+	scrollX = self.scrollView_bg:getPositionX()
+	scrollY = self.scrollView_bg:getPositionY()	
+    self._webView = ccexp.WebView:create()
+    self._webView:setContentSize(self.scrollView_bg:getContentSize().width - 50 , self.scrollView_bg:getContentSize().height - 50 )
+    
+    gt.log("个人请求", url)
+    self._webView:loadURL(url)
+    self._webView:setScalesPageToFit(true)
+
+    self._webView:setOnShouldStartLoading(function(sender, url)
+        return true
+    end)
+    self._webView:setOnDidFinishLoading(function(sender, url)
+    	-- self._webView:setVisible(true)
+    end)
+    self._webView:setOnDidFailLoading(function(sender, url)
+		self.label:setVisible(true)
+		self._webView:setVisible(false)
+    end)
+
+    local webNode = gt.seekNodeByName(self.csbNode, "scrollView_Node")
+    webNode:addChild(self._webView)
+
+end
+
+return NewHelpScene

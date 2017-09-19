@@ -1,0 +1,378 @@
+local RoomOptions = class("RoomOptions", BaseRoomOptions)
+
+local SELECT_TUIDAO_WANFA_KEY = "guangdong_tuidao_wanfa"
+local SELECT_TUIDAO_GUIPAI_KEY = "guangdong_tuidao_guipai"
+local SELECT_TUIDAO_MAPAI_KEY = "guangdong_tuidao_mapai"
+
+local userDefault = cc.UserDefault:getInstance()
+
+local Wanfa_Type = {5, 18, 10, 16, 17, 20, 30, 19, 33,35, 43, 53}
+local Guipai_Type = {7, 8, 9, 28}
+local Mapai_Type = {0, 2, 4, 6, 64,65,66,67}
+local Hu_Only_Gui = {8}
+local Hu_Only_Ma = {10,12} 
+
+function RoomOptions:ctor()
+	self.csbNode = cc.CSLoader:createNode("res/views/guangdong/CreateTuidao.csb")
+	self:addChild(self.csbNode)
+	self.disColor = cc.c3b(170,170,170)
+	RoomOptions.super.ctor(self)
+end
+function RoomOptions:initWanfa()
+	self.playWanfa = {1, 2, 3, 4, 0, 0, 0, 0, 0, 0,0,0}
+	local wan = Tools.getValue(SELECT_TUIDAO_WANFA_KEY)
+	if wan ~= "" then
+		wan = string.split(wan, ",")
+		for i = 1, #wan do
+			self.playWanfa[i] = tonumber(wan[i])
+		end
+	end
+--设置玩法选中
+	local function setSelectWanfa(index, check)
+		self.wanfaNodes[index].check:setSelected(check or false)
+		self:refreshCheckOutline(self.wanfaNodes[index].label, check or false)
+		if check then
+			self.playWanfa[index] = index
+		elseif check == false then
+			self.playWanfa[index] = 0
+		end
+	end
+	--玩法选中框逻辑
+	local function checkBoxWanfa( sender, eventType )
+		if eventType == ccui.CheckBoxEventType.selected then
+			if sender.index == 4 or sender.index == 5 then
+				setSelectWanfa(sender.index - 3, true)
+			elseif sender.index == 7 then
+				setSelectWanfa(sender.index - 5, true)
+			elseif sender.index == 12 then 
+				self:forbidSelectWanfa(7)
+			end
+
+			if sender.index == 2 and self.playBombMa == 5 then  --爆炸马的情况下，选择抢杠必须选中
+				setSelectWanfa(5, true)
+			end 
+			setSelectWanfa(sender.index, true)
+			Tools.saveKeyValue(SELECT_TUIDAO_WANFA_KEY, table.concat(self.playWanfa, ","))
+		elseif eventType == ccui.CheckBoxEventType.unselected then
+			if sender.index == 1 then
+				setSelectWanfa(sender.index + 3, false)
+			elseif sender.index == 2 then
+				setSelectWanfa(sender.index + 3, false)
+				setSelectWanfa(sender.index + 5, false)
+			elseif sender.index == 12 then 
+				self:allowSelectWanfa(7)
+			end
+
+			if sender.index == 5 and self.playBombMa == 5 then  --爆炸马的情况下，选择抢杠必须选中
+				setSelectWanfa(2, false)
+			end 
+			setSelectWanfa(sender.index, false)
+			Tools.saveKeyValue(SELECT_TUIDAO_WANFA_KEY, table.concat(self.playWanfa, ","))
+		end
+	end
+
+	self.wanfaNodes = self:getNodes(self.csbNode, "wanfa", #Wanfa_Type)
+	for i, v in ipairs(self.wanfaNodes) do
+		if self.playWanfa[i] == i then
+			if(i == 12) then
+				self:forbidSelectWanfa(7);
+			end 
+			setSelectWanfa(i, true)
+		else
+			setSelectWanfa(i)
+		end
+		
+		v.check.index = i
+		v.check:addEventListener(checkBoxWanfa)
+
+		v.panel:addClickEventListener(function(  )
+			if v.check:isSelected() then
+				checkBoxWanfa(v.check, ccui.CheckBoxEventType.unselected)
+			else
+				checkBoxWanfa(v.check, ccui.CheckBoxEventType.selected)
+			end
+		end)
+	end
+end
+
+--初始化鬼牌
+function RoomOptions:initGuipai()
+	self.playGuipai = {0, 2, 0, 0}
+	local gui = Tools.getValue(SELECT_TUIDAO_GUIPAI_KEY)
+	if gui ~= "" then
+		gui = string.split(gui, ",")
+		for i = 1, #gui do
+			self.playGuipai[i] = tonumber(gui[i])
+		end
+	end
+
+	local function setSelectGuipai(index, check)
+		self.guipaiNodes[index].check:setSelected(check or false)
+		self:refreshCheckOutline(self.guipaiNodes[index].label, check or false)
+		if check then
+			self.playGuipai[index] = index
+		elseif check == false then
+			self.playGuipai[index] = 0
+		end
+	end
+	local function checkBoxGuipai( sender, eventType )
+		if eventType == ccui.CheckBoxEventType.selected then
+			if self.playGuipai[1] == 0 and sender.index == 1 then
+				self:toWugui()
+			elseif self.playGuipai[1] ~= 0 and sender.index ~= 1 then
+				self:toYougui()
+			end
+			if sender.index == 4 then
+				setSelectGuipai(1, false)
+				setSelectGuipai(2, false)
+				setSelectGuipai(3, true)
+			elseif sender.index == 3 then
+				setSelectGuipai(1, false)
+				setSelectGuipai(2, false)
+			else
+				for i = 1, #Guipai_Type do
+					setSelectGuipai(i, false)
+				end
+			end
+			setSelectGuipai(sender.index, true)
+			Tools.saveKeyValue(SELECT_TUIDAO_GUIPAI_KEY, table.concat(self.playGuipai, ","))
+		elseif eventType == ccui.CheckBoxEventType.unselected then
+			if sender.index == 4 then
+				setSelectGuipai(4, false)
+				Tools.saveKeyValue(SELECT_TUIDAO_GUIPAI_KEY, table.concat(self.playGuipai, ","))
+			else
+				sender:setSelected(true)
+			end
+		end
+	end
+
+	self.guipaiNodes = self:getNodes(self.csbNode, "guipai", #Guipai_Type)
+	for i, v in ipairs(self.guipaiNodes) do		
+		if self.playGuipai[i] == i then
+			setSelectGuipai(i, true)
+		else
+			setSelectGuipai(i)
+		end
+		
+		v.check.index = i
+		v.check:addEventListener(checkBoxGuipai)
+
+		v.panel:addClickEventListener(function(  )
+			if v.check:isSelected() then
+				checkBoxGuipai(v.check, ccui.CheckBoxEventType.unselected)
+			else
+				checkBoxGuipai(v.check, ccui.CheckBoxEventType.selected)
+			end
+		end)
+	end
+	if self.playGuipai[1] ~= 0 then
+		self:toWugui()
+	end
+end
+
+function RoomOptions:initMapai()
+	self.playBombMa = 0;
+	self.playMapai = userDefault:getIntegerForKey(SELECT_TUIDAO_MAPAI_KEY, 1)
+	if(self.playMapai == 5) then --爆炸马 默认 修改成 加分
+		self.playMapai = 6;
+		self.playBombMa =5;
+	end
+
+	local function setSelectMapai(index, check)
+		self.mapaiNodes[index].check:setSelected(check or false)
+		self:refreshCheckOutline(self.mapaiNodes[index].label, check or false)
+		if check then
+			self.playMapai = index
+			userDefault:setIntegerForKey(SELECT_TUIDAO_MAPAI_KEY, index)
+		end
+	end
+	local function checkBoxMapai( sender, eventType )
+		if eventType == ccui.CheckBoxEventType.selected then
+			if(sender.index < 5 or sender.index == 8) then 
+				if sender.index == 1 then
+					self:toWuMa()
+				else
+					self:toYouMa()
+				end
+				if self.playMapai ~= sender.index then
+					setSelectMapai(self.playMapai, false)
+					setSelectMapai(sender.index, true)
+				end
+				self:toWuBompMai();
+			else
+				self:toBompMai();
+				if(sender.index == 5) then 
+					setSelectMapai(self.playMapai, false)
+					setSelectMapai(self.playBombMaChoice, true)
+				else
+					if self.playMapai ~= sender.index then
+						setSelectMapai(self.playMapai, false)
+						setSelectMapai(sender.index, true)
+						self.playBombMaChoice = sender.index;
+					end 
+				end
+			end
+
+		elseif eventType == ccui.CheckBoxEventType.unselected then
+			sender:setSelected(true)
+		end
+	end
+
+	self.mapaiNodes = self:getNodes(self.csbNode, "mapai", #Mapai_Type)
+	local bompMapai = false;
+	for i, v in ipairs(self.mapaiNodes) do		
+		if self.playMapai == i then
+			setSelectMapai(i, true)
+			if i == 1 then
+				self:toWuMa()
+			end
+			bompMapai = (i > 5 and i ~= 8);
+ 		else
+			setSelectMapai(i)
+		end
+
+		v.check.index = i
+		v.check:addEventListener(checkBoxMapai)
+		v.panel:addClickEventListener(function(  )
+			if not v.check:isSelected() then
+				checkBoxMapai(v.check, ccui.CheckBoxEventType.selected)
+			end
+		end)
+	end
+
+	if(bompMapai) then 
+ 		self:toBompMai()
+	else
+		self:toWuBompMai();
+	end
+end
+
+--禁止选中玩法
+function RoomOptions:forbidSelectWanfa(index)
+	self.wanfaNodes[index].check:setSelected(false);
+	self.wanfaNodes[index].check:setEnabled(false)
+	self:refreshCheckOutline(self.wanfaNodes[index].label, false)
+	self.wanfaNodes[index].label:setTextColor(self.disColor)
+	self.wanfaNodes[index].panel:setEnabled(false)
+	self.playWanfa[index] = 0
+end
+--允许选中玩法
+function RoomOptions:allowSelectWanfa(index)
+	self.wanfaNodes[index].check:setEnabled(true)
+	self:refreshCheckOutline(self.wanfaNodes[index].label, false)
+	self.wanfaNodes[index].panel:setEnabled(true)
+end
+
+function RoomOptions:forbidSelectMapai(index)
+	self.mapaiNodes[index].check:setSelected(false)
+	self.mapaiNodes[index].check:setEnabled(false)
+	self:refreshCheckOutline(self.mapaiNodes[index].label, false)
+	self.mapaiNodes[index].label:setTextColor(self.disColor)
+	self.mapaiNodes[index].panel:setEnabled(false)
+end 
+
+function RoomOptions:allowSelectMapai(index)
+	self.mapaiNodes[index].check:setEnabled(true)
+	self:refreshCheckOutline(self.mapaiNodes[index].label, false)
+	self.mapaiNodes[index].panel:setEnabled(true)
+end 
+--无鬼
+function RoomOptions:toYougui()
+	for i, v in ipairs(Hu_Only_Gui) do
+		self:allowSelectWanfa(v)
+	end
+	Tools.saveKeyValue(SELECT_TUIDAO_WANFA_KEY, table.concat(self.playWanfa, ","))
+end
+--有鬼
+function RoomOptions:toWugui()
+	for i, v in ipairs(Hu_Only_Gui) do
+		self:forbidSelectWanfa(v)
+	end
+	Tools.saveKeyValue(SELECT_TUIDAO_WANFA_KEY, table.concat(self.playWanfa, ","))
+end
+--有马
+function RoomOptions:toYouMa()
+	for i, v in ipairs(Hu_Only_Ma) do
+		self:allowSelectWanfa(v)
+	end
+	Tools.saveKeyValue(SELECT_TUIDAO_WANFA_KEY, table.concat(self.playWanfa, ","))
+end
+
+--无马
+function RoomOptions:toWuMa()
+	for i, v in ipairs(Hu_Only_Ma) do
+		self:forbidSelectWanfa(v)
+	end
+	--
+	self:allowSelectWanfa(7)
+	Tools.saveKeyValue(SELECT_TUIDAO_WANFA_KEY, table.concat(self.playWanfa, ","))
+end
+
+--爆炸马
+function RoomOptions:toBompMai()
+	self:toWuMa();
+	self.playBombMa = 5; --
+	self.playBombMaChoice = self.playBombMaChoice  or 6;
+	self.mapaiNodes[self.playBombMa ].check:setSelected(true)
+	self:refreshCheckOutline(self.mapaiNodes[self.playBombMa ].label,true);
+	-- for i, v in ipairs(Hu_Only_Ma) do  -- 
+	-- 	self:forbidSelectWanfa(v)
+	--end
+	self:allowSelectMapai(6);
+	self:allowSelectMapai(7);
+
+	local function setSelectWanfa(index, check)
+		self.wanfaNodes[index].check:setSelected(check or false)
+		self:refreshCheckOutline(self.wanfaNodes[index].label, check or false)
+		if check then
+			self.playWanfa[index] = index
+		elseif check == false then
+			self.playWanfa[index] = 0
+		end
+	end
+
+	if(self.playWanfa[2] ~= 0 or self.playWanfa[5] ~=0) then 
+		setSelectWanfa(2, true)
+		setSelectWanfa(5, true)
+	end 
+end 
+
+function RoomOptions:toWuBompMai()
+	if(self.playBombMa ~= 0 )then 
+		self.mapaiNodes[self.playBombMa ].check:setSelected(false)
+		self:refreshCheckOutline(self.mapaiNodes[self.playBombMa ].label,false);
+	end 
+    self.playBombMa = 0; --
+	self:forbidSelectMapai(6);
+	self:forbidSelectMapai(7);
+end 
+
+function RoomOptions:getStatu()
+	return gt.RoomType.ROOM_TUIDAOHU
+end
+
+function RoomOptions:getPlayType()
+	local typeList = {}
+	if(self.playBombMa ~= 0) then 
+		table.insert(typeList, Mapai_Type[self.playBombMa])
+	end 
+	table.insert(typeList, Mapai_Type[self.playMapai])
+
+
+	for k, v in pairs(self.playWanfa) do
+		if v ~= 0 then
+			table.insert(typeList, Wanfa_Type[v])
+		end
+	end
+
+	for i = #self.playGuipai, 1, -1 do
+		if self.playGuipai[i] ~= 0 then
+			table.insert(typeList, Guipai_Type[i])
+			break
+		end
+	end
+
+	return typeList
+end
+
+return RoomOptions

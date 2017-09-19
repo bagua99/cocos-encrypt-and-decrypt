@@ -1,0 +1,12 @@
+local RcvRoomCard = class("RcvRoomCard", BaseRoomAgreement)
+
+-- 更新玩家房卡 13
+function RcvRoomCard:ctor()
+	self:registerMsgListener(gt.GC_ROOM_CARD, self, self.onRcvRoomCard)
+end
+
+function RcvRoomCard:onRcvRoomCard(msgTbl)
+	gt.playerData.roomCardsCount = {msgTbl.m_card1, msgTbl.m_card2, msgTbl.m_card3}
+end
+
+return RcvRoomCard

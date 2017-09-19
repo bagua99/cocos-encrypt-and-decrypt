@@ -1,0 +1,733 @@
+-- region app.modules.player 
+-- 玩家 
+-- endregion
+
+local Player = class("Player")
+
+function Player:ctor()
+	--鬼牌
+	self.m_gui = nil
+	self.m_successCnt = 1 -- 连庄打次数
+	self.m_holdTilesTotal = 0;
+	self.m_sort_flag = false;
+end
+
+-- 初始化玩家保存牌table
+function Player:initMJTiles()
+	-- 玩家持有牌
+	self.m_holdMjTiles = {}
+	-- 玩家已出牌
+	self.m_outMjTiles = {}
+	-- 碰
+	self.m_mjTilePungs = {}
+	-- 明杠
+	self.m_mjTileBrightBars = {}
+	-- 暗杠
+	self.m_mjTileDarkBars = {}
+	-- 吃
+	self.m_mjTileEat = {}
+	-- 明补
+	self.m_mjTileBrightBu = {}
+	-- 暗补
+	self.m_mjTileDarkBu = {}	
+
+	--补得花牌
+	self.m_holdFlowers = {};
+
+	--补牌的动画组 
+	self.m_fillupActionNodes = {};
+	--补牌动画中断立即执行的动画
+	self.m_fillupImmiFunc = nil;
+end
+
+-- 添加一张持有牌
+function Player:addHoldMJTile(_tileSpr, _tileColor, _tileNumber)
+	--print("Player["..self.m_seatIdx ..'] 添加 持有牌 '..Tools.infoMJ(_tileColor,_tileNumber));
+	local data = {mjTileSpr = _tileSpr, mjColor = _tileColor, mjNumber = _tileNumber}
+	table.insert(self.m_holdMjTiles, data)
+	return data
+end
+
+-- 添加一张已出牌
+function Player:addOutMJTile(_tileSpr, _tileColor, _tileNumber)
+	table.insert(self.m_outMjTiles,
+		{mjTileSpr = _tileSpr, mjColor = _tileColor, mjNumber = _tileNumber})
+end
+
+-- 添加一组杠
+function Player:addBarMJTile(_tileColor, _tileNumber, _groupNode, _isBrightBar)
+	local barData = {mjColor = _tileColor, mjNumber = _tileNumber, groupNode = _groupNode}
+	if _isBrightBar then
+		table.insert(self.m_mjTileBrightBars, barData)
+	else
+		table.insert(self.m_mjTileDarkBars, barData)
+	end
+end
+
+-- 添加一组补张
+function Player:addBuMJTile(_tileColor, _tileNumber, _groupNode, _isBrightBu)
+	local buData = {mjColor = _tileColor, mjNumber = _tileNumber, groupNode = _groupNode}
+	if _isBrightBu then
+		table.insert(self.m_mjTileBrightBu, barData)
+	else
+		table.insert(self.m_mjTileDarkBu, barData)
+	end
+end
+
+--暗杠
+function Player:getDarkBars()
+	return self.m_mjTileDarkBars or {}
+end
+--明杠
+function Player:getBrightBars()
+	return self.m_mjTileBrightBars or {}
+end
+--补牌
+function Player:getBrightBus()
+	return self.m_mjTileBrightBu or {}
+end
+--暗补
+function Player:getDrakBus()
+	return self.m_mjTileDarkBu or {}
+end
+--碰牌
+function Player:getPungs()
+	return self.m_mjTilePungs or {}
+end
+
+-- 添加一组碰牌
+function Player:addPungMJTile(_tileColor, _tileNumber, _groupNode)
+	table.insert(self.m_mjTilePungs, {mjColor = _tileColor, mjNumber = _tileNumber, groupNode = _groupNode})
+end
+
+-- 通过已有数据添加一组明杠
+function Player:addBrightBar(_data)
+	table.insert(self.m_mjTileBrightBars, _data)
+end
+
+-- 对手中牌进行排序
+function Player:sortHoldMJTiles()
+	if self.m_holdMjTiles == nil or #(self.m_holdMjTiles) < 1 then
+		return
+	end
+
+	if(not gt.enableMoveCard) then
+		self:setHoldTileSortFlag(false);
+	end
+
+	if self.m_sort_flag then --> 不允许排序了
+		return;
+	end
+
+	if(gt.enableMoveCard) then --> 应该可以优化一下
+		return;
+	end
+
+	local newMjTile = nil
+	if #self.m_holdMjTiles == 14 then
+		newMjTile = table.remove(self.m_holdMjTiles)
+	end
+
+	table.sort(self.m_holdMjTiles, function(a, b)	
+		if a.mjColor ~= b.mjColor then
+			return a.mjColor%6 < b.mjColor%6
+		else
+			return a.mjNumber < b.mjNumber
+		end
+	end)
+	
+
+	--鬼牌的重新放置
+	if self.m_gui then
+		local guiList = {}
+		local mjlist = {}
+		for k,v in pairs(self.m_holdMjTiles) do
+			if Tools.isGhost(v.mjColor, v.mjNumber, self.m_gui) then 
+				table.insert(guiList, v)
+			else
+				table.insert(mjlist, v)
+			end
+		end
+
+		self.m_holdMjTiles = {}
+		for k,v in pairs(guiList) do
+			table.insert(self.m_holdMjTiles, v)
+		end
+
+		for k,v in pairs(mjlist) do
+			table.insert(self.m_holdMjTiles, v)
+		end
+	end
+	
+	if newMjTile then
+		table.insert(self.m_holdMjTiles, newMjTile)
+	end
+end
+
+-- 玩家持有牌
+function Player:setHoldMJTiles(_holdMJTiles)
+	self.m_holdMjTiles = _holdMJTiles
+end
+
+function Player:getHoldMJTiles()
+	return self.m_holdMjTiles or {}
+end
+
+function Player:cleanHoldMJTiles( )
+	if not self.m_holdMjTiles then
+		return
+	end
+
+	for k,mjTile in pairs(self.m_holdMjTiles) do
+		mjTile.mjTileSpr:removeFromParent()
+	end
+	self.m_holdMjTiles = {}
+	self.m_holdTilesTotal = 0; 
+end
+
+function Player:getHoldTileByIdx(_idx)
+	return self.m_holdMjTiles[_idx]
+
+end
+
+--根据当前spr的位置，取得当前应当插入的位置
+--
+function Player:findInsertPosIndex(tilespr)
+	--return 1;
+	local tilePosX = tilespr:getPositionX();
+	for i,v in ipairs(self.m_holdMjTiles) do
+		if(tilespr ~= v.mjTileSpr) then 
+			local pos_x = v.mjTileSpr:getPositionX();
+			if(pos_x > tilePosX) then
+				return i
+			end 
+		end 
+	end 
+	return #self.m_holdMjTiles + 1
+end 
+
+
+function Player:insertHoldTileAt(tile,idx)
+	--print("Player:insertHoldTileAt" ..tostring(idx));
+	--dump(self.m_holdMjTiles,'self.m_holdMjTiles at 0')
+	table.insert( self.m_holdMjTiles, idx, tile )
+	--dump(self.m_holdMjTiles,'self.m_holdMjTiles at 1')
+end 
+
+
+function Player:moveHoldTile(oriIdx,destIdx)
+	print("Player:moveHoldTile from " ..tostring(oriIdx) ..' to '..tostring(destIdx));
+
+	if(oriIdx == destIdx) then 
+		return false;  -- 应该还原
+	end 
+	local mjTile = clone(self.m_holdMjTiles[oriIdx]);
+	--取大值,先对大值进行操作。然后在对小值进行操作。保证 每个Idx 不会变
+	--dump(self.m_holdMjTiles,'self.m_holdMjTiles at 0')
+	if(oriIdx > destIdx) then 
+		--print("remove oriIdx"..oriIdx);
+		table.remove( self.m_holdMjTiles, oriIdx);
+		--print("insert destIdx"..destIdx);
+		table.insert( self.m_holdMjTiles, destIdx, mjTile )
+	else
+		--print("insert destIdx"..destIdx);
+		table.insert( self.m_holdMjTiles, destIdx, mjTile )
+		--print("remove oriIdx"..oriIdx);
+		table.remove( self.m_holdMjTiles, oriIdx);
+	end 
+	--dump(self.m_holdMjTiles,'self.m_holdMjTiles at 1')
+	return true;
+end
+
+
+function Player:setHoldTileSortFlag(type)
+	self.m_sort_flag = type;
+end 
+
+function Player:sortHoldMJTilesWithFlags(type,lastMjTile)
+	print("Player:sortholdMJTilesWithFlags" );
+	--dump(lastMjTile,'lastMjTile');
+	if(type ~= self.m_sort_flag) then
+		self:setHoldTileSortFlag(type)
+	end
+	
+	if(type) then --> type == true 不排序了
+		return
+	end
+	local newTile = nil--最后一张牌要拿出来，放到最后 
+	--dump(self.m_holdMjTiles,'dump holdTjTiles at sortHoldMJTilesWithFlags 0')
+	if(lastMjTile) then --不能直接用这个，出牌之后就消失了，只能用来判断，
+		local tbl = self.m_holdMjTiles;
+		for i = #tbl,1,-1 do 
+			local tile = tbl[i];
+			if  tile.mjColor == lastMjTile.mjColor and 
+				tile.mjNumber == lastMjTile.mjNumber then 
+				newTile = table.remove(tbl,i );
+				break;	
+			end 
+		end 
+	end
+	--dump(self.m_holdMjTiles,'dump holdTjTiles at sortHoldMJTilesWithFlags 1')
+	-- for i= v in ipairs(self.m_holdMjTiles) do
+	-- end 
+	table.sort(self.m_holdMjTiles, function(a, b)	
+		if a.mjColor ~= b.mjColor then
+			return a.mjColor%6 < b.mjColor%6
+		else
+			return a.mjNumber < b.mjNumber
+		end
+	end)
+
+
+	--鬼牌的重新放置
+	if self.m_gui then
+		local guiList = {} --鬼牌
+		local mjlist = {}  --麻将列表  普通的??
+		for k,v in pairs(self.m_holdMjTiles) do
+			if Tools.isGhost(v.mjColor, v.mjNumber, self.m_gui) then 
+				table.insert(guiList, v)
+			else
+				table.insert(mjlist, v)
+			end
+		end
+		self.m_holdMjTiles = {}
+		for k,v in pairs(guiList) do
+			table.insert(self.m_holdMjTiles, v)
+		end
+
+		for k,v in pairs(mjlist) do
+			table.insert(self.m_holdMjTiles, v)
+		end
+	end
+	if(newTile) then 
+		table.insert( self.m_holdMjTiles,newTile );
+	end 
+end 
+
+
+-- 根据颜色和数字在碰牌列表中移除碰牌
+function Player:removePungsTile(_mjColor, _mjNumber)
+	for i, mjTile in ipairs(self.m_mjTilePungs) do
+		if mjTile.mjColor == _mjColor and mjTile.mjNumber == _mjNumber then
+			table.remove(self.m_mjTilePungs, i)
+			return mjTile
+		end
+	end
+end
+
+-- 从持有牌中移除特定数量的牌
+function Player:removeHoldTileByCount(_count, _mjColor, _mjNumber)
+	local already = 0
+	local i = 1
+	while i <= #self.m_holdMjTiles do
+		local mjTile = self.m_holdMjTiles[i]
+		if already < _count and mjTile.mjColor == _mjColor and mjTile.mjNumber == _mjNumber then
+			mjTile.mjTileSpr:removeFromParent()
+			table.remove(self.m_holdMjTiles, i)
+			already = already + 1
+		else
+			i = i + 1
+		end
+		if already >= _count then
+			return true
+		end
+	end
+end
+
+-- 根据索引,从持有牌中移除此牌
+function Player:removeHoldTileByIdx(_idx)
+	local mjTile = self.m_holdMjTiles[_idx]
+	if mjTile then
+		mjTile.mjTileSpr:removeFromParent()
+		table.remove(self.m_holdMjTiles, _idx)
+	end
+end
+
+--根据牌，从持有牌中移除此牌
+function Player:removeHoldTileByMJ( _mjColor, _mjNumber )
+	for index, mjTile in pairs(self.m_holdMjTiles) do
+		if mjTile.mjColor == _mjColor and mjTile.mjNumber == _mjNumber then
+			mjTile.mjTileSpr:removeFromParent()
+			table.remove(self.m_holdMjTiles, index)
+			return true
+		end
+	end
+	return false
+end
+
+-- 其他玩家牌背面 只隐藏 不删除
+function Player:removeHoldTileLast()
+	local mjTile = self.m_holdMjTiles[self.m_holdTilesTotal]
+	if mjTile then
+		mjTile.mjTileSpr:setVisible(false)
+	end
+	self.m_holdTilesTotal = self.m_holdTilesTotal - 1
+end
+
+-- 玩家已出牌
+function Player:getOutMJTiles()
+	return self.m_outMjTiles or {}
+end
+-- 取得idx的已出牌
+function Player:getOutTileByIdx(_idx)
+	--return self.m_outMjTiles[_idx]
+	local outTiles =  self:getOutMJTiles();
+	return outTiles[_idx];
+end
+--移除已出牌
+function Player:removeOutTileByIdx(_idx)
+	local mjTile = self.m_outMjTiles[_idx]
+	if mjTile then
+		if( mjTile.mjTileSpr ) then
+			mjTile.mjTileSpr:stopAllActions();
+			mjTile.mjTileSpr:removeFromParent()
+		end 
+		table.remove(self.m_outMjTiles, _idx)
+	end
+end
+--移除最后一张已出的牌
+function Player:removeOutTileLast()
+	local mjTile = self.m_outMjTiles[#self.m_outMjTiles]
+	if mjTile then
+		if( mjTile.mjTileSpr ) then 
+			mjTile.mjTileSpr:stopAllActions();
+			mjTile.mjTileSpr:removeFromParent()
+		end 
+		table.remove(self.m_outMjTiles, #self.m_outMjTiles)
+	end
+end
+--返回吃的麻将牌
+function Player:getEatMJTiles()
+	return self.m_mjTileEat or {}
+end
+
+-- 设置麻将位置参考点
+function Player:setTilesReferPos(_tilesReferPos)
+	self.m_tilesReferPos = _tilesReferPos
+end
+
+function Player:getTilesReferPos()
+	return self.m_tilesReferPos
+end
+
+-- 玩家持有牌数量
+function Player:setHoldTilesTotal(_holdTilesTotal)
+	self.m_holdTilesTotal = _holdTilesTotal
+	gt.log("_holdTilesTotal = " .. _holdTilesTotal)
+end
+
+function Player:getHoldTilesTotal()
+	return self.m_holdTilesTotal
+end
+
+
+-- 唯一标识
+function Player:setuid(_uid)
+	self.m_uid = _uid
+end
+
+function Player:getuid()
+	return self.m_uid
+end
+
+-- ip
+function Player:setIP(_ip)
+	self.m_ip = _ip
+end
+
+-- 昵称
+function Player:setName(_name)
+	self.m_name = _name
+end
+
+function Player:getName()
+	return self.m_name
+end
+
+-- 头像下载地址
+function Player:setHeadURL(_headURL)
+	self.m_headURL = _headURL
+end
+
+function Player:getHeadURL()
+	return self.m_headURL
+end
+
+-- 性别
+function Player:setSex(_sex)
+	self.m_sex = _sex
+end
+
+function Player:getSex()
+	return self.m_sex
+end
+
+-- 座位标识(服务器m_pos + 1获得)
+function Player:setSeatIdx(_seatIdx)
+	self.m_seatIdx = _seatIdx
+end
+
+function Player:getSeatIdx()
+	return self.m_seatIdx
+end
+
+-- 实际显示位置
+function Player:setDisplayIdx(_displayIdx)
+	self.m_displayIdx = _displayIdx
+end
+
+function Player:getDisplayIdx()
+	return self.m_displayIdx
+end
+
+-- 准备状态
+function Player:setReady(_ready)
+	self.m_ready = _ready
+end
+
+function Player:getReady()
+	return self.m_ready
+end
+
+-- 分数
+function Player:setScore(_score)
+	self.m_score = _score
+	if self.m_scoreLabel and self.m_score then
+		self.m_scoreLabel:setString(tostring(self.m_score))
+	end
+end
+
+function Player:getScore()
+	return self.m_score
+end
+
+-- 分数label
+function Player:setScoreLabel(_scoreLabel)
+	self.m_scoreLabel = _scoreLabel
+end
+
+function Player:getScoreLabel()
+	return self.m_scoreLabel
+end
+
+-- 是否为庄家
+function Player:setBanker(_banker)
+	self.m_isBanker = _banker
+end
+
+function Player:getBanker()
+	return self.m_isBanker
+end
+
+-- 是否杠过牌
+function Player:setGang(_gang)
+	self.m_gang = _gang
+end
+
+function Player:getGang()
+	return self.m_gang
+end
+
+-- 设置鬼牌
+function Player:setGui( _tileColor, _tileNumber )
+	self.m_gui = {mjColor = _tileColor, mjNumber = _tileNumber}
+end
+
+function Player:getGui( )
+	return self.m_gui 
+end
+
+-- 设置坐标
+function Player:setLocation( _location )
+	self.m_location = _location
+end
+
+function Player:getLocation( )
+	return self.m_location or ""
+end
+
+function Player:setCurHeadIconId(curHeadIconId)
+	self.m_curHeadIconId = curHeadIconId or 0;
+end 
+
+function Player:getCurHeadIconId()
+	self.m_curHeadIconId = self.m_curHeadIconId or 0;
+	return self.m_curHeadIconId
+end
+
+--获取连庄打次数
+function Player:setSuccessCnt(_cnt)
+	self.m_successCnt = _cnt
+end
+
+function Player:getSuccessCnt()
+	return self.m_successCnt
+end
+
+--？？检测卡牌数量，作什么用呢？？
+--需要用来判断是否需要重新登录？？
+--
+function Player:getCheckCradNum(  )
+	local totleCardNum = #(self:getHoldMJTiles())
+	local minNum = 13
+
+	--暗杠
+	totleCardNum = totleCardNum + (#(self:getDarkBars()) * 4)
+	minNum = minNum + #(self:getDarkBars())
+
+	-- 明杠
+	totleCardNum = totleCardNum + (#(self:getBrightBars()) * 4)
+	minNum = minNum + #(self:getBrightBars())
+
+	-- 明补 ??
+	-- totleCardNum = totleCardNum + (#(self:getBrightBus()) * 4) 
+
+	-- 碰
+	totleCardNum = totleCardNum + (#(self:getPungs()) * 3)
+
+	-- 吃
+	totleCardNum = totleCardNum + (#(self:getEatMJTiles()) * 3)
+
+	gt.log("totleCardNum = ", totleCardNum, "minNum = ", minNum)
+
+	if totleCardNum == minNum or  totleCardNum == minNum + 1 then
+		return true
+	end
+
+	return false
+end
+
+-- 设置按钮禁用时间
+function Player:setFunnyEnabledTime( _time )
+	self.m_funnyEnabledTime = _time
+end
+
+function Player:getFunnyEnabledTime(  )
+	return self.m_funnyEnabledTime or 0
+end
+
+function Player:checkFlowerKey(key)
+	--print("checkFlowerKey " ..tostring(key));
+	if(key == nil) then 
+		return -2;
+	end 
+
+	local offset = 60;
+	if(key >=61 and key <= 68) then 
+		return key - offset;
+	elseif(key >=1 and key <=8) then 
+		return key;
+	else
+		return -1;
+	end
+end 
+
+function Player:getFillupFlowers()
+	--return  {};
+	self.m_fillupCards = self.m_fillupCards  or {};
+	return self.m_fillupCards;
+end 
+
+function Player:setFillupFlowers(flowers)
+	self.m_fillupCards = self.m_fillupCards  or {};
+	if(type(flowers) == 'table') then 
+		self.m_fillupCards = flowers;
+	elseif(flowers == nil) then
+		self.m_fillupCards = {};
+	end 
+end
+
+function Player:clearFillupFlowers()
+	self.m_fillupCards =  {};
+end 
+
+function Player:addHoldFlower(key,spr)
+	self.m_holdFlowers = self.m_holdFlowers or {};
+	key = self:checkFlowerKey(key);
+	if(key > 0) then
+		self.m_holdFlowers[key] = spr;
+	end 
+end 
+
+function Player:getHoldFlower(key)
+	key = self:checkFlowerKey(key);
+	self.m_holdFlowers = self.m_holdFlowers or {};
+	return self.m_holdFlowers[key];
+end 
+
+--移除单个
+function Player:removeHoldFlower(key)
+	key = self:checkFlowerKey(key);
+	self.m_holdFlowers = self.m_holdFlowers or {};
+	self.m_holdFlowers[key] = nil --
+end 
+
+function Player:clearHoldFlower()
+	if not self.m_holdFlowers then
+		return
+	end
+
+	for k,v in pairs(self.m_holdFlowers) do
+		v:removeFromParent()
+	end
+	self.m_holdFlowers = {};  --> 全部清空
+end
+
+function Player:getSortedFlowerPosArray()
+	local MAX_FLOWERS = 8;
+	local ret = {};
+	self.m_holdFlowers = self.m_holdFlowers or {};
+	for i = 1, 8 do 
+		if(self.m_holdFlowers[i]) then 
+			ret[#ret + 1 ] = i;
+		end  
+	end 
+	return ret;
+end
+
+--添加node,可以跑 runAction 的那种
+function Player:addFillupActionNode(actionNode)
+	self.m_fillupActionNodes = self.m_fillupActionNodes or {};
+	table.insert(self.m_fillupActionNodes,actionNode);
+end
+
+function Player:getFillupActionNodes()
+	self.m_fillupActionNodes = self.m_fillupActionNodes or {};
+	return self.m_fillupActionNodes;
+end 
+
+function Player:clearFillupActionNodes()
+	self.m_fillupActionNodes = self.m_fillupActionNodes or {};
+	for _,v in ipairs(self.m_fillupActionNodes) do
+		v:stopAllActions();
+		v:removeSelf();
+	end 
+	self.m_fillupActionNodes = {};
+end 
+
+
+function Player:setFillupImmiFunc(funcptr)
+	self.m_fillupImmiFunc = funcptr;
+end 
+
+function Player:getFillupImmiFunc()
+	return self.m_fillupImmiFunc;
+end 
+
+
+function Player:clearFillupImmiFunc()
+	self.m_fillupImmiFunc = nil;
+end
+
+function Player:isFlowerInHolderTiles()
+	local tileArray = self:getHoldMJTiles()
+	for _, v in ipairs(tileArray) do 
+		if(v.mjColor == 6) then 
+			return true;
+		end 
+	end 
+	return false;
+end 
+
+
+return Player

@@ -1,0 +1,80 @@
+--region CommonPopWebView.lua
+--Date
+--此文件由[BabeLua]插件自动生成
+local gt = cc.exports.gt
+
+local CommonPopWebView = class("CommonPopWebView", function()
+	return gt.createMaskLayer()    -- 创建房间遮罩层
+end)
+
+function CommonPopWebView:ctor(url,scale,bk,title,tab,close)
+	self.rootNode = gt.createCSNode("CommonWebView.csb")
+    self.panel = gt.seekNodeByName(self.rootNode, "Panel")
+    self.rootNode:setScale(scale)
+	self.rootNode:setAnchorPoint(0.5,0.5)
+	self.rootNode:setPosition(gt.winCenter)
+	self:addChild(self.rootNode)
+	self:initBaseInfo(url,bk,title,close)
+end
+
+function CommonPopWebView:initBaseInfo(url,bk,title,tab,close)
+    self.url = url
+    --self.url = "https://www.ixianlai.com/playMethod/guangdong/index2.html";
+    self.bk =  gt.seekNodeByName(self.panel, "bk")
+    if bk then
+        self.bk:loadTexture(bk)
+    end
+    self.tab = gt.seekNodeByName(self.panel, "tab")
+    if tab then
+       self.tab:loadTextureNormal(tab)
+    end
+
+    self.title = gt.seekNodeByName(self.tab, "title")
+    if title then
+       self.title:loadTextureNormal(title)
+    end
+    --关闭按钮的资源
+    self.closeBtn = gt.seekNodeByName(self.tab, "close")
+    if close then
+       self.closeBtn:loadTextureNormal(close)
+    end
+
+   gt.addBtnPressedListener(self.closeBtn, function ()
+		self:removeFromParent()
+    end
+    )
+    self:initWeb()
+end
+
+function CommonPopWebView:initWeb()
+    if self.url then
+        local webView = ccexp.WebView:create()
+        --WebView:setAnchorPoint(0.5,0.5)
+        local size = self.bk:getContentSize()
+        --rate: 1278/680
+        --rate: 1279/750 
+
+        webView:setContentSize(cc.size(size.width+1 ,size.height-50))
+        --webView:setContentSize(cc.size(1278,680));
+        --webView:setContentSize(cc.size(2400,600));
+        webView:setOnShouldStartLoading(function(sender, url)
+            return true
+        end)
+        webView:setOnDidFinishLoading(function(sender, url)
+        end)
+        webView:setOnDidFailLoading(function(sender, url)
+        end)
+        self.bk:addChild(webView)
+        --webView:setScalesPageToFit(true)
+        webView:loadURL(self.url)
+        --webView:setScalesPageToFit(true)
+        --webView:setScaleY(0.8);
+        local webSize = webView:getContentSize()
+        print('webSize '..webSize.width ..' '..webSize.height);
+        webView:setPosition(size.width/2,size.height/2 + 10)
+        
+    end
+end
+
+return CommonPopWebView
+--endregion

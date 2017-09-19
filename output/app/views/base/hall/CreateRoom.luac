@@ -1,0 +1,215 @@
+--region app.views.base.hall.CreateRoom
+--desc: 创建房间UI
+--endregion
+
+local CreateRoom = class("CreateRoom", function()
+	return gt.createMaskLayer()
+end)
+
+function CreateRoom:ctor()
+	print("CreateRoom:ctor");
+
+	self:registerScriptHandler(handler(self, self.onNodeEvent))
+	print("bindEvent: onEventUpdateFreeTime");
+	gt.CommonEvent:addEventListener("UPDATE_FREE_TIME",handler(self,self.onEventUpdateFreeTime))
+
+	local csbNode = cc.CSLoader:createNode("res/views/base/CreateRoom.csb")
+	csbNode:setPosition(gt.winCenter)
+	self:addChild(csbNode)
+	self.csbNode = csbNode;
+	-- 返回按键
+	local backBtn = gt.seekNodeByName(self, "Btn_back")
+	gt.addBtnPressedListener(backBtn, function()
+		--self:removeFromParent()
+		self:destroy();
+	end)
+
+
+
+	--self:addControlEvent()
+	-- 内容选择
+	local Node_select = gt.seekNodeByName(csbNode, "Node_select")
+	-- 游戏类型选择
+	self.m_roomSelect = Tools.requireFile("RoomSelect", "guangdong", Tools.BASE_TYPE.HALL)
+	
+	Node_select:addChild(self.m_roomSelect)
+
+    gt.socketClient:registerMsgListener(gt.GC_CREATE_ROOM, self, self.onRcvCreateRoom)
+
+    -- 创建按钮
+    local createBtn = gt.seekNodeByName(csbNode, "Btn_create")
+    --流光特效
+	--local tipsNode, tipsAnimation = gt.createCSAnimation("da/saoguang2.csb")
+	local tipsNode,tipsAnimation = gt.createCSAnimation("da/anniu_huanraoguang.csb");
+	tipsAnimation:play("anniu_huanraoguang", true)
+	tipsNode:setPosition(createBtn:getContentSize().width / 2 - 1 , createBtn:getContentSize().height / 2 + 2)
+	-- tipsNode:setScaleY(0.605)
+	-- tipsNode:setScaleX(0.665)
+	createBtn:addChild(tipsNode)
+
+
+    gt.addBtnPressedListener(createBtn, function()
+		self.m_roomSelect:sendCreateRoom() -- 发送创建房间
+		-- 等待提示
+		gt.showLoadingTips(gt.getLocationString("LTKey_0005"))
+	end)
+
+	local panel_root = gt.seekNodeByName(self.csbNode,'Panel_root');
+	panel_root:addClickEventListener(function() 
+		--print("panel_root:onClick");
+		self.m_roomSelect:hideAniCheatTips();
+	end)
+
+	self.textFree = gt.seekNodeByName(csbNode,'Text_FreeTime');
+	self.textFree:setVisible(false);
+
+
+	local switchPanel =  gt.seekNodeByName(csbNode, "Panel_switch");
+	local switchSlider = gt.seekNodeByName(switchPanel,'Slider_switch');
+	local switchCheckbox = gt.seekNodeByName(switchPanel,'CheckBox_switch');
+
+	local function onSwitch(funnyEnable)
+		print('funnyEnable = '..funnyEnable);
+		if(funnyEnable == 1)then
+			switchSlider:setPercent(0);
+			switchCheckbox:setEnabled(true);
+		else
+			switchSlider:setPercent(100);
+			switchCheckbox:setEnabled(false); 
+		end 
+	end 
+	onSwitch(gt.funnyEnable);
+
+	switchPanel:addClickEventListener(function( ... )
+		-- if(switchSlider:getPercent() == 0)then  --关闭
+		-- 	switchSlider:setPercent(100);
+		-- 	switchCheckbox:setEnabled(false);
+		-- 	gt.funnyEnable = false;
+		-- else 
+		-- 	switchSlider:setPercent(0);
+		-- 	switchCheckbox:setEnabled(true);
+		-- 	gt.funnyEnable = true;
+		-- end 
+		--gt.funnyEnable = not gt.funnyEnable;
+		if(gt.funnyEnable == 0) then 
+			gt.funnyEnable = 1
+		else
+			gt.funnyEnable = 0
+		end 
+
+		onSwitch(gt.funnyEnable);
+		--cc.UserDefault:getInstance():setBoolForKey("funnyEnable", gt.funnyEnable)
+		--IntegerForKey("funnyEnable",0)
+		cc.UserDefault:getInstance():setIntegerForKey("funnyEnable", gt.funnyEnable)
+	end)
+
+	local Button_debug = gt.seekNodeByName(csbNode, "Button_debug")
+	if gt.isDebugPackage and  Button_debug then
+		Button_debug:setVisible(true)
+		--Button_debug:setPosition(x-250,y)
+
+		gt.addBtnPressedListener(Button_debug, function()
+			local debugLayer = require("app/views/SetDebug"):create()
+	        self:addChild(debugLayer, 1000)
+		end)
+	elseif Button_debug then
+		Button_debug:setVisible(false)
+	end
+	--	编辑页签
+	local btnMoreGame = gt.seekNodeByName(csbNode, "Button_more_game")
+	if btnMoreGame then
+		gt.addBtnPressedListener(btnMoreGame, function()
+			self:destroy();
+			local editRoom = require("app/views/base/hall/EditRoom"):create()
+			display.getRunningScene():addChild(editRoom,6)
+		end)
+	end
+	--self.scheduleHandler = gt.scheduler:scheduleScriptFunc(handler(self, self.update), 0, false)
+end
+
+-- @class function
+-- @description 创建房间消息
+-- @param msgTbl 消息体
+-- end --
+function CreateRoom:onRcvCreateRoom(msgTbl)
+	dump(msgTbl,"房卡=== ")
+	gt.removeLoadingTips()
+	if msgTbl.m_errorCode ~= 0 then
+		-- 创建失败
+		-- 房卡不足提示
+		--注：由提示房卡不足 改成 消费引导。
+		--[[
+		local msg = "请添加微信公众号xlgdmj6"--string.split(gt.roomCardBuyInfo, ",")[1]
+		require("app/views/NoticeTips"):create(gt.getLocationString("LTKey_0007"),
+			gt.getLocationString("LTKey_0046", msg), nil, nil, true)
+			]]
+		if gt.isOpenIAP then
+			local layer = require("app/views/Purchase/RechargeLayer"):create( )
+			self:addChild(layer, 50)
+		else
+			if gt.AndroidIsInReview then
+				require("app/views/NoticeTipsForFangKa"):create(gt.getLocationString("LTKey_0007"), "房卡不足", nil, nil, true)
+			else
+				require("app/views/NoticeTipsForFangKa"):create(gt.getLocationString("LTKey_0007"), gt.roomCardBuyInfo, nil, nil, true)
+			end
+		end
+	end
+end
+
+-- function CreateRoom:onNodeEvent()
+
+-- end 
+
+function CreateRoom:onNodeEvent(eventName)
+	print("CreateRoom:onNodeEvent:"..eventName);
+	if "enter" == eventName then
+		self.scheduleHandler = gt.scheduler:scheduleScriptFunc(handler(self, self.update), 0, false)
+	elseif "exit" == eventName then
+		if(self.scheduleHandler) then 
+			gt.scheduler:unscheduleScriptEntry(self.scheduleHandler)
+		end 
+		gt.CommonEvent:removeEventListenersByEvent("UPDATE_FREE_TIME");
+	end
+end
+
+function CreateRoom:onEventUpdateFreeTime(event)
+	--dump(event,"CreateRoom:onEventUpdateFreeTime");
+	local event = event;
+	local params = event.params or {};
+	--local freeTime = params[1];
+	--dump(params,'params');
+	self.freeTime = params[1];
+	-- if(gt.isValidTimestamp(self.freeTime))then 
+	-- 	--self:update();
+	-- else
+	-- 	if(self.scheduleHandler ~= nil) then 
+	-- 		gt.scheduler:unscheduleScriptEntry(self.scheduleHandler)
+	-- 	end 
+	-- 	if(self.textFree ~= nil) then 
+	-- 		self.textFree:setVisible(false)
+	-- 	end 
+	-- end 
+end 
+
+function CreateRoom:update(dt)
+
+	if(gt.isValidTimestamp(self.freeTime))then 
+		if(self.textFree ~= nil) then 
+			self.textFree:setVisible(true)
+			local curTime = os.time()
+			local endTime = self.freeTime[2];
+			local deltaTime = Tools.getTime(endTime - curTime)
+			self.textFree:setString('免费时间:'..deltaTime or " ")
+		end
+	else
+		if(self.textFree ~= nil and self.textFree:isVisible()) then 
+			self.textFree:setVisible(false)
+		end
+	end 
+end 
+
+function CreateRoom:destroy()
+
+	self:removeFromParent();
+end 
+return CreateRoom

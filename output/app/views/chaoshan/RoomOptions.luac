@@ -1,0 +1,389 @@
+--region app.views.chaoshan.RoomOptions
+--desc: 潮汕麻将的玩法选项
+--
+--endregion 
+
+--local var
+local tinsert = table.insert;
+--
+local RoomOptions = class("RoomOptions", BaseRoomOptions)
+
+local SELECT_ZUOPAI_WANFA_KEY = "guangdong_chaoshan_wanfa"
+local SELECT_ZUOPAI_GUIPAI_KEY = "guangdong_chaoshan_guipai"
+local SELECT_ZUOPAI_MAPAI_KEY = "guangdong_chaoshan_mapai"
+
+local userDefault = cc.UserDefault:getInstance()
+
+local Wanfa_Type = {23, 16, 38, 40, 24, 39, 32, 27, 41, 35,12,44,45,46,53,60,61,62,63}
+local Guipai_Type = {7, 8, 9}
+local Mapai_Type = {0, 2, 4, 6, -1, 42}
+
+function RoomOptions:ctor()
+	self.csbNode = cc.CSLoader:createNode("res/views/guangdong/CreateChaoShan.csb")
+	self:addChild(self.csbNode)
+	self.disColor = cc.c3b(170,170,170)
+	RoomOptions.super.ctor(self)
+end
+
+function RoomOptions:initWanfa()
+	self.playWanfa = {1, 2, 3, 4, 5, 6, 7, 8, 9,0,11,12,13,14,0,16,17,18,19};
+	local wan = Tools.getValue(SELECT_ZUOPAI_WANFA_KEY)
+	if wan ~= "" then
+		wan = string.split(wan, ",")
+		for i = 1, #wan do
+			self.playWanfa[i] = tonumber(wan[i])
+		end
+	end
+	local wanfaNode = gt.seekNodeByName(self.csbNode,'ScrollView_Content');
+	wanfaNode:setSwallowTouches(false);
+	-- wanfaNode:setSwallowTouches(true);
+	-- wanfaNode:addEventListener(function(ref,eventType) 
+	-- 	print ('wanfaNode:onScrollEvent '..tostring(eventType));
+		
+	-- end)
+
+
+	local function setSelectWanfa(index, check)
+		self.wanfaNodes[index].check:setSelected(check or false)
+		self:refreshCheckOutline(self.wanfaNodes[index].label, check or false)
+		if check == true then
+			self.playWanfa[index] = index
+		else
+			self.playWanfa[index] = 0
+		end
+	end
+	local function checkBoxWanfa( sender, eventType )
+		if eventType == ccui.CheckBoxEventType.selected then
+			if(sender.index == 16 or sender.index == 18) then
+				setSelectWanfa(16, true) 
+				setSelectWanfa(18, true) 
+			elseif(sender.index == 17 or sender.index == 19)then 
+				setSelectWanfa(17, true) 
+				setSelectWanfa(19, true) 
+			else
+				setSelectWanfa(sender.index, true)
+			end 
+			Tools.saveKeyValue(SELECT_ZUOPAI_WANFA_KEY, table.concat(self.playWanfa, ","))
+		elseif eventType == ccui.CheckBoxEventType.unselected then
+			if(sender.index == 16 or sender.index == 18) then
+				setSelectWanfa(16, false) 
+				setSelectWanfa(18, false) 
+			elseif(sender.index == 17 or sender.index == 19)then 
+				setSelectWanfa(17, false) 
+				setSelectWanfa(19, false) 
+			else
+				setSelectWanfa(sender.index, false)
+			end 
+			Tools.saveKeyValue(SELECT_ZUOPAI_WANFA_KEY, table.concat(self.playWanfa, ","))
+		end
+	end
+
+
+	--self.wanfaNodes = --self:getNodes(self.csbNode, "wanfa", #Wanfa_Type)
+	self.wanfaNodes = self:getNodes(wanfaNode,'wanfa',#Wanfa_Type)
+
+	for i, v in ipairs(self.wanfaNodes) do
+		if self.playWanfa[i] == i then
+			setSelectWanfa(i, true)
+		else
+			setSelectWanfa(i, false)
+		end
+		v.check.index = i
+		v.check:addEventListener(checkBoxWanfa)
+		-- v.panel:addClickEventListener(function(  )
+		-- 	-- print("panel:addClickEventListener");
+		-- 	-- if v.check:isSelected() then
+		-- 	-- 	checkBoxWanfa(v.check, ccui.CheckBoxEventType.unselected)
+		-- 	-- else
+		-- 	-- 	checkBoxWanfa(v.check, ccui.CheckBoxEventType.selected)
+		-- 	-- end
+		-- end)
+		--吞吃触摸
+		--v.curNode:setSwallowTouches(false);
+		v.check:setSwallowTouches(false)
+		v.label:setSwallowTouches(false);
+		v.panel:setSwallowTouches(false)
+		gt.addBtnPressedListener(v.button, function( )
+			print("button:addClickEventListener");
+			if v.check:isSelected() then
+				checkBoxWanfa(v.check, ccui.CheckBoxEventType.unselected)
+			else
+				checkBoxWanfa(v.check, ccui.CheckBoxEventType.selected)
+			end
+		end)
+		-- if(v.button) then 
+		-- 	v.button:setSwallowTouches(false);
+		-- end 
+	end
+end
+
+function RoomOptions:initGuipai()
+	self.playGuipai = {1, 0, 0}
+	local gui = Tools.getValue(SELECT_ZUOPAI_GUIPAI_KEY)
+	if gui ~= "" then
+		gui = string.split(gui, ",")
+		for i = 1, #gui do
+			self.playGuipai[i] = tonumber(gui[i])
+		end
+	end
+
+	local baseNode = gt.seekNodeByName(self.csbNode,'ScrollView_Content');
+
+	local function setSelectGuipai(index, check)
+		self.guipaiNodes[index].check:setSelected(check or false)
+		self:refreshCheckOutline(self.guipaiNodes[index].label, check or false)
+		if check == true then
+			self.playGuipai[index] = index
+		else
+			self.playGuipai[index] = 0
+		end
+	end
+	
+	local function checkBoxGuipai( sender, eventType )
+		-- if(baseNode:isTouchMoved()) then 
+		-- 	return;
+		-- end 
+		if eventType == ccui.CheckBoxEventType.selected then
+			for i = 1, #Guipai_Type do
+				setSelectGuipai(i, false)
+			end
+			setSelectGuipai(sender.index, true)
+			Tools.saveKeyValue(SELECT_ZUOPAI_GUIPAI_KEY, table.concat(self.playGuipai, ","))
+		elseif eventType == ccui.CheckBoxEventType.unselected then
+			sender:setSelected(true)
+		end
+	end
+
+	
+	self.guipaiNodes = self:getNodes(baseNode,"guipai", #Guipai_Type)
+
+	--self.guipaiNodes = self:getNodes(self.csbNode, "guipai", #Guipai_Type)
+	for i, v in ipairs(self.guipaiNodes) do		
+		if self.playGuipai[i] == i then
+			setSelectGuipai(i, true)
+		else
+			setSelectGuipai(i)
+		end
+		
+		v.check.index = i
+		v.check:addEventListener(checkBoxGuipai)
+		-- v.panel:addClickEventListener(function(  )
+		-- 	if v.check:isSelected() then
+		-- 		checkBoxGuipai(v.check, ccui.CheckBoxEventType.unselected)
+		-- 	else
+		-- 		checkBoxGuipai(v.check, ccui.CheckBoxEventType.selected)
+		-- 	end
+		-- end)
+		--吞吃触摸
+		--v.curNode:setSwallowTouches(false);
+		v.check:setSwallowTouches(false)
+		v.label:setSwallowTouches(false);
+		v.panel:setSwallowTouches(false)
+		gt.addBtnPressedListener(v.button, function( )
+			print("button:Guipai");
+			if v.check:isSelected() then
+				checkBoxGuipai(v.check, ccui.CheckBoxEventType.unselected)
+			else
+				checkBoxGuipai(v.check, ccui.CheckBoxEventType.selected)
+			end
+		end)
+	end
+end
+
+function RoomOptions:initMapai()
+	self.playMapai = userDefault:getIntegerForKey(SELECT_ZUOPAI_MAPAI_KEY, 4)
+	local baseNode = gt.seekNodeByName(self.csbNode,'ScrollView_Content');
+
+	local function setSelectMapai(index, check)
+		if self.mapaiNodes[index].check:isEnabled() then
+			self.mapaiNodes[index].check:setSelected(check or false)
+			self:refreshCheckOutline(self.mapaiNodes[index].label, check or false)
+			if check and index ~= 5 then
+				self.playMapai = index
+				userDefault:setIntegerForKey(SELECT_ZUOPAI_MAPAI_KEY, index)
+			end
+		end
+	end
+
+	local function setMaPaiUnuser( _unuser )
+		for i=2,4 do
+			if _unuser == false then
+				self:allowSelectMaPai(i)
+			else
+				self:forbidSelectMaPai(i)
+			end
+		end
+
+		if _unuser == false then
+			setSelectMapai(4, true)
+		end
+	end
+
+	local function checkBoxMapai( sender, eventType )
+		-- if baseNode:isTouchMoved() then 
+		-- 	return;
+		-- end 
+		if eventType == ccui.CheckBoxEventType.selected then
+			--取消原先玩法
+			if self.playMapai ~= sender.index then
+				if sender.index == 1 or sender.index == 6 then
+					setSelectMapai(5, false)
+				end
+				setSelectMapai(self.playMapai, false)
+			end
+
+			--设置玩法
+			if sender.index == 1 or sender.index == 6 then
+				setMaPaiUnuser(true)
+				self:setWanfaUnuser({10,15}, true)
+			elseif sender.index == 5 then
+				setMaPaiUnuser(false)
+				self:setWanfaUnuser({10,15}, false)
+			end			
+			setSelectMapai(sender.index, true)
+		elseif eventType == ccui.CheckBoxEventType.unselected then
+			sender:setSelected(true)
+		end
+	end
+	
+	self.mapaiNodes = self:getNodes(baseNode,"mapai", #Mapai_Type)
+	--self.mapaiNodes = self:getNodes(self.csbNode, "mapai", #Mapai_Type)
+	for i, v in ipairs(self.mapaiNodes) do		
+		if self.playMapai == i then
+			setSelectMapai(i, true)
+			if i == 1 or i == 6 then
+				self:setWanfaUnuser({10,15}, true)
+				setMaPaiUnuser(true)
+			end
+		else
+			setSelectMapai(i)
+		end
+		
+		v.check.index = i
+		v.check:addEventListener(checkBoxMapai)
+		-- v.panel:addClickEventListener(function(  )
+		-- 	if not v.check:isSelected() then
+		-- 		checkBoxMapai(v.check, ccui.CheckBoxEventType.selected)
+		-- 	end
+		-- end)
+
+		gt.addBtnPressedListener(v.button, function( )
+			if not v.check:isSelected() then
+				checkBoxMapai(v.check, ccui.CheckBoxEventType.selected)
+			end
+		end)
+
+						--吞吃触摸
+		--v.curNode:setSwallowTouches(false);
+		v.check:setSwallowTouches(false)
+		v.label:setSwallowTouches(false);
+		v.panel:setSwallowTouches(false)
+	end
+
+	if self.playMapai > 1 and self.playMapai < 5 then
+		setSelectMapai(5, true)
+	end
+end
+
+
+function RoomOptions:forbidSelectWanfa(index)
+	self.wanfaNodes[index].check:setSelected(false);
+	self.wanfaNodes[index].check:setEnabled(false)
+	self:refreshCheckOutline(self.wanfaNodes[index].label, false)
+	self.wanfaNodes[index].label:setTextColor(self.disColor)
+	self.wanfaNodes[index].panel:setEnabled(false)
+	self.playWanfa[index] = 0
+end
+
+function RoomOptions:allowSelectWanfa(index)
+	self.wanfaNodes[index].check:setEnabled(true)
+	self:refreshCheckOutline(self.wanfaNodes[index].label, false)
+	self.wanfaNodes[index].panel:setEnabled(true)
+end
+
+function RoomOptions:forbidSelectMaPai(index)
+	self.mapaiNodes[index].check:setSelected(false)
+	self.mapaiNodes[index].check:setEnabled(false)
+	self:refreshCheckOutline(self.mapaiNodes[index].label, false)
+	self.mapaiNodes[index].label:setTextColor(self.disColor)
+	self.mapaiNodes[index].panel:setEnabled(false)
+end
+
+function RoomOptions:allowSelectMaPai(index)
+	self.mapaiNodes[index].check:setEnabled(true)
+	self:refreshCheckOutline(self.mapaiNodes[index].label, false)
+	self.mapaiNodes[index].panel:setEnabled(true)
+end
+
+function RoomOptions:setWanfaUnuser( _list, _unuser )
+	for i, v in ipairs(_list) do
+		if _unuser == true then
+			self:forbidSelectWanfa(v)
+		else
+			self:allowSelectWanfa(v)
+		end		
+	end
+	Tools.saveKeyValue(SELECT_TUIDAO_WANFA_KEY, table.concat(self.playWanfa, ","))
+end
+
+--取得具体的类型
+function RoomOptions:getStatu()
+	return gt.RoomType.ROOM_CHAOSHAN
+end
+
+--返回玩法类型
+function RoomOptions:getPlayType()
+	local typeList = {}
+	-- table.insert(typeList, Mapai_Type[self.playMapai])
+	tinsert(typeList,Mapai_Type[self.playMapai]); --马牌
+	for k, v in pairs(self.playWanfa) do --玩法
+		if v ~= 0 then
+			--table.insert(typeList, Wanfa_Type[v])
+			tinsert(typeList,Wanfa_Type[v]);
+		end
+	end
+	--dump(self.playGuipai)
+	for i = #self.playGuipai, 1, -1 do --鬼牌
+		if self.playGuipai[i] ~= 0 then
+			--table.insert(typeList, Guipai_Type[i])
+			tinsert(typeList,Guipai_Type[i]);
+			break
+		end
+	end
+	--？？插入表中的顺序有一定的需要吗？
+	return typeList
+end
+
+-- function RoomOptions:onNodeEvent(eventName)
+-- 	if "enter" == eventName then
+-- 		local baseNode = gt.seekNodeByName(self.csbNode,'ScrollView_Content');
+-- 		local listener = cc.EventListenerTouchOneByOne:create()
+-- 		listener:setSwallowTouches(true)
+-- 		listener:registerScriptHandler(handler(self, self.onTouchBegan), cc.Handler.EVENT_TOUCH_BEGAN)
+-- 		listener:registerScriptHandler(handler(self, self.onTouchEnded), cc.Handler.EVENT_TOUCH_ENDED)
+-- 		listener:registerScriptHandler(handler(self, self.onTouchMoved), cc.Handler.EVENT_TOUCH_MOVED)
+-- 		local eventDispatcher = self:getEventDispatcher()
+-- 		eventDispatcher:addEventListenerWithSceneGraphPriority(listener, baseNode)
+-- 	elseif "exit" == eventName then
+-- 		local eventDispatcher = self:getEventDispatcher()
+-- 		eventDispatcher:removeEventListenersForTarget(self)
+-- 	end
+-- end
+
+-- function RoomOptions:onTouchBegan(touch, event)
+-- 	--return true
+-- 	print("RoomOptions:onTouchBegan");
+-- 	return true;
+-- end
+
+-- function RoomOptions:onTouchEnded(touch, event)
+-- 	--00return true
+-- 	print("RoomOptions:onTouchEnded");
+-- end
+
+-- function RoomOptions:onTouchMoved(touch, event)
+-- 	--return true
+-- 	print("RoomOptions:onTouchMoved");
+-- end
+
+return RoomOptions

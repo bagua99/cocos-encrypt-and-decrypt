@@ -1,0 +1,94 @@
+local CommonEvent = class("CommonEvent")
+
+function CommonEvent:ctor( )
+	self.m_actionList = {}	
+	self.m_callFun = {
+		[gt.GC_COMMONT_NOTICE] = handler(self, self.recvCommonNotic),
+		[gt.GC_COMMONT_ROOMFREE] = handler(self, self.recvCommonFreeTime),
+		[gt.GC_FREE_PLAY] = handler(self,self.recvFreePlay),
+		[gt.GC_FREE_PLAY_NEW] = handler(self,self.recvFreePlayNew),
+	}
+
+	--self:addEventListener('MSG_')
+	for msgID,_ in pairs(self.m_callFun) do
+		gt.socketClient:registerMsgListener(msgID, self, self.dispatchMessage)
+	end
+	
+	
+	if not self.scheduleHandler then
+		self.scheduleHandler = gt.scheduler:scheduleScriptFunc(handler(self, self.update), 0, false)
+	end
+
+	cc.bind(self,"event");
+end
+
+function CommonEvent:update(  )
+	local cureTime = os.time()
+	if not self.m_checkTime or cureTime - self.m_checkTime > 1 then
+		for k,action in pairs(self.m_actionList) do
+			self:dispatchMessage(action)
+		end
+		self.m_checkTime = cureTime
+	end
+end
+
+function CommonEvent:dispatchMessage( _msgtable )
+	local msgID = _msgtable.m_msgId
+	self.m_actionList[msgID] = _msgtable
+
+	if not self.m_callFun[msgID] or self.m_callFun[msgID](_msgtable) then
+		self.m_actionList[msgID] = nil
+	end
+end
+
+function CommonEvent:recvCommonNotic( _msgtable)
+	gt.commonNoticData = _msgtable
+
+	local runningScene = display.getRunningScene()
+	if runningScene and runningScene.checkNewMsg then
+		runningScene:checkNewMsg()
+		return true
+	end
+
+	return false
+end
+
+function CommonEvent:recvCommonFreeTime( _msgtable )
+	print("recvCommonFreeTime")
+	local endTime  = os.time() + _msgtable.m_countdown
+	gt.roomFreeEndTime =  gt.roomFreeEndTime or 0;
+	if(gt.roomFreeEndTime < endTime) then 
+		gt.roomFreeEndTime = endTime;
+	end 
+	print("recvCommonFreeTime end time", gt.roomFreeEndTime)
+	return true
+end
+
+function CommonEvent:recvFreePlay(_msgTable)
+	print('CommonEvent:recvFreePlay');
+	gt.freePlay = _msgTable.m_vecFreePlayType;
+	return true
+end 
+
+function CommonEvent:recvFreePlayNew(msgTable)
+	--print("CommonEvent:recvFreePlayNew");
+	dump(msgTable,"CommonEvent:recvFreePlayNew");
+	gt.freePlay2 = msgTable.m_mapXianMian
+	local allFree = gt.freePlay2[-1];
+	if(allFree and allFree[2]) then --收到显示时间了
+		gt.roomFreeEndTime =  gt.roomFreeEndTime or 0;
+		if(gt.roomFreeEndTime < allFree[2]) then 
+			gt.roomFreeEndTime = allFree[2];
+		end 
+	end 
+	return true;
+end 
+
+function CommonEvent:pushEvent(eventName,...)
+	self:dispatchEvent{
+		name = eventName,
+		params = {...}
+	}
+end 
+
+gt.CommonEvent = CommonEvent:create()

@@ -1,0 +1,116 @@
+local RoomScene = class("RoomScene", BaseRoomScene)
+RoomScene.RuleType = clone(Room.RuleType)
+
+RoomScene.RuleType[5] =  '七对4倍'   --
+RoomScene.RuleType[40] = "混一色2倍"
+
+function RoomScene:ctor(msgTbl)
+	RoomScene.super.ctor(self, msgTbl, Tools.GAME_TYPE[gt.RoomType.ROOM_YIBAI + 1])
+	--设置鬼牌
+	for k,v in pairs(msgTbl.m_playtype) do
+		if v == 8 then --白板鬼
+			self.m_room:setGui({m_color = 5, m_number = 3})
+			self.m_ghost_type = 8
+			-- gt.socketClient:dispatchMessage({m_msgId = 161, m_ghostCard = {m_color = 1, m_numbe = 9}})
+			break
+		elseif v == 9 then -- 翻牌鬼
+			self.m_ghost_type = 9
+			break
+		elseif v == 28 then --双鬼
+			self.m_ghost_type = 28
+			break
+		elseif v == 10 then
+			self.m_isFeng = false
+		end
+	end	
+	gt.anglePngPath = "res/sd/images/otherImages/gui_icon.png"
+	self:initGhost()
+end
+
+function RoomScene:initListener( _subArgeements )	
+	local argeements = {
+		"RcvRoundReport",
+	}
+	
+	RoomScene.super.initListener(self, argeements)
+end
+
+-- 玩法设置
+function RoomScene:getRuleDesc( _msgTbl, _splitChar , _type)
+	local ruleDesc = ""
+	if _type == RoomScene.RULEDESC_TYPE.ROOM then
+		ruleDesc = Room.TypeName[_msgTbl.m_state + 1]
+	end
+	local siGostType, qianggangType = 0, nil
+	local minggang = nil
+	for i, v in ipairs(_msgTbl.m_playtype) do
+		if v == 0 then
+			ruleDesc = ruleDesc .. _splitChar .. "无马"
+		elseif v == 21 or v == 22 then
+			if siGostType < v then
+				siGostType = v
+			end
+		elseif v == 17 or v == 18 then
+			if qianggangType then
+				if qianggangType > v then
+					qianggangType = v
+				end
+			else
+				qianggangType = v
+			end
+		elseif v == 30 then
+			minggang = true
+		elseif self.RuleType[v] and v ~= 30 and v ~= 31 then
+			ruleDesc = ruleDesc .. _splitChar .. self.RuleType[v]
+		end
+	end
+
+	if siGostType > 0 then
+		ruleDesc = ruleDesc .. _splitChar .. self.RuleType[siGostType]
+	end
+	
+	if minggang then
+		ruleDesc = ruleDesc .. _splitChar .. self.RuleType[30]
+	end
+
+	if qianggangType then
+		if qianggangType == 18 and minggang then
+		else
+			ruleDesc = ruleDesc .. _splitChar .. self.RuleType[qianggangType]
+		end
+	end
+	
+	return ruleDesc
+end
+
+--获取胡的声音
+function RoomScene:getPlayHuSound( _huCard )
+	if not _huCard or #_huCard < 1 then
+		return
+	end
+
+	local huType = {
+		[8] = "gangshangkaihua",
+		[9] = "gangshangpao",
+		[10] = "haidilaoyue",
+		[11] = "haidipao",
+		[12] = "qiangganghu",
+		[103] = "pengpenghu",
+		[106] = "qingyise",
+		[116] = "haohuaxiaoqidui",
+		[117] = "qixiaodui",
+	}
+
+	local soundType = nil
+
+	for k,v in pairs(_huCard) do
+		if huType[v] then
+			soundType = huType[v]
+			break
+		end
+	end
+
+	return soundType or "hu"
+end
+
+return RoomScene

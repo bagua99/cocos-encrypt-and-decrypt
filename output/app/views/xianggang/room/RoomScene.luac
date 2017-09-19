@@ -1,0 +1,356 @@
+--region app.views.huizhouzhuag.room.RoomScene
+--desc: 惠州庄的房间内Scene
+--endregion 
+
+--加入一个config 尝试一下
+local _mod = ...;
+_mod= string.gsub(_mod,"%/","%.");
+
+print('mod = '.._mod);
+
+local config = import('..config',_mod);
+local RuleType = config.RuleType;
+--dump(RuleType,'RuleType',5);
+
+local RoomScene = class("RoomScene", BaseRoomScene)
+
+function RoomScene:ctor(msgTbl)
+	self.super.ctor(self,msgTbl,config:getGameType());
+end
+
+-- 玩法设置
+function RoomScene:getRuleDesc( _msgTbl, _splitChar , _type)
+	print('getRuleDesc: ')
+	dump(_msgTbl ,'msgTbl',5);
+	print('_type = '.._type);
+	
+	local ruleDesc = ""
+	if _type == RoomScene.RULEDESC_TYPE.ROOM then
+		ruleDesc = Room.TypeName[_msgTbl.m_state + 1]
+	end
+	local qianggangType = nil
+	local minggang = nil
+	for i, v in ipairs(_msgTbl.m_playtype) do
+		if v == 0 then
+			ruleDesc = ruleDesc .. " 无马"
+		elseif v == 17 or v == 18 then
+			if qianggangType then
+				if qianggangType > v then
+					qianggangType = v
+				end
+			else
+				qianggangType = v
+			end
+		elseif v == 30 then
+			minggang = true
+		elseif RuleType[v] then
+			ruleDesc = ruleDesc .. _splitChar .. RuleType[v]
+		end
+	end
+
+	if minggang then
+		ruleDesc = ruleDesc .. _splitChar .. RuleType[30]
+	end
+
+	if qianggangType then
+		if qianggangType == 18 and minggang then
+		else
+			ruleDesc = ruleDesc .. _splitChar .. RuleType[qianggangType]
+		end
+	end
+	
+	print('ruleDesc = '..ruleDesc);
+	return ruleDesc
+end
+
+
+function RoomScene:stopFillupActions(seatIdx)
+	print("RoomScene:stopFillupActions ");
+
+	local player = self.m_room:getPlayer(seatIdx);
+	if(not player) then --已经添加过了
+		return;
+	end
+	player:clearFillupActionNodes();
+
+	local fillupFunc = player:getFillupImmiFunc();
+	if(fillupFunc ~= nil) then 
+		print("do at fillupFunc Immi");
+		fillupFunc()
+		player:clearFillupImmiFunc();
+	end
+end 
+
+--看看是否
+function RoomScene:realFillupFlowers(seatIdx,func)
+	print("RoomScene:realFillupFlowers");
+	local player = self:getRoom():getPlayer(seatIdx);
+	if(not player) then --可能不需要
+		return;
+	end
+	local fillupCards = player:getFillupFlowers();   -- {}  table
+	dump(fillupCards,'fillupCards');
+	for i,v in ipairs(fillupCards) do 
+		self:addToFlowerGroups(seatIdx,v);
+	end 
+end
+
+-- 动画添加到数组。控制显示和删除
+function RoomScene:addToFlowerGroups(seatIdx,fillupCards)
+	local player = self.m_room:getPlayer(seatIdx);
+
+	local key = checkint(fillupCards[1])*10 + checkint(fillupCards[2]);
+	print("fillup "..tostring(key))
+
+	if(player:checkFlowerKey(key) <= 0) then 
+		print("FLOWER KEY ERROR "..tostring(key));
+		return;
+	end 
+	
+	if(player:getHoldFlower(key)) then --已经添加过了
+		return;
+	end
+	
+
+	local uiIndex = player:getDisplayIdx();
+	--local rotateAngle = {-90, 180, 90, 0}
+	
+	local str = string.format("images/otherImages/flowers/nm_youxizhong_hp_%03d.png",player:checkFlowerKey(key))
+	local flowrSpr = cc.Sprite:create(str);
+	self.m_mahjongNode:addChild(flowrSpr,1024) 
+
+	
+	player:addHoldFlower(key,flowrSpr);
+	--print("rot "..rot[uiIndex]);
+	--flowrSpr:setRotation(rotateAngle[uiIndex]);
+	self:placeFlower(player)
+end 
+
+
+function RoomScene:getFlowerPos(player, index)
+	--local mapFlowers = player:getSortedFlowerPosArray();
+	index = (index - 1);
+	if(index < 0 ) then 
+		index = 0;
+	end 
+
+	local mjTilesReferPos = player:getTilesReferPos()
+	local flowerStart = mjTilesReferPos.flowerStart;
+		--local mjTilesCount = #roomPlayer:getOutMJTiles() + 1
+	local lineCount = math.floor(index /4);
+	local lineIdx = index %4;
+	local retPos = cc.pAdd(flowerStart, cc.pMul(mjTilesReferPos.flowerSpaceV, lineCount))
+	retPos = cc.pAdd(retPos, cc.pMul(mjTilesReferPos.flowerSpaceH, lineIdx))
+
+	--local retPos = cc.pAdd(flowerStart, cc.pMul(mjTilesReferPos.flowerSpace, index))
+
+	return retPos;
+end 
+
+function RoomScene:placeFlower(player)
+	local mapFlowers = player:getSortedFlowerPosArray();
+	--dump(mapFlowers,'mapFlowers');
+	for i = 1,#mapFlowers do 
+		local spr = player:getHoldFlower(mapFlowers[i])
+		if(spr ~= nil) then
+			local pos = self:getFlowerPos(player,i)
+			spr:setPosition(pos);
+		end 
+	end
+end 
+
+
+local function onFillupTileAction(tileSpr,posStart,posMid,posEnd,delayTimer,callback)
+	print('local onMJTileSprMoveAction '..tostring(mjTile) ..' '..tostring(posStart)..' '..tostring(posMid)..' '..tostring(posEnd).. ' '..tostring(delayTimer));
+	local spr = tileSpr;
+	local totalTime = 0.05;
+	spr:setPosition(posStart);
+	local delay1 = cc.DelayTime:create(delayTimer);
+	local moveToAc_1 = cc.MoveTo:create(totalTime,posMid);
+	local rotateToAc_1 = cc.ScaleTo:create(totalTime, 1.5)
+	local delay2 = cc.DelayTime:create(0.8)
+	local moveToAc_2 = cc.MoveTo:create(totalTime, posEnd)
+	local rotateToAc_2 = cc.ScaleTo:create(totalTime, 1.0)
+	local callFunction = cc.CallFunc:create(callback);
+	local rmAct = cc.Hide:create()--cc.RemoveSelf:create();
+	spr:runAction(cc.Sequence:create(delay1,
+				cc.Spawn:create(moveToAc_1, rotateToAc_1),
+				delay2,
+				cc.Spawn:create(moveToAc_2, rotateToAc_2),
+				callFunction,
+				rmAct));
+end 
+
+function RoomScene:onFillupFlowerAnimation(seatIdx,fillupCards,index,maxsize,nextFillupFunc)
+	print("RoomScene:onFillupFlowerAnimation ")
+	local player = self.m_room:getPlayer(seatIdx);
+	if(not player) then 
+		return;
+	end 
+	local mjTilesReferPos = player:getTilesReferPos();
+	local posStart = mjTilesReferPos.holdStart;
+	local playerMJTiles = player:getHoldMJTiles();
+
+	local pos_0 = {};
+	local pos_1 = {};
+	local pos_2 = {};
+
+
+	local fillupNum = #fillupCards
+	local posMid = self:getMJWorldPoint(mjTilesReferPos.showRedDragonTilePos)
+	local pos_2_half_num = math.floor(fillupNum /2)
+	posMid = cc.pSub(posMid, cc.pMul(mjTilesReferPos.showRedDragonSpace, pos_2_half_num))
+
+	for i = 1,fillupNum do 
+		pos_0[i] = mjTilesReferPos.holdStart; --> 默认的位置
+		pos_1[i] = cc.pAdd(posMid, cc.pMul(mjTilesReferPos.showRedDragonSpace, i-1))
+	end
+	
+	local rdHideTiles = {};
+	local inTiles = {};
+	for i,v in ipairs(fillupCards) do 
+		local mjColor =  v[1];
+		local mjNumber = v[2];
+		for i2,v2 in ipairs(playerMJTiles) do 
+			if(v2.mjColor == mjColor and  v2.mjNumber == mjNumber) then --某一个花牌
+				table.insert(rdHideTiles ,v2);
+				pos_0[i] = self:getMJWorldPoint(cc.p(v2.mjTileSpr:getPosition())) --> 取得位置,手牌的话，
+			end 
+		end
+		inTiles[i]= self:addFillupMJTileToPlayer(seatIdx, mjColor, mjNumber)
+		player:addFillupActionNode(inTiles[i].mjTileSpr); 
+	end 
+	-- for i,v in ipairs(playerMJTiles) do
+	-- 	if(v.mjColor == mjColor and  v.mjNumber == mjNumber) then --某一个花牌
+	-- 		table.insert(rdHideTiles ,v);
+	-- 		--player:addFillupHideFiles();
+	-- 	end  
+	-- end
+	for i,v in ipairs(rdHideTiles) do 
+		table.removebyvalue(playerMJTiles,v);
+		v.mjTileSpr:setVisible(false);
+	end
+	self:setRdHideTiles(seatIdx,rdHideTiles);
+
+	--fillupCards
+	-- local function getPosMid()
+	-- 	local posMid = self:getMJWorldPoint(mjTilesReferPos.showRedDragonTilePos)
+	-- 	return posMid; 
+	-- end 
+	local function getPosEnd()
+		local posEnd = self:getMJWorldPoint(mjTilesReferPos.flowerStart)
+		print(tostring(seatIdx)..' posEnd '..tostring(posEnd));
+		return posEnd;
+	end 
+
+	--local posMid = getPosMid();
+	local posEnd = getPosEnd();
+	local delayTimer = 0.01;
+	
+	for i,v in ipairs(inTiles) do
+		local delay = 0.05 + (i - 1) * 0.05;
+		onFillupTileAction(v.mjTileSpr,pos_0[i],pos_1[i],posEnd,delay,function()
+			print('onActionEnd '..i )
+			if(i >= maxsize) then
+				self:removeAllRdHideTiles(seatIdx);
+				nextFillupFunc();
+			end
+		end)
+	end
+
+	-- local player = self.m_room:getPlayer(seatIdx);
+	-- if(not player) then 
+	-- 	return;
+	-- end 
+	-- local playerMJTiles = player:getHoldMJTiles();
+	-- local mjColor = fillupCards[1];
+	-- local mjNumber = fillupCards[2];
+
+	-- local rdHideTiles = {};
+	-- for i,v in ipairs(playerMJTiles) do
+	-- 	if(v.mjColor == mjColor and  v.mjNumber == mjNumber) then --某一个花牌
+	-- 		table.insert(rdHideTiles ,v);
+	-- 		--player:addFillupHideFiles();
+	-- 	end  
+	-- end
+
+	-- for i,v in ipairs(rdHideTiles) do 
+	-- 	table.removebyvalue(playerMJTiles,v);
+	-- 	v.mjTileSpr:setVisible(false);
+	-- end
+
+	-- self:setRdHideTiles(rdHideTiles);
+
+	-- local mjTilesReferPos = player:getTilesReferPos();
+	-- local posStart = mjTilesReferPos.holdStart;
+	-- local mjTile = self:addFillupMJTileToPlayer(seatIdx, mjColor, mjNumber)
+	-- local function getPosMid()
+	-- 	local posMid = self:getMJWorldPoint(mjTilesReferPos.showRedDragonTilePos)
+	-- 	 return posMid; 
+	-- end 
+
+	-- local function getPosEnd()
+	-- 	local posEnd = self:getMJWorldPoint(mjTilesReferPos.flowerStart)
+	-- 	print(tostring(seatIdx)..' posEnd '..tostring(posEnd));
+	-- 	return posEnd;
+	-- end 
+
+	-- local posMid = getPosMid();
+	-- local posEnd = getPosEnd();
+	-- local delayTimer = 0.01;
+	-- player:addFillupActionNode(mjTile.mjTileSpr);
+	
+	-- onFillupTileAction(mjTile.mjTileSpr,posStart,posMid,posEnd,delayTimer,function()
+	-- 	print('onActionEnd '..index )
+	-- 	if(index >= maxsize) then
+	-- 		self:removeAllRdHideTiles();
+	-- 	end
+	-- 	nextFillupFunc();
+	-- end)
+
+end 
+
+function RoomScene:clearFillup()
+	for k,player in pairs(self.m_room:getPlayers()) do
+		player:clearFillupFlowers();
+		player:clearFillupActionNodes();
+		player:clearFillupImmiFunc();
+	end
+end 
+
+function RoomScene:touchPlayerMjTiles(touch)
+	local player = self.m_room:getMainPlayer()
+	if not player then
+		return
+	end
+
+	for idx, mjTile in ipairs(player:getHoldMJTiles()) do
+		if(mjTile.mjColor   ~=6) then --花牌不能出
+			local touchPoint = mjTile.mjTileSpr:convertTouchToNodeSpace(touch)
+			local mjTileSize = mjTile.mjTileSpr:getContentSize()
+			local mjTileRect = cc.rect(0, 0, mjTileSize.width, mjTileSize.height)
+			if cc.rectContainsPoint(mjTileRect, touchPoint) then
+				gt.soundEngine:playEffect("common/audio_card_click")
+				return mjTile, idx
+			end
+		end
+	end
+	return nil
+end
+
+function RoomScene:grayMJTile(mjTile,isGray)
+	print("RoomScene:grayMJTileTouch " ..'')
+	if(mjTile ~= nil and mjTile.mjTileSpr ~= nil) then 
+		local spr = mjTile.mjTileSpr;
+		if(spr ~= nil) then 
+			if(isGray ) then 
+				spr:setOpacity(128)
+			else
+				spr:setOpacity(255)
+			end
+		end
+	end
+end 
+
+
+return RoomScene

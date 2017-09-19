@@ -1,0 +1,253 @@
+--region app.views.jihu_buhua.RoomOptions
+--author: 
+--desc:  惠州庄玩法选择界面
+--
+--endregion
+local _mod = ...;  --使用的是这种格式  app/views/...
+_mod= string.gsub(_mod,"%/","%.");
+local config = import('.config',_mod); --> 导入这个文件
+
+local Wanfa_Type = config.Wanfa_Type;
+local Guipai_Type = config.Guipai_Type;
+local Mapai_Type = config.Mapai_Type;
+local Hu_Only_Ma = config.Hu_Only_Ma;
+local defaultConfig = config.defaltConfig;
+
+local userDefault = cc.UserDefault:getInstance()
+
+
+local RoomOptions = class("RoomOptions", BaseRoomOptions)
+
+function RoomOptions:ctor()
+	self.csbNode = cc.CSLoader:createNode("res/views/guangdong/CreateJihu_buhua.csb")
+	self:addChild(self.csbNode)
+	self.disColor = cc.c3b(170,170,170)
+	self.super.ctor(self)
+end
+
+
+function RoomOptions:initWanfa()
+	self.playWanfa = defaultConfig.wanfa;--{1, 2, 3, 4, 5, 6, 7}
+	local wan = Tools.getValue(defaultConfig.WANFA_KEY)
+	if wan ~= "" then
+		wan = string.split(wan, ",")
+		for i = 1, #wan do
+			self.playWanfa[i] = tonumber(wan[i])
+		end
+	end
+
+	local function setSelectWanfa(index, check)
+		self.wanfaNodes[index].check:setSelected(check or false)
+		self:refreshCheckOutline(self.wanfaNodes[index].label, check or false)
+		if check then
+			self.playWanfa[index] = index
+		elseif check == false then
+			self.playWanfa[index] = 0
+		end
+	end
+	local function checkBoxWanfa( sender, eventType )
+		if eventType == ccui.CheckBoxEventType.selected then
+			setSelectWanfa(sender.index, true)
+			if(sender.index == 2 ) then
+				setSelectWanfa(1, true) 
+			end 
+			-- if(sender.index == 1) then
+			-- 	setSelectWanfa(2, true) 
+			-- end 
+			self:saveWanfaToFile();
+		elseif eventType == ccui.CheckBoxEventType.unselected then
+			setSelectWanfa(sender.index, false)
+			if(sender.index == 1) then
+				setSelectWanfa(2, false)
+			end 
+			-- if(sender.index == 2) then
+			-- 	setSelectWanfa(1, false) 
+			-- end 
+			self:saveWanfaToFile();
+		end
+	end
+
+	self.wanfaNodes = self:getNodes(self.csbNode, "wanfa", #Wanfa_Type)
+	for i, v in ipairs(self.wanfaNodes) do
+		if self.playWanfa[i] == i then
+			setSelectWanfa(i, true)
+		else
+			setSelectWanfa(i)
+		end
+		
+		v.check.index = i
+		v.check:addEventListener(checkBoxWanfa)
+
+		v.panel:addClickEventListener(function(  )
+			if v.check:isSelected() then
+				checkBoxWanfa(v.check, ccui.CheckBoxEventType.unselected)
+			else
+				checkBoxWanfa(v.check, ccui.CheckBoxEventType.selected)
+			end
+		end)
+	end
+end
+
+function RoomOptions:initGuipai()
+
+	-- self.playGuipai = userDefault:getIntegerForKey(defaultConfig.GUIPAI_KEY, 5)
+	-- local function setSelectGuipai(index, check)
+	-- 	self.guipaiNodes[index].check:setSelected(check or false)
+	-- 	self:refreshCheckOutline(self.guipaiNodes[index].label, check or false)
+	-- 	if check then
+	-- 		self.playGuipai = index
+	-- 		userDefault:setIntegerForKey(defaultConfig.GUIPAI_KEY, index)
+	-- 	end
+	-- end
+	-- local function checkBoxGuipai( sender, eventType )
+	-- 	if eventType == ccui.CheckBoxEventType.selected then
+	-- 		if self.playGuipai == 1 and sender.index ~= 1 then		-- 之前无鬼,现在有鬼
+	-- 			self:toYougui()
+	-- 		elseif sender.index == 1 and self.playYibaiGui ~= 1 then	-- 之前有鬼,现在无鬼
+	-- 			self:toWugui()
+	-- 		end
+	-- 		if self.playGuipai ~= sender.index then
+	-- 			setSelectGuipai(self.playGuipai, false)
+	-- 			setSelectGuipai(sender.index, true)
+	-- 		end
+	-- 	elseif eventType == ccui.CheckBoxEventType.unselected then
+	-- 		sender:setSelected(true)
+	-- 	end
+	-- end
+
+	-- self.guipaiNodes = self:getNodes(self.csbNode, "guipai", #Guipai_Type)
+	-- for i, v in ipairs(self.guipaiNodes) do		
+	-- 	if self.playGuipai == i then
+	-- 		if(i == 1) then
+	-- 			self:toWugui()
+	-- 		end 
+	-- 		setSelectGuipai(i, true)
+	-- 	else
+	-- 		setSelectGuipai(i)
+	-- 	end
+		
+	-- 	v.check.index = i
+	-- 	v.check:addEventListener(checkBoxGuipai)
+	-- 	v.panel:addClickEventListener(function(  )
+	-- 		if v.check:isSelected() then
+	-- 			checkBoxGuipai(v.check, ccui.CheckBoxEventType.unselected)
+	-- 		else
+	-- 			checkBoxGuipai(v.check, ccui.CheckBoxEventType.selected)
+	-- 		end
+	-- 	end)
+	-- end
+end
+
+function RoomOptions:initMapai()
+	self.playMapai = userDefault:getIntegerForKey(defaultConfig.MAPAI_KEY,defaultConfig.mapai)
+
+	local function setSelectMapai(index, check)
+		self.mapaiNodes[index].check:setSelected(check or false)
+		self:refreshCheckOutline(self.mapaiNodes[index].label, check or false)
+		if check then
+			self.playMapai = index
+			userDefault:setIntegerForKey(defaultConfig.MAPAI_KEY, index)
+		end
+	end
+	local function checkBoxMapai( sender, eventType )
+		if eventType == ccui.CheckBoxEventType.selected then
+			if sender.index == 1 then
+				self:toWuMa()
+			else
+				self:toYouMa()
+			end
+
+			if self.playMapai ~= sender.index then
+				setSelectMapai(self.playMapai, false)
+				setSelectMapai(sender.index, true)
+			end
+		elseif eventType == ccui.CheckBoxEventType.unselected then
+			sender:setSelected(true)
+		end
+	end
+
+	self.mapaiNodes = self:getNodes(self.csbNode, "mapai", #Mapai_Type)
+	for i, v in ipairs(self.mapaiNodes) do		
+		if self.playMapai == i then
+			setSelectMapai(i, true)
+			if i == 1 then
+				self:toWuMa()
+			end
+		else
+			setSelectMapai(i)
+		end
+		
+		v.check.index = i
+		v.check:addEventListener(checkBoxMapai)
+
+		v.panel:addClickEventListener(function(  )
+			if not v.check:isSelected() then
+				checkBoxMapai(v.check, ccui.CheckBoxEventType.selected)
+			end
+		end)
+	end
+end
+
+function RoomOptions:forbidSelectWanfa(index)
+	self.wanfaNodes[index].check:setSelected(false);
+	self.wanfaNodes[index].check:setEnabled(false)
+	self:refreshCheckOutline(self.wanfaNodes[index].label, false)
+	self.wanfaNodes[index].label:setTextColor(self.disColor)
+	self.wanfaNodes[index].panel:setEnabled(false)
+	self.playWanfa[index] = 0
+end
+
+function RoomOptions:allowSelectWanfa(index)
+	self.wanfaNodes[index].check:setEnabled(true)
+	self:refreshCheckOutline(self.wanfaNodes[index].label, false)
+	self.wanfaNodes[index].panel:setEnabled(true)
+end
+
+function RoomOptions:toYougui()
+	--self:allowSelectWanfa(6)
+	self:saveWanfaToFile();
+end 
+
+function RoomOptions:toWugui()
+	--self:forbidSelectWanfa(6)
+	self:saveWanfaToFile();
+end 
+function RoomOptions:toYouMa()
+	for i, v in ipairs(Hu_Only_Ma) do
+		self:allowSelectWanfa(v)
+	end
+	self:saveWanfaToFile();
+end
+
+function RoomOptions:toWuMa()
+	for i, v in ipairs(Hu_Only_Ma) do
+		self:forbidSelectWanfa(v)
+	end
+	self:saveWanfaToFile();
+end
+
+function RoomOptions:getStatu()
+	return config.RoomType;
+end
+
+function RoomOptions:getPlayType()
+	local typeList = {}
+	
+	table.insert(typeList, Mapai_Type[self.playMapai])
+	table.insert(typeList, Guipai_Type[self.playGuipai]) --鬼牌 第一个固定放进去
+
+	for k, v in pairs(self.playWanfa) do
+		if v ~= 0 then
+			table.insert(typeList, Wanfa_Type[v])
+		end
+	end
+
+	return typeList
+end
+
+function RoomOptions:saveWanfaToFile()
+--	config:saveToFile('wanfa');
+	Tools.saveKeyValue(defaultConfig.WANFA_KEY, table.concat(self.playWanfa, ","));
+end 
+
+return RoomOptions

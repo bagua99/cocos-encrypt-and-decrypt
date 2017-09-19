@@ -1,0 +1,53 @@
+local HaidiRcvMakeDescision = class("HaidiRcvMakeDescision", BaseRoomAgreement)
+
+function HaidiRcvMakeDescision:ctor()
+	self:registerMsgListener(gt.CG_SYNC_HAIDI, self, self.onHaidiRcvMakeDescision)
+end
+
+function HaidiRcvMakeDescision:onHaidiRcvMakeDescision(msgTbl)
+	-- body
+	local seatIdx = msgTbl.m_pos + 1
+	-- 当前出牌座位
+	self.m_scene:setTurnSeatSign(seatIdx)
+
+	local room = self.m_scene:getRoom()
+	gt.log("room:getDisplayIdx() = " .. room:getMainSeatIdx())
+	if seatIdx == room:getMainSeatIdx() then
+		-- 玩家决策
+		self.m_scene:setPlayerDecision(true)
+		self:LaoYueNodeVisible(true)
+	else
+		self:LaoYueNodeVisible(false)
+	end
+end
+
+function HaidiRcvMakeDescision:LaoYueNodeVisible(isShow)
+	-- body
+	local laoYueNode = self.m_scene:getHaiDiLao()
+	if isShow then
+		laoYueNode:setVisible(true)
+		local yaoBtn = gt.seekNodeByName(laoYueNode, "Btn_yao")
+		local guoBtn = gt.seekNodeByName(laoYueNode, "Btn_guo")
+		gt.addBtnPressedListener(yaoBtn, function ( )
+			laoYueNode:setVisible(false)
+			self.m_scene:setPlayerDecision(false)
+			local msgToSend = {}
+			msgToSend.m_msgId = gt.CG_CHOOSE_HAIDI
+			msgToSend.m_flag = 1
+			gt.socketClient:sendMessage(msgToSend)
+
+		end)
+		gt.addBtnPressedListener(guoBtn, function ( )
+			laoYueNode:setVisible(false)
+			self.m_scene:setPlayerDecision(false)
+			local msgToSend = {}
+			msgToSend.m_msgId = gt.CG_CHOOSE_HAIDI
+			msgToSend.m_flag = 0
+			gt.socketClient:sendMessage(msgToSend)
+		end)
+	else
+		laoYueNode:setVisible(false)
+	end
+end
+
+return HaidiRcvMakeDescision

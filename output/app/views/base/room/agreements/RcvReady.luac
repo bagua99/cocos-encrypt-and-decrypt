@@ -1,0 +1,21 @@
+local RcvReady = class("RcvReady", BaseRoomAgreement)
+
+-- 同步玩家准备状态 37
+function RcvReady:ctor()
+	self:registerMsgListener(gt.GC_READY, self, self.onRcvReady)
+end
+
+function RcvReady:onRcvReady(msgTbl)
+	local seatIdx = msgTbl.m_pos + 1
+
+	local room = self.m_scene:getRoom()
+	local mainSeat = room:getMainSeatIdx()
+	if seatIdx == mainSeat then
+		room:setRoomStatus(Room.Status.WAIT)
+	end	
+	
+	room:setReady(seatIdx, 1)
+	self.m_scene:checkReady()
+end
+
+return RcvReady

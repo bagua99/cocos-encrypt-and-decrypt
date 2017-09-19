@@ -1,0 +1,29 @@
+local RecvPlayerScore = class("RecvPlayerScore", BaseRoomAgreement)
+
+-- 服务器返回分数 116
+function RecvPlayerScore:ctor()
+	self:registerMsgListener(gt.GC_UPDATE_SCORE, self, self.onRecvPlayerScore)
+end
+
+function RecvPlayerScore:onRecvPlayerScore(msgTbl)
+	if not msgTbl.m_score or #msgTbl.m_score ~= 4 then
+		return false
+	end
+
+	local room = self.m_scene:getRoom()
+	local players = room:getPlayers()
+
+	local totalScore = 0
+	for k,player in pairs(players) do
+		local score = msgTbl.m_score[player:getSeatIdx()] or 0
+		player:setScore(score)
+		totalScore = totalScore + score
+	end
+	
+	if totalScore ~= 4000 then
+		require("app/views/NoticeTips"):create("提示", "分数结算错误,请联系客服!", nil, nil, true)
+	end
+end
+
+
+return RecvPlayerScore

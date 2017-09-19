@@ -1,0 +1,26 @@
+local RcvAddPlayer = class("RcvAddPlayer", BaseRoomAgreement)
+
+-- 其他玩家进入房间 31
+function RcvAddPlayer:ctor()
+	self:registerMsgListener(gt.GC_ADD_PLAYER, self, self.onRcvAddPlayer)
+end
+
+function RcvAddPlayer:onRcvAddPlayer(msgTbl)
+	local room = self.m_scene:getRoom()
+	local player = Player.new()
+	player:setuid(msgTbl.m_userId)
+	player:setName(msgTbl.m_nike)
+	player:setHeadURL(string.sub(msgTbl.m_face, 1, string.lastString(msgTbl.m_face, "/")) .. "96")
+	player:setSex(msgTbl.m_sex)
+	player:setIP(msgTbl.m_ip)
+	player:setSeatIdx(msgTbl.m_pos + 1)
+	player:setDisplayIdx((msgTbl.m_pos + room:getSeatOffset()) % room:getMaxPlayerNum() + 1)
+	player:setReady(msgTbl.m_ready)
+	player:setScore(msgTbl.m_score)
+	player:setLocation(msgTbl.m_location)
+	player:setCurHeadIconId(msgTbl.m_curHeadIconId);
+	self.m_scene:roomAddPlayer(player)
+end
+
+
+return RcvAddPlayer

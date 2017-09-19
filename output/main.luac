@@ -1,0 +1,44 @@
+cc.FileUtils:getInstance():setPopupNotify(false)
+
+local writePath = cc.FileUtils:getInstance():getWritablePath()
+local resSearchPaths = {
+	writePath,
+	writePath .. "src_et/",
+	writePath .. "src/",
+	writePath .. "res/sd/",
+	writePath .. "res/",
+	"src_et/",
+	"src/",
+	"res/sd/",
+	"res/"
+}
+cc.FileUtils:getInstance():setSearchPaths(resSearchPaths)
+
+require "config"
+require "cocos.init"
+
+local function main()
+    require("app.MyApp"):create():run()
+end
+
+local logfile = cc.FileUtils:getInstance():getWritablePath() .. "log.log"
+function __G__TRACKBACK__( msg )
+	--崩溃收集
+	if buglyReportLuaException then
+		local message = msg
+		buglyReportLuaException(tostring(message), debug.traceback())
+	end
+
+	--调试模式显示异常
+	if gt.isDebugPackage then
+		local logInfo = io.readfile(logfile)
+		local logTab = string.split(logInfo, "\n")
+		local ret = table.concat(logTab, "\n", #logTab > 100 and (#logTab - 100 ) or 1)
+        require("app/views/ErrorTips"):create(ret .. "\n" .. "LUA ERROR: " .. tostring(msg) .. "\n" .. debug.traceback(), true)		
+    end  
+
+    gt.log("LUA ERROR: " .. tostring(msg) .. "\n")
+    gt.log(debug.traceback())
+end
+
+xpcall(main, __G__TRACKBACK__)

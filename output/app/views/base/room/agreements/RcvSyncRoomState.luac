@@ -1,0 +1,119 @@
+local RcvSyncRoomState = class("RcvSyncRoomState", BaseRoomAgreement)
+
+-- 同步房间状态 35
+function RcvSyncRoomState:ctor()
+	self:registerMsgListener(gt.GC_SYNC_ROOM_STATE, self, self.onRcvSyncRoomState)
+end
+
+function RcvSyncRoomState:onRcvSyncRoomState(msgTbl)
+	print('base.room.agreements.RcvSyncRoomState:onRcvSyncRoomState ');
+	if msgTbl.m_state == 1 then
+		-- 等待状态
+		return
+	end
+
+	--设置断线重连状态
+	if msgTbl.m_msgId == gt.GC_SYNC_ROOM_STATE then
+		self.m_scene.m_isRelogin = true
+	end
+
+	
+	--设置房间状态
+	local room = self.m_scene:getRoom()
+	room:setRoomStatus(msgTbl.m_state)
+	--room:setCanInteraction(msgTbl.m_canInteraction);
+	
+
+	local csbLayer = self.m_scene:getCsbLayer()
+
+	-- 隐藏等待界面元素
+	local readyPlayNode = gt.seekNodeByName(csbLayer, "Node_readyPlay")
+	readyPlayNode:setVisible(false)
+	-- 游戏开始后隐藏准备标识
+	self.m_scene:hideReadySign()
+	local readyBtn = gt.seekNodeByName(csbLayer, "Btn_ready")
+	readyBtn:setVisible(false)
+
+	-- 显示轮转座位标识
+	local turnPosBgSpr = gt.seekNodeByName(csbLayer, "Spr_turnPosBg")
+	turnPosBgSpr:setVisible(true)
+	-- 显示游戏中按钮
+	local playBtnsNode = gt.seekNodeByName(csbLayer, "Node_playBtns")
+	playBtnsNode:setVisible(true)
+
+	-- 显示当前出牌座位标示
+	if msgTbl.m_pos then
+		local seatIdx = msgTbl.m_pos + 1
+		self.m_scene:setTurnSeatSign(seatIdx)
+	end
+
+	-- 牌局状态,剩余牌
+	local roundStateNode = gt.seekNodeByName(csbLayer, "Node_roundState")
+	local remainTilesLabel = gt.seekNodeByName(roundStateNode, "Label_remainTiles")
+	remainTilesLabel:setString(tostring(msgTbl.m_dCount))
+
+	-- 断线重连后,当前所选牌,索引等需要清理掉
+	self.m_scene:clearChoose()  
+	self.m_scene:clearAnimation() --停止动画
+	self.m_scene:clearFillup();  --> 放在这里好不好呢
+	--清除决策按钮
+	self.m_scene:getDecisionNode():removeAllChildren()
+
+	local room = self.m_scene:getRoom()
+	table.foreach(room:getPlayers(), function(seatIdx, player)
+		-- 设置庄家标识
+		local playerInfoNode = gt.seekNodeByName(csbLayer, "Node_playerInfo_" .. player:getDisplayIdx())
+		local bankerSignSpr = gt.seekNodeByName(playerInfoNode, "Spr_bankerSign")
+		local nodeSuccessMorSpr = gt.seekNodeByName(playerInfoNode, "Node_successMor")
+		local nodeHongzhong = gt.seekNodeByName(playerInfoNode,"Node_hongzhong")
+		if(nodeHongzhong) then 
+			nodeHongzhong:setVisible(false);
+		end 
+		
+		if seatIdx == msgTbl.m_zhuang + 1 then
+			player:setBanker(true)
+			bankerSignSpr:setVisible(true)
+			--节节高玩法
+			if Tools.isSelectPlayWF(43) then
+
+				--print("-------------有43标示符号-----------------------")
+				nodeSuccessMorSpr:setVisible(true)
+				gt.seekNodeByName(nodeSuccessMorSpr, "Atlas_num"):setString(""..player:getSuccessCnt())
+				bankerSignSpr:setVisible(false)
+			else
+				nodeSuccessMorSpr:setVisible(false)
+			end
+		else
+			player:setBanker(false)
+			bankerSignSpr:setVisible(false)
+			nodeSuccessMorSpr:setVisible(false)
+		end
+	end)
+
+	-- 重新设置玩家牌
+	self.m_scene:resetTiles(msgTbl)
+
+	--self.m_scene:clearAnimation()
+
+	self.m_scene.m_yuyinButton:setVisible(true)
+
+	-- 这里开始验证牌数量是否为13或者14
+	self.m_scene:setFlushCardNumFlag(true)
+
+	if msgTbl.m_fengQuan and self.m_scene.setRingType then
+		self.m_scene:setRingType(msgTbl.m_fengQuan + 1)
+	end
+
+	--去除动画
+	if self.m_scene.huAnimateNode then
+		self.m_scene.huAnimateNode:removeFromParent()
+		self.m_scene.huAnimateNode = nil
+	end
+
+	--清除出牌动作
+	self.m_scene:setSelfOutMjTile()
+
+	self.m_scene:initCatchHorse();
+end
+
+return RcvSyncRoomState

@@ -1,0 +1,280 @@
+--	端午节代理投票活动
+--	by:house
+--	date:2017.05.23
+
+local ActivityAgentVote = class("ActivityAgentVote", function()
+	return cc.LayerColor:create(cc.c4b(85, 85, 85, 85), gt.winSize.width, gt.winSize.height)
+end)
+
+local gt = cc.exports.gt
+local dragonBoatServer = "http://120.76.194.200:7480/xlhy-activity/"
+if gt.isDebugPackage then
+	if gt.debugInfo.YunDun then -- 线上服务器
+		dragonBoatServer =  "https://active.xianlaigame.com/xlhy-activity/"
+	else  -- 测试服务器
+		dragonBoatServer =  "http://120.76.194.200:7480/xlhy-activity/"
+	end
+else
+	dragonBoatServer = "https://active.xianlaigame.com/xlhy-activity/"
+end
+
+function ActivityAgentVote:ctor()
+	-- 注册节点事件
+	self:registerScriptHandler(handler(self, self.onNodeEvent))
+
+	local csbNode = cc.CSLoader:createNode("ActivityAgentVote.csb")
+	csbNode:setPosition(gt.winCenter)
+	self:addChild(csbNode)
+	self.rootNode = csbNode
+	self.closeBtn = gt.seekNodeByName(self.rootNode, "closeBtn")
+	gt.addBtnPressedListener(self.closeBtn, function()
+		self:removeFromParent()
+	end)
+	--	活动规则
+	local buttonActivityRule = gt.seekNodeByName(csbNode, "Button_activity_rule")
+	gt.addBtnPressedListener(buttonActivityRule, function()
+		local voteRuleLayer = require("app/views/Activities/ActivityAgentVoteRule"):create()
+		display.getRunningScene():addChild(voteRuleLayer, 9)
+	end)
+
+	--	投票
+	local buttonActivityVote = gt.seekNodeByName(csbNode, "Button_activity_vote")
+	gt.addBtnPressedListener(buttonActivityVote, function()
+		self:buttonActivityVoteHandler()
+	end)
+
+	self.buttonActivityVote = buttonActivityVote
+	self.textFieldAgentid = gt.seekNodeByName(csbNode, "TextField_agentid") -- 代理id输入
+	self.listViewVoteRank = gt.seekNodeByName(csbNode, "ListView_vote_rank")
+	self.listViewVoteRank:setScrollBarEnabled(false)
+	self:getVoteRankData()
+end
+
+function ActivityAgentVote:onNodeEvent(eventName)
+	if "enter" == eventName then
+		local listener = cc.EventListenerTouchOneByOne:create()
+		listener:setSwallowTouches(true)
+		listener:registerScriptHandler(handler(self, self.onTouchBegan), cc.Handler.EVENT_TOUCH_BEGAN)
+		listener:registerScriptHandler(handler(self, self.onTouchEnded), cc.Handler.EVENT_TOUCH_ENDED)
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:addEventListenerWithSceneGraphPriority(listener, self)
+	elseif "exit" == eventName then
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:removeEventListenersForTarget(self)
+	end
+end
+
+function ActivityAgentVote:onTouchBegan(touch, event)
+	return true
+end
+
+function ActivityAgentVote:onTouchEnded(touch, event)
+	local bg = gt.seekNodeByName(self.rootNode, "Img_bg")
+	if bg then
+		local point = bg:convertToNodeSpace(touch:getLocation())
+		local rect = cc.rect(0, 0, bg:getContentSize().width, bg:getContentSize().height)
+		if not cc.rectContainsPoint(rect, cc.p(point.x, point.y)) then
+			-- self:removeFromParent()
+		end
+	end
+end
+
+--	投票
+function ActivityAgentVote:buttonActivityVoteHandler(  )
+	local agentId = self.textFieldAgentid:getString()
+	if string.len(agentId) < 1 then
+		require("app/views/NoticeTips"):create("提示", "请输入代理ID", nil, nil, true)	
+		return
+	end
+	local isVoted = cc.UserDefault:getInstance():getStringForKey( "AGENT_VOTE_".. tostring(gt.playerData.uid))
+	if isVoted and string.len(isVoted) > 0 then 	--	该id账户已经投过票了  
+		require("app/views/NoticeTips"):create("提示", "您已经投过票了", nil, nil, true)
+		return
+	end
+
+	self.buttonActivityVote:setEnabled(false)
+	
+	if agentId and string.len(agentId) > 0 then
+		self:sendVoteSubmit(agentId)
+	end
+	local delayTime = cc.DelayTime:create(5)
+	local callFunc = cc.CallFunc:create(function(sender)
+		self.buttonActivityVote:setEnabled(true)
+	end)
+	local seqAction = cc.Sequence:create(delayTime, callFunc)
+	self.buttonActivityVote:runAction(seqAction)
+	-- self:getVoteRightsFromGameServer()
+end
+
+
+
+--	向游戏服务器进行投票资格验证
+function ActivityAgentVote:getVoteRightsFromGameServer(  )
+	local md5  = require("app/libs/md5")
+	local unionId = gt.unionid or "local"
+	local signStr = md5.sumhexa("msgcheckUserQualificationtype1unionId" .. unionId .. "1234567890987654321");
+	local URL_IP = "120.76.241.58:5001"
+	if gt.isDebugPackage then
+		if gt.debugInfo.YunDun then -- 线上服务器
+			URL_IP =  "120.76.241.58:5001"
+		else  -- 测试服务器
+			URL_IP =  "120.76.241.58:5001"
+		end
+	else
+		URL_IP = "120.76.241.58:5001"
+	end
+	local url = "http://" .. URL_IP .. "/cgi-bin/admin?msg=checkUserQualification&type=1&unionId=%s&sign=%s"
+
+	local xhr = cc.XMLHttpRequest:new()
+	xhr.responseType = cc.XMLHTTPREQUEST_RESPONSE_JSON
+	xhr:open("GET", string.format(url,unionId,signStr))
+	local function onResp()
+		if xhr.readyState == 4 and xhr.status == 200 and xhr.response ~= ""  then
+			local response = xhr.response
+			require("json")
+			local respJson = json.decode(response)
+			if respJson.checkUserQualification then
+				
+			else
+				require("app/views/NoticeTips"):create("提示", "您还没有投票的资格,请查看详细规则", nil, nil, true)
+			end
+		else
+
+		end
+		xhr:unregisterScriptHandler()
+	end
+	xhr:registerScriptHandler(onResp)
+	xhr:send()
+end
+
+--	向后台发送投票验证
+function ActivityAgentVote:sendVoteSubmit( agentId )
+	--	获取活动数据
+	local xhr = cc.XMLHttpRequest:new()
+	xhr.responseType = cc.XMLHTTPREQUEST_RESPONSE_JSON
+	local unionId = gt.unionid or "local"
+	local md5  = require("app/libs/md5")
+	local serverCode = gt.serverCode or "guangdong_db"
+	local md5Str = serverCode .. gt.AppID .. gt.playerData.uid .. unionId .. "w4eEr5T"
+	local md5_as_hex = md5.sumhexa(md5Str)
+	local signStr = cc.UtilityExtension:generateMD5(md5Str,string.len(md5Str))
+	local voteSubmitURL = string.format(dragonBoatServer.."newvote/submit?serverCode=%s&gameId=%s&userId=%s&agentId=%s&unionId=%s&sign=%s", 
+							serverCode, gt.AppID, gt.playerData.uid, agentId, unionId , md5_as_hex)
+	xhr:open("GET", voteSubmitURL)
+	local function onResp()
+		if xhr.readyState == 4 and xhr.status == 200 and xhr.response ~= ""  then
+			local response = xhr.response
+			require("json")
+			local respJson = json.decode(response)
+			if tonumber(respJson.status) == 1 then 	--	投票成功
+				self:removeFromParent()
+				cc.UserDefault:getInstance():setStringForKey( "AGENT_VOTE_".. tostring(gt.playerData.uid),agentId)
+				require("app/views/NoticeTips"):create("提示", "感谢您为代理"..agentId.."投上了宝贵的一票", nil, nil, true)
+			else
+				require("app/views/NoticeTips"):create("提示", tostring(respJson.msg), nil, nil, true)
+			end
+		else
+
+		end
+		xhr:unregisterScriptHandler()
+	end
+	xhr:registerScriptHandler(onResp)
+	xhr:send()
+end
+
+--	获取投票排名
+function ActivityAgentVote:getVoteRankData(  )
+	--	获取活动数据
+	local xhr = cc.XMLHttpRequest:new()
+	xhr.responseType = cc.XMLHTTPREQUEST_RESPONSE_JSON
+	local serverCode = serverCode or "guangdong_db"
+	local voteRankURL = string.format(dragonBoatServer.."newvote/getRank?serverCode=%s&gameId=%s&start=%s&end=%s", 
+							serverCode, gt.AppID, 1, 50)
+	xhr:open("GET", voteRankURL)
+	local function onResp()
+		if xhr.readyState == 4 and xhr.status == 200 and xhr.response ~= ""  then
+			local response = xhr.response
+			require("json")
+			local respJson = json.decode(response)
+			--	tmp ======			test		======
+			-- respJson = {
+			-- 				{rank=1,member="999dawdwad",score=191928},
+			-- 				{rank=2,member="dakwdjawjd",score=191928},
+			-- 				{rank=3,member=999,score=13123},
+			-- 				{rank=4,member=999,score=1},
+			-- 				{rank=5,member=999,score=41241},
+			-- 				{rank=6,member=999,score=191928},
+			-- 				{rank=7,member=999,score=191928},
+			-- 				{rank=8,member=999,score=191941228},
+			-- 				{rank=9,member=999,score=1},
+			-- 				{rank=10,member=999,score=191928},
+			-- 				{rank=11,member=999,score=4124},
+			-- 				{rank=12,member=999,score=191928},
+			-- 				{rank=13,member=999,score=191928},
+			-- 				{rank=14,member=999,score=191928},
+			-- 				{rank=15,member=999,score=41241},
+			-- 				{rank=16,member=999,score=191928},
+			-- 				{rank=17,member=999,score=191928},
+			-- 				{rank=18,member=999,score=191928},
+			-- 				{rank=19,member=999,score=1919128},
+			-- 				{rank=20,member=999,score=1},
+
+			-- 			}
+			if self and self.initVoteRankList then
+				self:initVoteRankList(respJson)
+			end
+		end
+		xhr:unregisterScriptHandler()
+	end
+	xhr:registerScriptHandler(onResp)
+	xhr:send()
+end
+
+function ActivityAgentVote:initVoteRankList( listData )
+	for i=1,#listData do
+		self.listViewVoteRank:pushBackCustomItem(self:getVoteRankListCell(listData[i]))
+	end
+end
+
+function ActivityAgentVote:getVoteRankListCell( cellData )
+	local listItem = ccui.Widget:create()
+	local spritePath = "images/otherImages/activity_agentvote/activity_agent_vote_rank_bg_"..tostring(cellData.rank % 2)..".png"
+	local listCell = cc.Sprite:create(spritePath)
+	listItem:addChild(listCell)
+	local cellSize = listCell:getContentSize()
+	listItem:setContentSize(cellSize)
+	local _cx,_cy = cellSize.width / 2,cellSize.height / 2
+	listCell:setPosition(_cx,_cy)
+	local LabelColor = cc.c3b(254,205,255)
+	if cellData.rank < 4 then
+		local cupSpritePath = "images/otherImages/activity_agentvote/activity_agent_vote_rank_"..tostring(cellData.rank)..".png"
+		local cup = cc.Sprite:create(cupSpritePath)
+		cup:setPosition(73,_cy - 8)
+		listCell:addChild(cup)
+		local rankLabel = gt.createTTFLabel(cellData.rank, 30)
+		rankLabel:setColor(cc.c3b(78,36,2))
+		rankLabel:setPosition(73,_cy)
+		listCell:addChild(rankLabel)
+	else
+		local rankLabel = gt.createTTFLabel(cellData.rank, 30)
+		rankLabel:setColor(LabelColor)
+		rankLabel:setPosition(73,_cy)
+		listCell:addChild(rankLabel)
+	end
+	--	代理Id
+	local labelAgentId = gt.createTTFLabel(cellData.member, 30)
+	labelAgentId:setColor(LabelColor)
+	labelAgentId:setPosition(330,_cy)
+	labelAgentId:setAnchorPoint(cc.p(0.5, 0.5))
+	listCell:addChild(labelAgentId)
+	--	票数
+	local labelScoreId = gt.createTTFLabel(cellData.score, 30)
+	labelScoreId:setColor(LabelColor)
+	labelScoreId:setPosition(570,_cy)
+	labelScoreId:setAnchorPoint(cc.p(0.5, 0.5))
+	listCell:addChild(labelScoreId)
+	return listItem
+end
+
+
+return ActivityAgentVote

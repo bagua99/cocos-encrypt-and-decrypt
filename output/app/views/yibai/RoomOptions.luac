@@ -1,0 +1,263 @@
+--region RoomOptions.lua
+--file:  app.views.yibai.RoomOptions
+--desc:  一百张 玩法界面
+--endergion
+
+local RoomOptions = class("RoomOptions", BaseRoomOptions)
+
+local SELECT_YIBAI_WANFA_KEY = "guangdong_yibai_wanfa"
+local SELECT_YIBAI_GUIPAI_KEY = "guangdong_yibai_guipai"
+local SELECT_YIBAI_MAPAI_KEY = "guangdong_yibai_mapai"
+
+local userDefault = cc.UserDefault:getInstance()
+
+local Wanfa_Type = {18, 17, 20, 19, 21, 22, 23, 24, 25, 26, 27, 30, 31, 33, 35,40, 5,53}
+local Guipai_Type = {7, 8, 9}
+local Mapai_Type = {0, 2, 4, 6}
+local Hu_Only_Gui = {4, 5, 6, 11}
+local Hu_Only_Ma = {15,18}
+
+function RoomOptions:ctor()
+	self.csbNode = cc.CSLoader:createNode("res/views/guangdong/CreateYibai.csb")
+	self:addChild(self.csbNode)
+	self.disColor = cc.c3b(170,170,170)
+	RoomOptions.super.ctor(self)
+end
+
+function RoomOptions:initWanfa()
+	self.playWanfa = {1, 2, 3, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,0}
+	local wan = Tools.getValue(SELECT_YIBAI_WANFA_KEY)
+	if wan ~= "" then
+		wan = string.split(wan, ",")
+		for i = 1, #wan do
+			self.playWanfa[i] = tonumber(wan[i])
+		end
+	end
+
+	local function setSelectWanfa(index, check)
+		self.wanfaNodes[index].check:setSelected(check or false)
+		self:refreshCheckOutline(self.wanfaNodes[index].label, check or false)
+		if check then
+			self.playWanfa[index] = index
+		elseif check == false then
+			self.playWanfa[index] = 0
+		end
+	end
+	local function checkBoxWanfa( sender, eventType )
+		if eventType == ccui.CheckBoxEventType.selected then
+			if sender.index == 2 or sender.index == 6 then
+				setSelectWanfa(sender.index - 1, true)
+			elseif sender.index == 12 then
+				setSelectWanfa(1, true)
+			elseif sender.index == 13 then
+				setSelectWanfa(9, true)
+			elseif sender.index == 18 then
+				self:forbidSelectWanfa(12)
+			end
+			setSelectWanfa(sender.index, true)
+			Tools.saveKeyValue(SELECT_YIBAI_WANFA_KEY, table.concat(self.playWanfa, ","))
+		elseif eventType == ccui.CheckBoxEventType.unselected then
+			if sender.index == 5 then
+				setSelectWanfa(sender.index + 1, false)
+			elseif sender.index == 1 then
+				setSelectWanfa(2, false)
+				setSelectWanfa(12, false)
+			elseif sender.index == 9 then
+				setSelectWanfa(13, false)
+			elseif sender.index == 18 then 
+				self:allowSelectWanfa(12)
+			end
+			setSelectWanfa(sender.index, false)
+			Tools.saveKeyValue(SELECT_YIBAI_WANFA_KEY, table.concat(self.playWanfa, ","))
+		end
+	end
+
+	self.wanfaNodes = self:getNodes(self.csbNode, "wanfa", #Wanfa_Type)
+	for i, v in ipairs(self.wanfaNodes) do
+		if self.playWanfa[i] == i then
+			if(i == 18 ) then
+				self:forbidSelectWanfa(12) 
+			end 
+			setSelectWanfa(i, true)
+		else
+			setSelectWanfa(i)
+		end
+		
+		v.check.index = i
+		v.check:addEventListener(checkBoxWanfa)
+
+		v.panel:addClickEventListener(function(  )
+			if v.check:isSelected() then
+				checkBoxWanfa(v.check, ccui.CheckBoxEventType.unselected)
+			else
+				checkBoxWanfa(v.check, ccui.CheckBoxEventType.selected)
+			end
+		end)
+	end
+end
+
+function RoomOptions:initGuipai()
+	self.playGuipai = userDefault:getIntegerForKey(SELECT_YIBAI_GUIPAI_KEY, 3)
+
+	local function setSelectGuipai(index, check)
+		self.guipaiNodes[index].check:setSelected(check or false)
+		self:refreshCheckOutline(self.guipaiNodes[index].label, check or false)
+		if check then
+			self.playGuipai = index
+			userDefault:setIntegerForKey(SELECT_YIBAI_GUIPAI_KEY, index)
+		end
+	end
+	local function checkBoxGuipai( sender, eventType )
+		if eventType == ccui.CheckBoxEventType.selected then
+			if self.playGuipai == 1 and sender.index ~= 1 then		-- 之前无鬼,现在有鬼
+				self:toYougui()
+			elseif sender.index == 1 and self.playYibaiGui ~= 1 then	-- 之前有鬼,现在无鬼
+				self:toWugui()
+			end
+			if self.playGuipai ~= sender.index then
+				setSelectGuipai(self.playGuipai, false)
+				setSelectGuipai(sender.index, true)
+			end
+		elseif eventType == ccui.CheckBoxEventType.unselected then
+			sender:setSelected(true)
+		end
+	end
+
+	self.guipaiNodes = self:getNodes(self.csbNode, "guipai", #Guipai_Type)
+	for i, v in ipairs(self.guipaiNodes) do		
+		if self.playGuipai == i then
+			setSelectGuipai(i, true)
+		else
+			setSelectGuipai(i)
+		end
+		
+		v.check.index = i
+		v.check:addEventListener(checkBoxGuipai)
+
+		v.panel:addClickEventListener(function(  )
+			if not v.check:isSelected() then
+				checkBoxGuipai(v.check, ccui.CheckBoxEventType.selected)
+			end
+		end)
+	end
+
+	if self.playGuipai == 1 then
+		self:toWugui()
+	end
+end
+
+function RoomOptions:initMapai()
+	self.playMapai = userDefault:getIntegerForKey(SELECT_YIBAI_MAPAI_KEY, 4)
+
+	local function setSelectMapai(index, check)
+		self.mapaiNodes[index].check:setSelected(check or false)
+		self:refreshCheckOutline(self.mapaiNodes[index].label, check or false)
+		if check then
+			self.playMapai = index
+			userDefault:setIntegerForKey(SELECT_YIBAI_MAPAI_KEY, index)
+		end
+	end
+	local function checkBoxMapai( sender, eventType )
+		if eventType == ccui.CheckBoxEventType.selected then
+			if sender.index == 1 then
+				self:toWuMa()
+			else
+				self:toYouMa()
+			end
+
+			if self.playMapai ~= sender.index then
+				setSelectMapai(self.playMapai, false)
+				setSelectMapai(sender.index, true)
+			end
+		elseif eventType == ccui.CheckBoxEventType.unselected then
+			sender:setSelected(true)
+		end
+	end
+
+	self.mapaiNodes = self:getNodes(self.csbNode, "mapai", #Mapai_Type)
+	for i, v in ipairs(self.mapaiNodes) do		
+		if self.playMapai == i then
+			setSelectMapai(i, true)
+			if i == 1 then
+				self:toWuMa()
+			end
+		else
+			setSelectMapai(i)
+		end
+		
+		v.check.index = i
+		v.check:addEventListener(checkBoxMapai)
+
+		v.panel:addClickEventListener(function(  )
+			if not v.check:isSelected() then
+				checkBoxMapai(v.check, ccui.CheckBoxEventType.selected)
+			end
+		end)
+	end
+end
+
+function RoomOptions:forbidSelectWanfa(index)
+	self.wanfaNodes[index].check:setSelected(false);
+	self.wanfaNodes[index].check:setEnabled(false)
+	self:refreshCheckOutline(self.wanfaNodes[index].label, false)
+	self.wanfaNodes[index].label:setTextColor(self.disColor)
+	self.wanfaNodes[index].panel:setEnabled(false)
+	self.playWanfa[index] = 0
+end
+
+function RoomOptions:allowSelectWanfa(index)
+	self.wanfaNodes[index].check:setEnabled(true)
+	self:refreshCheckOutline(self.wanfaNodes[index].label, false)
+	self.wanfaNodes[index].panel:setEnabled(true)
+end
+
+function RoomOptions:toYougui()
+	for i, v in ipairs(Hu_Only_Gui) do
+		self:allowSelectWanfa(v)
+	end
+	Tools.saveKeyValue(SELECT_YIBAI_WANFA_KEY, table.concat(self.playWanfa, ","))
+end
+
+function RoomOptions:toWugui()
+	for i, v in ipairs(Hu_Only_Gui) do
+		self:forbidSelectWanfa(v)
+	end
+	Tools.saveKeyValue(SELECT_YIBAI_WANFA_KEY, table.concat(self.playWanfa, ","))
+end
+
+function RoomOptions:toYouMa()
+	for i, v in ipairs(Hu_Only_Ma) do
+		self:allowSelectWanfa(v)
+	end
+	Tools.saveKeyValue(SELECT_TUIDAO_WANFA_KEY, table.concat(self.playWanfa, ","))
+end
+
+function RoomOptions:toWuMa()
+	for i, v in ipairs(Hu_Only_Ma) do
+		self:forbidSelectWanfa(v)
+	end
+	self:allowSelectWanfa(12)
+	Tools.saveKeyValue(SELECT_TUIDAO_WANFA_KEY, table.concat(self.playWanfa, ","))
+end
+
+function RoomOptions:getStatu()
+	return gt.RoomType.ROOM_YIBAI
+end
+
+function RoomOptions:getPlayType()
+	local typeList = {}
+
+	table.insert(typeList, Mapai_Type[self.playMapai])
+
+	for k, v in pairs(self.playWanfa) do
+		if v ~= 0 then
+			table.insert(typeList, Wanfa_Type[v])
+		end
+	end
+
+	table.insert(typeList, Guipai_Type[self.playGuipai])
+	
+	return typeList
+end
+
+return RoomOptions

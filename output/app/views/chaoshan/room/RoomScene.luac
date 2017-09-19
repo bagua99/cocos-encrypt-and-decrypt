@@ -1,0 +1,67 @@
+local RoomScene = class("RoomScene", BaseRoomScene)
+
+RoomScene.RuleType = clone(Room.RuleType)
+RoomScene.RuleType[8] = "白板鬼"
+RoomScene.RuleType[12] = '可接炮胡'
+RoomScene.RuleType[23] = "碰碰胡2倍"
+RoomScene.RuleType[16] = "七小对2倍"
+RoomScene.RuleType[38] = "抢杠胡2倍"
+RoomScene.RuleType[40] = "混一色2倍"
+RoomScene.RuleType[24] = "清一色2倍"
+RoomScene.RuleType[39] = "杠上开花2倍"
+RoomScene.RuleType[32] = "豪华4倍"
+RoomScene.RuleType[27] = "十三幺10倍"
+RoomScene.RuleType[41] = "天地胡10倍"
+RoomScene.RuleType[44] = "双豪华3倍"
+RoomScene.RuleType[45] = "三豪华8倍"
+RoomScene.RuleType[46] = "十八罗汉10倍"
+RoomScene.RuleType[60] = "小三元4倍"
+RoomScene.RuleType[61] = "小四喜4倍"
+RoomScene.RuleType[62] = "大三元6倍"
+RoomScene.RuleType[63] = "大四喜6倍"
+
+
+
+function RoomScene:ctor(msgTbl)
+	RoomScene.super.ctor(self, msgTbl, Tools.GAME_TYPE[gt.RoomType.ROOM_CHAOSHAN + 1])
+	--设置鬼牌
+	for k,v in pairs(msgTbl.m_playtype) do
+		if v == 8 then --白板鬼
+			self.m_room:setGui({m_color = 5, m_number = 3})
+			self.m_ghost_type = 8
+			-- gt.socketClient:dispatchMessage({m_msgId = 161, m_ghostCard = {m_color = 1, m_numbe = 9}})
+			break
+		elseif v == 9 then -- 翻牌鬼
+			self.m_ghost_type = 9
+			-- self:setGhostAnimation(true)
+			break
+		elseif v == 28 then --双鬼
+			self.m_ghost_type = 28
+			break
+		elseif v == 10 then
+			self.m_isFeng = false
+		end
+	end	
+	gt.anglePngPath = "res/sd/images/otherImages/gui_icon.png"
+	self:initGhost()
+end
+
+
+-- 玩法设置
+function RoomScene:getRuleDesc( _msgTbl, _splitChar , _type)
+	local ruleDesc = ""
+	if _type == RoomScene.RULEDESC_TYPE.ROOM then
+		ruleDesc = Room.TypeName[_msgTbl.m_state + 1]
+	end
+	for i, v in ipairs(_msgTbl.m_playtype) do
+		if v == 0 then
+			ruleDesc = ruleDesc .. _splitChar .. "无马"
+		elseif self.RuleType[v] and v ~= 31 then
+			ruleDesc = ruleDesc .. _splitChar .. self.RuleType[v]
+		end
+	end
+	
+	return ruleDesc
+end
+
+return RoomScene

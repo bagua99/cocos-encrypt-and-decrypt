@@ -1,0 +1,414 @@
+
+local gt = cc.exports.gt
+
+local COLOR_SELECT = cc.c4b(254,205,255,255);--cc.c4b(255, 0, 0, 255)
+local COLOR_OUTLINE =cc.c4b(254,205,255,255); --cc.c4b(255, 183, 0, 255)
+
+local log= gt.log
+
+local SettingMain = class("SettingMain", function()
+	return cc.LayerColor:create(cc.c4b(85, 85, 85, 85), gt.winSize.width, gt.winSize.height)
+end)
+
+function SettingMain:ctor(playerSeatPos)
+	log("SettingMain:ctor");
+
+	print("gt.enableMoveCard = " ..tostring(gt.enableMoveCard));
+	-- 注册节点事件
+	self:registerScriptHandler(handler(self, self.onNodeEvent))
+
+	local csbNode = cc.CSLoader:createNode("SettingMain.csb")
+	csbNode:setPosition(gt.winCenter)
+	self:addChild(csbNode)
+	self.rootNode = csbNode
+
+	-- 关闭按钮
+	local closeBtn = gt.seekNodeByName(csbNode, "Btn_close")
+	gt.addBtnPressedListener(closeBtn, function()
+		self:removeFromParent()
+	end)
+
+	-- 退出游戏按钮
+	local dismissRoomBtn = gt.seekNodeByName(csbNode, "Btn_dismissRoom")
+	gt.addBtnPressedListener(dismissRoomBtn, function()
+		-- 关闭socket连接时,赢停止当前定时器
+		if gt.socketClient.scheduleHandler then
+			gt.scheduler:unscheduleScriptEntry( gt.socketClient.scheduleHandler )
+		end
+		-- 关闭事件回调
+		gt.removeTargetAllEventListener(gt.socketClient)
+		-- 调用善后处理函数
+		gt.socketClient:clearSocket()
+		-- 关闭socket
+		gt.socketClient:close()
+
+		gt.saveUserInfo("WX_Access_Token", "")
+		gt.saveUserInfo("WX_Refresh_Token", "")
+		gt.saveUserInfo("WX_Access_Token_Time", "")
+		gt.saveUserInfo("WX_Refresh_Token_Time", "")
+		gt.saveUserInfo("WX_OpenId", "")
+		gt.saveUserInfo("WX_Uuid", "" )
+		gt.saveUserInfo("WX_Nickname", "")
+
+
+		local loginScene = require("app/views/LoginScene"):create()
+		cc.Director:getInstance():replaceScene(loginScene)
+	end)
+
+	-- 音效调节
+	local soundEftSlider = gt.seekNodeByName(csbNode, "Slider_soundEffect")
+	local soundEftPercent = gt.soundEngine:getSoundEffectVolume()
+	soundEftPercent = math.floor(soundEftPercent)
+	soundEftSlider:setPercent(soundEftPercent)
+	soundEftSlider:addEventListener(function(sender, eventType)
+		if eventType == ccui.SliderEventType.percentChanged then
+			local soundEftPercent = soundEftSlider:getPercent()
+			self:setEffectButton(soundEftPercent)
+		end
+	end)
+	self.soundEftSlider = soundEftSlider
+
+	-- 音乐调节
+	local musicSlider = gt.seekNodeByName(csbNode, "Slider_music")
+	local musicPercent = gt.soundEngine:getMusicVolume()
+	musicPercent = math.floor(musicPercent)
+	musicSlider:setPercent(musicPercent)
+	musicSlider:addEventListener(function(sender, eventType)
+		if eventType == ccui.SliderEventType.percentChanged then
+			local musicPercent = musicSlider:getPercent()
+			self:setMusicButton(musicPercent)
+		end
+	end)
+	self.musicSlider = musicSlider
+
+	-- 音效min
+	local soundMinBtn = gt.seekNodeByName(csbNode, "Btn_minSound")
+	gt.addBtnPressedListener(soundMinBtn, function()
+		self:setEffectButton(100)
+	end)
+	self.soundMinBtn = soundMinBtn
+
+	-- 音效max
+	local soundMaxBtn = gt.seekNodeByName(csbNode, "Btn_maxSound")
+	gt.addBtnPressedListener(soundMaxBtn, function()
+		self:setEffectButton(0)
+	end)
+	self.soundMaxBtn = soundMaxBtn
+
+	self:setEffectButton(gt.soundEngine:getSoundEffectVolume())
+
+	-- 音乐min
+	local musicMinBtn = gt.seekNodeByName(csbNode, "Btn_minMusic")
+	gt.addBtnPressedListener(musicMinBtn, function()
+		self:setMusicButton(100)
+	end)
+	self.musicMinBtn = musicMinBtn
+
+	-- 音乐max
+	local musicMaxBtn = gt.seekNodeByName(csbNode, "Btn_maxMusic")
+	gt.addBtnPressedListener(musicMaxBtn, function()
+		self:setMusicButton(0)
+	end)
+	self.musicMaxBtn = musicMaxBtn
+
+	self:setMusicButton(gt.soundEngine:getMusicVolume())
+
+	-- 语言
+	self:initLanguage(csbNode)
+
+	self:initTablecloth(csbNode);
+end
+
+function SettingMain:setMusicButton( _volume )
+	if not _volume then
+		return
+	end
+
+	self.musicSlider:setPercent(_volume)
+	gt.soundEngine:setMusicVolume(_volume)
+	self.musicMinBtn:setVisible(_volume == 0)
+	self.musicMaxBtn:setVisible(_volume ~= 0)
+end
+
+function SettingMain:setEffectButton( _volume )
+	if not _volume then
+		return
+	end
+
+	self.soundEftSlider:setPercent(_volume)
+	gt.soundEngine:setSoundEffectVolume(_volume)
+	self.soundMinBtn:setVisible(_volume == 0)
+	self.soundMaxBtn:setVisible(_volume ~= 0)
+end
+
+function SettingMain:onNodeEvent(eventName)
+	if "enter" == eventName then
+		local listener = cc.EventListenerTouchOneByOne:create()
+		listener:setSwallowTouches(true)
+		listener:registerScriptHandler(handler(self, self.onTouchBegan), cc.Handler.EVENT_TOUCH_BEGAN)
+		listener:registerScriptHandler(handler(self, self.onTouchEnded), cc.Handler.EVENT_TOUCH_ENDED)
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:addEventListenerWithSceneGraphPriority(listener, self)
+	elseif "exit" == eventName then
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:removeEventListenersForTarget(self)
+	end
+end
+
+function SettingMain:onTouchBegan(touch, event)
+	return true
+end
+
+function SettingMain:onTouchEnded(touch, event)
+	local bg = gt.seekNodeByName(self.rootNode, "Img_bg")
+	if bg then
+		local point = bg:convertToNodeSpace(touch:getLocation())
+		local rect = cc.rect(0, 0, bg:getContentSize().width, bg:getContentSize().height)
+		if not cc.rectContainsPoint(rect, cc.p(point.x, point.y)) then
+			self:removeFromParent()
+		end
+	end
+end
+
+-- 设置 桌布
+function SettingMain:initTablecloth(csbNode)
+	log("initLanguage");
+	local userDefault = cc.UserDefault:getInstance();
+
+	local senderGroups = {
+		--gt.seekNodeByName(csbNode,"Node_zhuobu1"),
+		--gt.seekNodeByName(dsbNode,"Node_zhuobu2")
+		-- ["Node_zhuobo1"] = gt.seekNodeByName(csbNode,"Node_zhuobo2"),
+		-- ["Node_zhuobo2"] = gt.seekNodeByName(csbNode,"Node_zhuobo1")
+		"Node_zhuobo1",
+		"Node_zhuobo2"
+	};
+
+	
+
+
+	local function onTableClothSelect(sender,eventType)
+		log("onTouchClothSelect " .. sender:getName());
+		local name = sender:getName();
+		--local parent = sender:getParent();
+		local parent_name = sender:getParent():getName();
+		log("parent_name "..parent_name)
+		
+		if(eventType == ccui.CheckBoxEventType.selected) then
+			for _,v in ipairs(senderGroups) do
+				local parent = gt.seekNodeByName(csbNode,v);
+				local chkbox = gt.seekNodeByName(parent,"ChkBox")
+				local label = gt.seekNodeByName(parent,"Label")
+				local panel = gt.seekNodeByName(parent,"Panel")
+				if(parent_name == v) then
+					chkbox:setTouchEnabled(false);
+					--chkbox:setBright(true)
+					panel:setTouchEnabled(false);
+					--panel:setBright(true)
+					chkbox:setSelected(true)
+					self:refreshCheckOutline(label, true)
+					userDefault:setStringForKey("zhuobu_type",v)
+					gt.CommonEvent:pushEvent("ROOM_EVENT_CHANGE_TABLECLOTH")
+				else
+					chkbox:setTouchEnabled(true);
+					panel:setTouchEnabled(true);
+					chkbox:setSelected(false);
+					self:refreshCheckOutline(label, false)
+				end  
+			end 
+			-- sender:setTouchEnabled(false);
+			-- sender:setBright(true);
+			-- senderGroups[name]:setTouchEnabled(true)
+			-- senderGroups[name]:setSelected(false);
+			
+			
+		elseif(eventType == ccui.CheckBoxEventType.unselected)then
+
+		end 
+	end 
+
+	local zhuobu_type = userDefault:getStringForKey("zhuobu_type")-- or "Node_zhuobo1";
+	--log("zhuobu_typye " ..zhuobu_type)
+	-- if(zhuobu_type == "") then
+	-- 	zhuobu_type = "Node_zhuobo1";
+	-- end
+
+	zhuobu_type = (zhuobu_type == "" and "Node_zhuobo1" or zhuobu_type);
+	for i,v  in pairs(senderGroups) do
+		local node  = gt.seekNodeByName(csbNode,v);
+		local chkbox = gt.seekNodeByName(node,"ChkBox")
+		chkbox:addEventListener(onTableClothSelect)
+		local panel = gt.seekNodeByName(node,"Panel")
+		panel:addClickEventListener(function(  )
+			onTableClothSelect(chkbox, ccui.CheckBoxEventType.selected)
+		end)
+		local label = gt.seekNodeByName(node,"Label")
+
+		--if() then
+			self:refreshCheckOutline(label, v == zhuobu_type)
+			chkbox:setSelected(v == zhuobu_type);
+		--else
+		--	self:refreshCheckOutline(label, true)
+		--	chkbox:setSelected(true);
+		--end 
+	end 
+	--senderGroups["ChkBox_green_1"]:addEventListener(onTableClothSelect)
+	--senderGroups["ChkBox_blue_1"]:addEventListener(onTableClothSelect)
+end 
+
+function SettingMain:initLanguage(csbNode)
+	-- 语音
+	log("SettingMain:initLanguage")
+
+	self.m_tLanguages = {}
+	local function checkBoxLanguage( sender, eventType )
+		if eventType == ccui.CheckBoxEventType.selected then
+			if gt.Language ~= sender.index then
+				self.m_tLanguages[gt.Language].check:setSelected(false)
+				self:refreshCheckOutline(self.m_tLanguages[gt.Language].label, false)
+				gt.Language = sender.index
+				self.m_tLanguages[gt.Language].check:setSelected(true)
+				self:refreshCheckOutline(self.m_tLanguages[gt.Language].label, true)
+
+				cc.UserDefault:getInstance():setIntegerForKey("Language_type", gt.Language)
+			end
+		elseif eventType == ccui.CheckBoxEventType.unselected then
+			sender:setSelected(true)
+		end
+	end
+
+	for i = 1, 2 do
+		local languageNode = gt.seekNodeByName(csbNode, "Node_" .. i)
+		self.m_tLanguages[i] = {}
+		self.m_tLanguages[i].check = gt.seekNodeByName(languageNode, "ChkBox_language_" .. i)
+		self.m_tLanguages[i].label = gt.seekNodeByName(languageNode, "Label_language_" .. i)
+		self.m_tLanguages[i].panel = gt.seekNodeByName(languageNode, "Panel_language_" .. i)
+		if not self.oriColor then
+			self.oriColor = self.m_tLanguages[i].label:getTextColor()
+		end
+		
+		if i == gt.Language then
+			self.m_tLanguages[i].check:setSelected(true)
+			self:refreshCheckOutline(self.m_tLanguages[i].label, true)
+		else
+			self.m_tLanguages[i].check:setSelected(false)
+			self:refreshCheckOutline(self.m_tLanguages[i].label, false)
+		end
+
+		self.m_tLanguages[i].check.index = i
+		self.m_tLanguages[i].check:addEventListener(checkBoxLanguage)
+
+		self.m_tLanguages[i].panel:addClickEventListener(function(  )
+			checkBoxLanguage(self.m_tLanguages[i].check, ccui.CheckBoxEventType.selected)
+		end)
+	end
+
+	-- 屏蔽玩家语音
+	local function checkBoxShield( sender, eventType )
+		if eventType == ccui.CheckBoxEventType.selected then
+			self.m_tShield.check:setSelected(true)
+			self:refreshCheckOutline(self.m_tShield.label, true)
+			gt.ShieldVoice = true
+		elseif eventType == ccui.CheckBoxEventType.unselected then
+			self.m_tShield.check:setSelected(false)
+			self:refreshCheckOutline(self.m_tShield.label, false)
+			gt.ShieldVoice = false
+		end
+		cc.UserDefault:getInstance():setBoolForKey("Shield_type", gt.ShieldVoice)
+	end
+
+	local shieldNode = gt.seekNodeByName(csbNode, "Node_shield")
+	self.m_tShield = {}
+	self.m_tShield.check = gt.seekNodeByName(shieldNode, "ChkBox_shield")
+	self.m_tShield.label = gt.seekNodeByName(shieldNode, "Label_shield")
+	self.m_tShield.panel = gt.seekNodeByName(shieldNode, "Panel_shield")
+	if not self.oriColor then
+		self.oriColor = self.m_tShield.label:getTextColor()
+	end
+	
+	if gt.ShieldVoice then
+		self.m_tShield.check:setSelected(true)
+		self:refreshCheckOutline(self.m_tShield.label, true)
+	else
+		self.m_tShield.check:setSelected(false)
+		self:refreshCheckOutline(self.m_tShield.label, false)
+	end
+
+	self.m_tShield.check:addEventListener(checkBoxShield)
+
+	self.m_tShield.panel:addClickEventListener(function(  )
+		if gt.ShieldVoice then
+			checkBoxShield(self.m_tShield.check, ccui.CheckBoxEventType.unselected)
+		else
+			checkBoxShield(self.m_tShield.check, ccui.CheckBoxEventType.selected)
+		end
+	end)
+
+	-- 自由挪牌
+	local nodeMoveCard = gt.seekNodeByName(csbNode, "Node_movecard")
+	if(not gt.debugMoveCard) then 
+		nodeMoveCard:setVisible(false);
+	end 
+	
+	self.m_tMoveCard = {}
+	self.m_tMoveCard.check = gt.seekNodeByName(nodeMoveCard, "ChkBox_shield")
+	self.m_tMoveCard.label = gt.seekNodeByName(nodeMoveCard, "Label_shield")
+	self.m_tMoveCard.panel = gt.seekNodeByName(nodeMoveCard, "Panel_shield")
+	-- if not self.oriColor then
+	-- 	self.oriColor = self.m_tMoveCard.label:getTextColor()
+	-- end
+
+	local function checkBoxMoveCard( sender, eventType )
+		if eventType == ccui.CheckBoxEventType.selected then
+			self.m_tMoveCard.check:setSelected(true)
+			self:refreshCheckOutline(self.m_tMoveCard.label, true)
+			gt.enableMoveCard = true
+		elseif eventType == ccui.CheckBoxEventType.unselected then
+			self.m_tMoveCard.check:setSelected(false)
+			self:refreshCheckOutline(self.m_tMoveCard.label, false)
+			gt.enableMoveCard = false
+		end
+		cc.UserDefault:getInstance():setBoolForKey("moveCardEnable", gt.enableMoveCard)
+	end
+
+	if gt.enableMoveCard then
+		self.m_tMoveCard.check:setSelected(true)
+		self:refreshCheckOutline(self.m_tMoveCard.label, true)
+	else
+		self.m_tMoveCard.check:setSelected(false)
+		self:refreshCheckOutline(self.m_tMoveCard.label, false)
+	end
+
+	print("gt.enableMoveCard = "..tostring(gt.enableMoveCard));
+	self.m_tMoveCard.check:addEventListener(checkBoxMoveCard)
+	self.m_tMoveCard.panel:addClickEventListener(function(  )
+		if gt.enableMoveCard then
+			checkBoxMoveCard(self.m_tMoveCard.check, ccui.CheckBoxEventType.unselected)
+		else
+			checkBoxMoveCard(self.m_tMoveCard.check, ccui.CheckBoxEventType.selected)
+		end
+	end)
+
+	print("gt.enableMoveCard = "..tostring(gt.enableMoveCard));
+
+end
+
+function SettingMain:refreshCheckOutline( _label, _type )
+	if not _label then
+		return 
+	end
+
+	if _type then
+		_label:setTextColor(COLOR_SELECT)
+		--gt.setTTFLabelStroke(_label, COLOR_OUTLINE)
+	else
+		_label:setTextColor(self.oriColor)
+		--gt.setTTFLabelStroke(_label, cc.c4b(255, 183, 0, 0))
+		--gt.setTTFLabelStroke(_label, COLOR_OUTLINE)
+	end
+end
+
+return SettingMain
+
+
+

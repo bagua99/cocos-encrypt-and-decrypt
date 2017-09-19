@@ -1,0 +1,31 @@
+--
+
+local PlayinfoConfigGuangdongjihu = class("PlayinfoConfigBase", require("app/views/playinfo/Playinfo_config_base"))
+
+function PlayinfoConfigGuangdongjihu:ctor(  )
+	PlayinfoConfigGuangdongjihu.super.ctor(self)
+	self.ruleType[0].desc = "无马"
+end
+
+function PlayinfoConfigGuangdongjihu:getShowList( )
+	return {
+		18, --可抢杠胡
+        17, --抢杠全包
+        10, --不带风
+        33, --跟庄
+        43, --节节高
+		--
+		7, --无鬼
+        9, --翻鬼
+        28,--双鬼
+		--
+        0, --无马 
+        2, --买2马
+        4, --买4马
+        6, --买6马
+        67, --买8马
+        80,--买10马,
+        105,--买20马
+	}
+end
+return PlayinfoConfigGuangdongjihu

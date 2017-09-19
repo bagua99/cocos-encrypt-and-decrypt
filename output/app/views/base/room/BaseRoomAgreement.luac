@@ -1,0 +1,24 @@
+local BaseRoomAgreement = class("BaseRoomAgreement")
+
+function BaseRoomAgreement:ctor()
+
+end
+
+function BaseRoomAgreement:setScene(_scene)
+	self.m_scene = _scene
+end
+
+function BaseRoomAgreement:registerMsgListener(msgId, msgTarget, msgFunc)
+	self.m_msgId = msgId
+	gt.log("registerMsgListener self.m_msgId = " .. self.m_msgId)
+	gt.socketClient:registerMsgListener(msgId, msgTarget, msgFunc)
+end
+
+function BaseRoomAgreement:unregisterMsgListener()
+	gt.log("name = " .. self.__cname)
+	gt.log("unregisterMsgListener self.m_msgId = " .. self.m_msgId)
+	gt.socketClient:unregisterMsgListener(self.m_msgId)
+end
+
+
+return BaseRoomAgreement

@@ -1,0 +1,49 @@
+local RoomScene = class("RoomScene", BaseRoomScene)
+
+function RoomScene:ctor(msgTbl)
+	RoomScene.super.ctor(self, msgTbl, Tools.GAME_TYPE[gt.RoomType.ROOM_BAIDA + 1])
+	self.RuleType = clone(Room.RuleType)
+	self.RuleType[19] = "无花加倍"
+end
+
+-- 玩法设置
+function RoomScene:getRuleDesc( _msgTbl, _splitChar , _type)
+	local ruleDesc = ""
+	if _type == RoomScene.RULEDESC_TYPE.ROOM then
+		ruleDesc = Room.TypeName[_msgTbl.m_state + 1]
+	end
+	local qianggangType = nil
+	local minggang = nil
+	for i, v in ipairs(_msgTbl.m_playtype) do
+		if v == 0 then
+			ruleDesc = ruleDesc .. " 无马"
+		elseif v == 17 or v == 18 then
+			if qianggangType then
+				if qianggangType > v then
+					qianggangType = v
+				end
+			else
+				qianggangType = v
+			end
+		elseif v == 30 then
+			minggang = true
+		elseif self.RuleType[v] then
+			ruleDesc = ruleDesc .. _splitChar .. self.RuleType[v]
+		end
+	end
+
+	if minggang then
+		ruleDesc = ruleDesc .. _splitChar .. self.RuleType[30]
+	end
+
+	if qianggangType then
+		if qianggangType == 18 and minggang then
+		else
+			ruleDesc = ruleDesc .. _splitChar .. self.RuleType[qianggangType]
+		end
+	end
+	
+	return ruleDesc
+end
+
+return RoomScene

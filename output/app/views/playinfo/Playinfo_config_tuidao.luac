@@ -1,0 +1,18 @@
+local PlayinfoConfigTuiDao = class("PlayinfoConfigBase", require("app/views/playinfo/Playinfo_config_base"))
+
+function PlayinfoConfigTuiDao:ctor(  )
+	PlayinfoConfigTuiDao.super.ctor(self)
+	self.ruleType[0].desc = "无马"
+end
+
+function PlayinfoConfigTuiDao:getShowList( )
+	return {
+		5, 18, 10, 16, 17, 
+		20, 30, 19, 33, 35,
+		7, 8, 9, 28,
+		0, 2, 4, 6,67,43,53,
+		64,65,66,
+	}
+end
+
+return PlayinfoConfigTuiDao

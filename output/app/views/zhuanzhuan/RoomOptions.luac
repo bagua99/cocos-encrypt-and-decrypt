@@ -1,0 +1,173 @@
+local RoomOptions = class("RoomOptions", BaseRoomOptions)
+
+local SELECT_ZHUANZHUAN_WANFA_KEY = "guangdong_zhuanzhuan_wanfa"
+local SELECT_ZHUANZHUAN_KEXUAN_KEY = "guangdong_zhuanzhuan_kexuan"
+local SELECT_ZHUANZHUAN_MAPAI_KEY = "guangdong_zhuanzhuan_mapai"
+
+local userDefault = cc.UserDefault:getInstance()
+
+local Wanfa_Type = {11, 13}
+local Kexuan_Type = {15, 5, 14}
+local Mapai_Type = {2, 4, 6}
+
+function RoomOptions:ctor()
+	self.csbNode = cc.CSLoader:createNode("res/views/guangdong/CreateZhuanzhuan.csb")
+	self:addChild(self.csbNode)
+	RoomOptions.super.ctor(self)
+end
+
+function RoomOptions:initWanfa()
+	self.playWanfa = userDefault:getIntegerForKey(SELECT_ZHUANZHUAN_WANFA_KEY, 2)
+
+	local function setSelectWanfa(index, check)
+		self.wanfaNodes[index].check:setSelected(check or false)
+		self:refreshCheckOutline(self.wanfaNodes[index].label, check or false)
+		if check then
+			self.playWanfa = index
+			userDefault:setIntegerForKey(SELECT_ZHUANZHUAN_WANFA_KEY, index)
+		end
+	end
+	local function checkBoxWanfa( sender, eventType )
+		if eventType == ccui.CheckBoxEventType.selected then
+			if self.playWanfa ~= sender.index then
+				setSelectWanfa(self.playWanfa, false)
+				setSelectWanfa(sender.index, true)
+			end
+		elseif eventType == ccui.CheckBoxEventType.unselected then
+			sender:setSelected(true)
+		end
+	end
+
+	self.wanfaNodes = self:getNodes(self.csbNode, "wanfa", #Wanfa_Type)
+	for i, v in ipairs(self.wanfaNodes) do
+		if self.playWanfa == i then
+			setSelectWanfa(i, true)
+		else
+			setSelectWanfa(i)
+		end
+		
+		v.check.index = i
+		v.check:addEventListener(checkBoxWanfa)
+
+		v.panel:addClickEventListener(function(  )
+			if not v.check:isSelected() then
+				checkBoxWanfa(v.check, ccui.CheckBoxEventType.selected)
+			end
+		end)
+	end
+end
+
+function RoomOptions:initKexuan()
+	self.playKexuan = {0, 2, 3}
+	local xuan = Tools.getValue(SELECT_ZHUANZHUAN_KEXUAN_KEY)
+	if xuan ~= "" then
+		xuan = string.split(xuan, ",")
+		for i = 1, #xuan do
+			self.playKexuan[i] = tonumber(xuan[i])
+		end
+	end
+
+	local function setSelectKexuan(index, check)
+		self.kexuanNodes[index].check:setSelected(check or false)
+		self:refreshCheckOutline(self.kexuanNodes[index].label, check or false)
+		if check then
+			self.playKexuan[index] = index
+		elseif check == false then
+			self.playKexuan[index] = 0
+		end
+	end
+	local function checkBoxKexuan( sender, eventType )
+		if eventType == ccui.CheckBoxEventType.selected then
+			setSelectKexuan(sender.index, true)
+		elseif eventType == ccui.CheckBoxEventType.unselected then
+			setSelectKexuan(sender.index, false)
+		end
+		Tools.saveKeyValue(SELECT_ZHUANZHUAN_KEXUAN_KEY, table.concat(self.playKexuan, ","))
+	end
+
+	self.kexuanNodes = self:getNodes(self.csbNode, "kexuan", #Kexuan_Type)
+	for i, v in ipairs(self.kexuanNodes) do		
+		if self.playKexuan[i] == i then
+			setSelectKexuan(i, true)
+		else
+			setSelectKexuan(i)
+		end
+		
+		v.check.index = i
+		v.check:addEventListener(checkBoxKexuan)
+
+		v.panel:addClickEventListener(function(  )
+			if v.check:isSelected() then
+				checkBoxKexuan(v.check, ccui.CheckBoxEventType.unselected)
+			else
+				checkBoxKexuan(v.check, ccui.CheckBoxEventType.selected)
+			end
+		end)
+	end
+end
+
+function RoomOptions:initMapai()
+	self.playMapai = userDefault:getIntegerForKey(SELECT_ZHUANZHUAN_MAPAI_KEY, 1)
+
+	local function setSelectMapai(index, check)
+		if self.mapaiNodes[index] then
+			self.mapaiNodes[index].check:setSelected(check or false)
+			self:refreshCheckOutline(self.mapaiNodes[index].label, check or false)
+		end
+	end
+	local function checkBoxMapai( sender, eventType )
+		if eventType == ccui.CheckBoxEventType.selected then
+			if self.playMapai ~= sender.index then
+				setSelectMapai(self.playMapai, false)
+				setSelectMapai(sender.index, true)
+			end
+			self.playMapai = sender.index
+		elseif eventType == ccui.CheckBoxEventType.unselected then
+			setSelectMapai(sender.index, false)
+			self.playMapai = 0
+		end
+		userDefault:setIntegerForKey(SELECT_ZHUANZHUAN_MAPAI_KEY, self.playMapai)
+	end
+
+	self.mapaiNodes = self:getNodes(self.csbNode, "mapai", #Mapai_Type)
+	for i, v in ipairs(self.mapaiNodes) do		
+		if self.playMapai == i then
+			setSelectMapai(i, true)
+		else
+			setSelectMapai(i)
+		end
+		
+		v.check.index = i
+		v.check:addEventListener(checkBoxMapai)
+
+		v.panel:addClickEventListener(function(  )
+			if v.check:isSelected() then
+				checkBoxMapai(v.check, ccui.CheckBoxEventType.unselected)
+			else
+				checkBoxMapai(v.check, ccui.CheckBoxEventType.selected)
+			end
+		end)
+	end
+end
+
+function RoomOptions:getStatu()
+	return gt.RoomType.ROOM_ZHUANZHUAN
+end
+
+function RoomOptions:getPlayType()
+	local typeList = {}
+
+	table.insert(typeList, Mapai_Type[self.playMapai] or 0)
+
+	table.insert(typeList, Wanfa_Type[self.playWanfa])
+
+	for k, v in pairs(self.playKexuan) do
+		if v ~= 0 then
+			table.insert(typeList, Kexuan_Type[v])
+		end
+	end
+
+	return typeList
+end
+
+return RoomOptions

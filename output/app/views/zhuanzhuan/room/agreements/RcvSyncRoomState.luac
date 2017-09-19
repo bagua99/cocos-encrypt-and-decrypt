@@ -1,0 +1,14 @@
+local RcvSyncRoomState = class("RcvSyncRoomState", BaseRcvSyncRoomState)
+
+-- 同步房间状态 35
+function RcvSyncRoomState:ctor()
+	self:registerMsgListener(gt.GC_SYNC_ROOM_STATE, self, self.onRcvSyncRoomState)
+end
+
+function RcvSyncRoomState:onRcvSyncRoomState(msgTbl)
+	RcvSyncRoomState.super.onRcvSyncRoomState(self, msgTbl)
+	--设置扎鸟为false
+	self.m_scene.m_isZhaNiao = false
+end
+
+return RcvSyncRoomState

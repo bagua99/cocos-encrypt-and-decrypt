@@ -1,0 +1,2 @@
+local RcvGhostMsg = class("RcvGhostMsg", BaseRcvGhostMsg)
+return RcvGhostMsg

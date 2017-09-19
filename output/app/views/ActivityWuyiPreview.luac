@@ -1,0 +1,50 @@
+local ActivityWuyiPreview = class("ActivityWuyiPreview", function()
+	return cc.LayerColor:create(cc.c4b(85, 85, 85, 85), gt.winSize.width, gt.winSize.height)
+end)
+
+local gt = cc.exports.gt
+
+function ActivityWuyiPreview:ctor()
+	-- 注册节点事件
+	self:registerScriptHandler(handler(self, self.onNodeEvent))
+
+	local csbNode = cc.CSLoader:createNode("ActivityWuyiPreview.csb")
+	csbNode:setPosition(gt.winCenter)
+	self:addChild(csbNode)
+	self.rootNode = csbNode
+	self.closeBtn = gt.seekNodeByName(self.rootNode, "closeBtn")
+	gt.addBtnPressedListener(self.closeBtn, function()
+		self:removeFromParent()
+	end)
+end
+
+function ActivityWuyiPreview:onNodeEvent(eventName)
+	if "enter" == eventName then
+		local listener = cc.EventListenerTouchOneByOne:create()
+		listener:setSwallowTouches(true)
+		listener:registerScriptHandler(handler(self, self.onTouchBegan), cc.Handler.EVENT_TOUCH_BEGAN)
+		listener:registerScriptHandler(handler(self, self.onTouchEnded), cc.Handler.EVENT_TOUCH_ENDED)
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:addEventListenerWithSceneGraphPriority(listener, self)
+	elseif "exit" == eventName then
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:removeEventListenersForTarget(self)
+	end
+end
+
+function ActivityWuyiPreview:onTouchBegan(touch, event)
+	return true
+end
+
+function ActivityWuyiPreview:onTouchEnded(touch, event)
+	local bg = gt.seekNodeByName(self.rootNode, "Img_bg")
+	if bg then
+		local point = bg:convertToNodeSpace(touch:getLocation())
+		local rect = cc.rect(0, 0, bg:getContentSize().width, bg:getContentSize().height)
+		if not cc.rectContainsPoint(rect, cc.p(point.x, point.y)) then
+			self:removeFromParent()
+		end
+	end
+end
+
+return ActivityWuyiPreview

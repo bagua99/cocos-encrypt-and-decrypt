@@ -1,0 +1,125 @@
+local gt = cc.exports.gt
+
+local Distance_Count = 3
+
+local OtherInfoTips = class("OtherInfoTips", function()
+	return cc.LayerColor:create(cc.c4b(85, 85, 85, 85), gt.winSize.width, gt.winSize.height)
+end)
+
+function OtherInfoTips:ctor(playerData, descs, mainSeat,canInteraction)
+	-- 注册节点事件
+	print('OtherInfoTips:ctor '..tostring(canInteraction));	
+	
+	self:registerScriptHandler(handler(self, self.onNodeEvent))
+	local csbNode = cc.CSLoader:createNode("OtherInfoTips.csb")
+	csbNode:setPosition(gt.winCenter)
+	self:addChild(csbNode)
+
+	local headFrameSpr = gt.seekNodeByName(csbNode, "Image_box");
+	local headFramePos= cc.p(headFrameSpr:getPosition())
+	local headIndex = (playerData.m_curHeadIconId or 0) + 1;
+	print("headIndex " ..headIndex);
+	--if(headIndex ~= 1) then 
+		-- headFrameSpr:setContentSize(cc.size(0,0));
+		-- local str = string.format("res/sd/images/otherImages/headframes/%03d.png",headIndex)
+		-- headFrameSpr:loadTexture(str)
+		-- headFrameSpr:setPosition(cc.p(headFramePos.x,headFramePos.y));
+		-- headFrameSpr:setScale(0.95);
+		gt.addHeadFrames_Image(headFrameSpr,headIndex);
+
+	--end 
+	-- 头像
+	local headSpr = gt.seekNodeByName(csbNode, "Spr_head")
+	Tools.setHeardTexture( headSpr, playerData.m_uid or playerData.uid)
+
+	-- 性别
+	local sexSpr = gt.seekNodeByName(csbNode, "Spr_sex")
+	-- 默认男
+	-- local sexFrameName = "sex_male"
+	-- if playerData.m_sex == 2 or playerData.sex == 2 then
+	-- 	-- 女
+	-- 	sexFrameName = "sex_female"
+	-- end
+	local sexFrameName = "images/otherImages/common/nan.png"
+	if playerData.m_sex == 2 or playerData.sex == 2 then
+		-- 女
+		sexFrameName = "images/otherImages/common/nv.png"
+	end
+	sexSpr:setTexture(sexFrameName)
+
+	-- 昵称
+	local nicknameLabel = gt.seekNodeByName(csbNode, "Label_nickname")
+	local nickname = playerData.m_name or playerData.nickname
+	nickname = string.gsub(nickname, " ", "")
+	nicknameLabel:setString(nickname)
+	
+	-- ID
+	local uidLabel = gt.seekNodeByName(csbNode, "Label_uid")
+	uidLabel:setString("ID: " .. (playerData.m_uid or playerData.uid))
+
+	-- ip
+	local ipLabel = gt.seekNodeByName(csbNode, "Label_ip")
+	ipLabel:setString("IP: " .. (playerData.m_ip or playerData.ip ))
+
+	for i = 1, #descs do
+		local disLabel = gt.seekNodeByName(csbNode, "Label_distance_" .. i)
+		disLabel:setString(descs[i])
+	end
+
+	-- 互动按钮
+	for i=1,2 do
+		local button = gt.seekNodeByName(csbNode, "Btn_" .. i)
+		if(canInteraction == 0) then 
+			button:setVisible(false)
+			button:setEnabled(false);
+		else 
+			if mainSeat == playerData:getSeatIdx() then
+				button:setVisible(false)
+			else
+				local curTime = os.time()
+				if curTime < playerData:getFunnyEnabledTime() then
+					button:setColor(cc.c3b(127, 127, 127))
+					button:setEnabled(false)
+				else
+					-- 鲜花 1 鸡蛋 2
+					gt.addBtnPressedListener(button, function(  )
+						local msgToSend = {}
+						msgToSend.m_msgId = gt.CG_FUNNY_PLAY
+						msgToSend.m_sendPos = mainSeat
+						msgToSend.m_targetPos = playerData:getSeatIdx()
+						msgToSend.m_interactionType = i - 1
+						gt.socketClient:sendMessage(msgToSend)
+						playerData:setFunnyEnabledTime(os.time() + 5)
+						self:removeFromParent()
+					end)
+				end
+			end
+		end 
+	end
+end
+
+function OtherInfoTips:onNodeEvent(eventName)
+	if "enter" == eventName then
+		local listener = cc.EventListenerTouchOneByOne:create()
+		listener:setSwallowTouches(true)
+		listener:registerScriptHandler(handler(self, self.onTouchBegan), cc.Handler.EVENT_TOUCH_BEGAN)
+		listener:registerScriptHandler(handler(self, self.onTouchEnded), cc.Handler.EVENT_TOUCH_ENDED)
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:addEventListenerWithSceneGraphPriority(listener, self)
+	elseif "exit" == eventName then
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:removeEventListenersForTarget(self)
+	end
+end
+
+function OtherInfoTips:onTouchBegan(touch, event)
+	return true
+end
+
+function OtherInfoTips:onTouchEnded(touch, event)
+	self:removeFromParent()
+end
+
+return OtherInfoTips
+
+

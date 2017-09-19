@@ -1,0 +1,85 @@
+local RcvRoundReport = class("RcvRoundReport", BaseRoomAgreement)
+
+function RcvRoundReport:ctor()
+	self:registerMsgListener(gt.GC_ROUND_REPORT, self, self.onRcvRoundReport)
+end
+
+function RcvRoundReport:onRcvRoundReport(msgTbl)
+
+	local room = self.m_scene:getRoom()
+	--设置房间状态
+	room:setRoomStatus(Room.Status.END)
+
+	--设置玩家状态
+	self.m_scene:roundEnd( )
+
+	local players = room:getPlayers()
+	local curRoomPlayers = clone(players)
+	local allDelayTimy = 1.2
+	local delayTime = cc.DelayTime:create(allDelayTimy)
+	local callFunc = cc.CallFunc:create(function(sender)
+		local csbLayer = self.m_scene:getCsbLayer()
+		-- 显示准备按钮
+		local readyBtn = gt.seekNodeByName(csbLayer, "Btn_ready")
+		-- readyBtn:setVisible(true)
+
+		-- 停止未完成动作
+		self.m_scene:clearAnimation()
+			--清除选中的牌，防止操作崩溃闪退
+		self.m_scene:clearRedDragon();
+		self.m_scene:clearFillup();
+
+		-- 停止倒计时音效
+		self.m_scene.playTimeCD = nil
+
+		-- 移除所有麻将
+		-- local mahjongNode = self.m_scene:getMahjongNode()
+		-- mahjongNode:removeAllChildren()
+		self.m_scene:cleanAllMahjong()
+
+		-- 玩家准备手势隐藏
+		self.m_scene:hideReadySign()
+
+		-- 隐藏座次标识
+		local turnPosBgSpr = gt.seekNodeByName(csbLayer, "Spr_turnPosBg")
+		turnPosBgSpr:setVisible(false)
+
+		-- 隐藏牌局状态
+		local roundStateNode = gt.seekNodeByName(csbLayer, "Node_roundState")
+		roundStateNode:setVisible(false)
+
+		-- 隐藏倒计时
+		self.m_scene.playTimeCDLabel:setVisible(false)
+
+		-- 隐藏出牌标识
+		self.m_scene.m_outMjtileSignNode:setVisible(false)
+
+		-- 隐藏决策
+		local decisionNode = self.m_scene:getDecisionNode()
+		decisionNode:removeAllChildren()
+
+		--移除特效
+	if self.m_scene.huAnimateNode then
+			self.m_scene.huAnimateNode:removeFromParent()
+			self.m_scene.huAnimateNode = nil
+		end
+
+		--设置分数
+		if msgTbl.m_end == 0 then
+			table.foreach(room:getPlayers(), function(seatIdx, player)
+				player:setScore(player:getScore() + msgTbl.m_score[seatIdx])
+			end)
+		end
+		
+		-- 弹出局结算界面
+		local roundReport = Tools.requireFile("RoundReport", self.m_scene:getGameType(), Tools.BASE_TYPE.ROOM)
+		roundReport:init(curRoomPlayers, room:getMainSeatIdx(), msgTbl, msgTbl.m_end)
+		
+		self.m_scene:addChild(roundReport, Room.ZOrder.ROUND_REPORT)
+	end)
+
+	local seqAction = cc.Sequence:create(delayTime, callFunc)
+	self.m_scene:runAction(seqAction)
+end
+
+return RcvRoundReport

@@ -1,0 +1,18 @@
+local RcvDismissRoom = class("RcvDismissRoom", BaseRoomAgreement)
+
+-- 解散房间 27
+function RcvDismissRoom:ctor()
+	self:registerMsgListener(gt.GC_DISMISS_ROOM, self, self.onRcvDismissRoom)
+end
+
+function RcvDismissRoom:onRcvDismissRoom(msgTbl)
+	if msgTbl.m_errorCode == 1 then
+		-- 游戏未开始解散成功
+		self.m_scene:backMainSceneEvt()
+	else
+		-- 游戏中玩家申请解散房间
+		gt.dispatchEvent(gt.EventType.APPLY_DIMISS_ROOM, msgTbl)
+	end
+end
+
+return RcvDismissRoom

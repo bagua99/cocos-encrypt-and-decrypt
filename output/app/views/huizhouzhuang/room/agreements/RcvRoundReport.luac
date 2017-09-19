@@ -1,0 +1,171 @@
+--region app.views.huizhouzhuang.room.agreements.RcvRoundReport
+--desc: 收到一局结束的消息
+--endregion 
+local RcvRoundReport = class("RcvRoundReport", BaseRcvRoundReport)
+
+function RcvRoundReport:ctor(  )
+	self.super.ctor(self)
+end
+
+function RcvRoundReport:onRcvRoundReport(msgTbl)
+	--设置玩家状态
+	self.m_scene:roundEnd( )
+	local room = self.m_scene:getRoom()
+	--设置房间状态
+	room:setRoomStatus(Room.Status.END)
+	local players = room:getPlayers()
+
+	local curRoomPlayers = clone(players)
+	self.m_scene:setPlayMaAnimation(true)
+
+	if not msgTbl.m_bird_infos or #msgTbl.m_bird_infos < 1 then
+		self:showRoundReport(msgTbl, curRoomPlayers)
+		self.m_scene.haveMa = false
+		return
+	end
+
+	self.m_scene.haveMa = true
+	local animaiNode = cc.Node:create()
+	-- animaiNode:setAnchorPoint(cc.p(0.5, 0.5))
+	animaiNode:setPosition(gt.winCenter)
+	self.m_scene:addChild(animaiNode, Room.ZOrder.MAPAI)
+
+	local list = msgTbl.m_bird_infos
+	local posXList = {
+		{0, 0},
+		{-125, 125, -125, 125},
+		{-200, 0, 200, -200, 0, 200},
+	}
+
+	local posX = nil
+	local posY = 104
+	local len = #msgTbl.m_bird_infos
+	if len < 3 then
+		posX = posXList[1]
+	elseif len < 5 then
+		posX = posXList[2]
+	else
+		posX = posXList[3]
+	end
+
+	local function getAnimation( _pos, _callFunc )
+		local scaleTo = cc.ScaleTo:create(0.5, 1.6) --cc.ScaleBy:create(1, 0.1, 2)
+		local moveTo = cc.MoveTo:create(0.8, _pos)
+		local delayTime = cc.DelayTime:create(0.5)
+		local fadeOut = cc.FadeOut:create(1)		
+		if _callFunc then
+			local callFunc = cc.CallFunc:create(_callFunc)
+			return cc.Sequence:create(scaleTo, moveTo, delayTime, fadeOut, callFunc)
+		else
+			return cc.Sequence:create(scaleTo, moveTo, delayTime, fadeOut)
+		end
+	end
+
+	for k,v in pairs(msgTbl.m_bird_infos) do
+		local mjTileName = string.format("p4s%d_%d.png", v[2][1], v[2][2])
+		local mjTileSpr = cc.Sprite:createWithSpriteFrameName(mjTileName)
+		mjTileSpr:setAnchorPoint(cc.p(0.5, 0.5))
+		mjTileSpr:setPosition(cc.p(0, 0))
+		mjTileSpr:setScale(0.1)
+		if v[1] < 0 then
+			mjTileSpr:setColor(cc.c3b(100,100,100))
+		end		
+		animaiNode:addChild(mjTileSpr)
+		local pos = cc.p(posX[k], (k > (#msgTbl.m_bird_infos / 2) and posY) or -posY) 
+
+		if k == #msgTbl.m_bird_infos then
+			mjTileSpr:runAction(getAnimation(pos, function( )
+				animaiNode:removeFromParent()
+				self:showRoundReport(msgTbl, curRoomPlayers)
+			end))
+		else
+			mjTileSpr:runAction(getAnimation(pos))
+		end
+	end
+end
+
+function RcvRoundReport:showRoundReport( msgTbl, curRoomPlayers)
+	
+	--弹出结算界面
+	local room = self.m_scene:getRoom()
+	local players = room:getPlayers()
+	local allDelayTimy = 1
+
+	local delayTime = cc.DelayTime:create(allDelayTimy)
+	local callFunc = cc.CallFunc:create(function(sender)
+		self.m_scene:setPlayMaAnimation(false)
+		
+		local csbLayer = self.m_scene:getCsbLayer()
+		-- 显示准备按钮
+		local readyBtn = gt.seekNodeByName(csbLayer, "Btn_ready")
+		-- readyBtn:setVisible(true)
+
+		-- 停止未完成动作
+		self.m_scene:clearAnimation()
+
+		-- 停止倒计时音效
+		self.m_scene.playTimeCD = nil
+
+		-- 移除所有麻将
+		-- local mahjongNode = self.m_scene:getMahjongNode()
+		-- mahjongNode:removeAllChildren()
+		self.m_scene:cleanAllMahjong()
+
+		-- 玩家准备手势隐藏
+		self.m_scene:hideReadySign()
+
+		-- 隐藏座次标识
+		local turnPosBgSpr = gt.seekNodeByName(csbLayer, "Spr_turnPosBg")
+		turnPosBgSpr:setVisible(false)
+
+		-- 隐藏牌局状态
+		local roundStateNode = gt.seekNodeByName(csbLayer, "Node_roundState")
+		roundStateNode:setVisible(false)
+
+		-- 隐藏倒计时
+		self.m_scene.playTimeCDLabel:setVisible(false)
+
+		-- 隐藏出牌标识
+		self.m_scene.m_outMjtileSignNode:setVisible(false)
+
+		-- 隐藏决策
+		local decisionNode = self.m_scene:getDecisionNode()
+		decisionNode:removeAllChildren()
+
+		--移除特效
+		if self.m_scene.huAnimateNode then
+			self.m_scene.huAnimateNode:removeFromParent()
+			self.m_scene.huAnimateNode = nil
+		end
+
+		--隐藏鬼牌标识
+		self.m_scene:initGhost()
+
+		--翻鬼清除鬼数据
+		if self.m_scene.m_ghost_type and self.m_scene.m_ghost_type ~= 8 then
+			self.m_scene:getRoom():cleanGui()
+		end
+
+		--设置分数
+		if msgTbl.m_end == 0 then
+			table.foreach(room:getPlayers(), function(seatIdx, player)
+				player:setScore(player:getScore() + msgTbl.m_score[seatIdx])
+			end)
+		end
+		
+		-- 弹出局结算界面
+		local roundReport = Tools.requireFile("RoundReport", self.m_scene:getGameType(), Tools.BASE_TYPE.ROOM)
+		roundReport:init(curRoomPlayers, room:getMainSeatIdx(), msgTbl, msgTbl.m_end)
+		
+		self.m_scene:setPlayMaAnimation(false)
+
+		self.m_scene:addChild(roundReport, Room.ZOrder.ROUND_REPORT)
+
+	end)
+
+	local seqAction = cc.Sequence:create(delayTime, callFunc)
+	self.m_scene:runAction(seqAction)
+end
+
+
+return RcvRoundReport

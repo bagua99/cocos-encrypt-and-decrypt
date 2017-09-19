@@ -1,0 +1,93 @@
+local PlayinfoLayer = class("PlayinfoLayer", function ( ... )
+	return gt.createMaskLayer()
+end)
+
+-- _type:玩法类型，_msgTable:勾选的玩法
+function PlayinfoLayer:ctor( _type, _msgTable )
+	gt.log("PlayinfoLayer type is ", _type)
+	dump(_msgTable)
+	self:initData(_type + 1, _msgTable )
+	self:initLayer( )
+end
+
+--将数据分为牌型和玩法，并将数据转换为界面内使用类型
+function PlayinfoLayer:initData( _type, _msgTable )
+	self.m_data = {}
+	self.config = Tools.getGameConfig(_type)
+	if self.config then
+		if self.config.fixData then
+			_msgTable = self.config:fixData(_msgTable)
+			dump(_msgTable)
+		end
+		dump(self.config:getShowList())
+		dump(self.config.ruleType)
+		for k,v in pairs(self.config:getShowList()) do
+			local item = self.config.ruleType[v]
+			if item then
+				-- 显示文字，是否选中
+				local data = {desc = item.desc, isSelect = table.keyof(_msgTable, v) and true or false}
+				local type = item.type
+				self.m_data[type] = self.m_data[type] or {}
+				table.insert(self.m_data[type], data)
+			end
+		end
+	end	
+end
+
+function PlayinfoLayer:initLayer(  )
+	dump(self.m_data)
+	local csbNode = cc.CSLoader:createNode("PlayInfoLayer.csb")
+	csbNode:setAnchorPoint(0.5, 0.5)
+	csbNode:setPosition(gt.winCenter)
+	self:addChild(csbNode)
+
+	-- 关闭按钮
+	local closeBtn = gt.seekNodeByName(csbNode, "Btn_close")
+	gt.addBtnPressedListener(closeBtn, function()
+		self:removeFromParent()
+	end)
+
+	--控件
+	local listView = {
+		[gt.PlayInfoType.WANFA] = gt.seekNodeByName(csbNode, "ListView_2"),
+		[gt.PlayInfoType.PAIXING] = gt.seekNodeByName(csbNode, "ListView_1"),
+	}
+
+	for k,v in pairs(listView) do
+		self:initListView(v, self.m_data[k])
+	end
+end
+
+function PlayinfoLayer:initListView( _listView, _msgTable )
+	if not _listView or not _msgTable then
+		gt.log("listview error")
+		return
+	end
+
+	for i=1,math.ceil(#_msgTable/2) do
+		gt.log("cell index = ", i)
+
+		local cell = cc.CSLoader:createNode("PlayInfoCell.csb")
+		print("cell width = ", cell:getContentSize().width, " height = ", cell:getContentSize().height)
+		local widget = ccui.Layout:create()
+		widget:setContentSize(cell:getContentSize())
+		widget:addChild(cell)
+		for j = 1, 2 do
+			local CheckBox = gt.seekNodeByName(cell, "CheckBox_" .. j)
+			local Text = gt.seekNodeByName(cell, "Text_" .. j)
+			local dataIndex = (i * 2) - (j%2)
+			if _msgTable[dataIndex] then
+				CheckBox:setSelected(_msgTable[dataIndex].isSelect)
+				CheckBox:setEnabled(_msgTable[dataIndex].isSelect)
+				Text:setString(_msgTable[dataIndex].desc)
+			else
+				CheckBox:setVisible(false)
+				Text:setVisible(false)
+			end 
+		end
+
+		_listView:pushBackCustomItem(widget)
+	end
+end
+
+return PlayinfoLayer

@@ -1,0 +1,530 @@
+local Room = class("Room")
+
+--玩家数组，整个类都用
+Room.m_players = {}
+
+--当前的房间状态
+Room.Status = {
+	WAIT = 1,
+	PLAY = 2,
+	END = 3
+}
+
+--
+Room.ZOrder = {
+	CSB_LAYER = 1, -- CSB 层
+	-- MAHJONG_LAYER = 2,
+	DECISION = 3, --  决策层
+	CHAT = 4,	  --  聊天层	
+	PLAYER_INFO_TIPS = 5,--玩家消息提示
+	FLIMLAYER = 6,  --胶片(电影)
+	OUTMJTILE_SIGN = 7, --出的麻将块-符号？？
+	MJBAR_ANIMATION = 8, --杠牌动画层
+	SETTING = 9, --设置层
+	VOICE_TIPS = 11,--声音提示	
+	ROOM_WANFA = 12,--房间玩法
+	HAIDILAOYUE = 13,--海底捞月
+	MAPAI = 77,--没牌
+	REPORT	= 16,--报告
+	ZHANIAO = 72,--？？
+	ROUND_REPORT = 66,-- 单局结算界面显示在总结算界面之上
+	DISMISS_ROOM = 66, -- 解散房间界面置顶
+
+}
+
+Room.MJZOrder = {
+	OUTMJTILE_SIGN = 100000,
+}
+
+--决策类型
+Room.DecisionType = {
+	-- 接炮胡
+	TAKE_CANNON_WIN				= 1,
+	-- 自摸胡
+	SELF_DRAWN_WIN				= 2,
+	-- 明杠
+	BRIGHT_BAR					= 4,
+	-- 暗杠
+	DARK_BAR					= 3,
+	-- 碰
+	PUNG						= 5,
+	-- 吃
+	EAT					        = 6,
+	--眀补
+	BRIGHT_BU                   = 8,
+	--暗补
+	DARK_BU                     = 7,
+	--跟庄
+	FOLLOW_ZHUANG				= 9,
+}
+
+--房间符号
+Room.TAG = {
+	FLIMLAYER_BAR = 50,
+	FLIMLAYER_BU = 51,
+}
+
+--决策名，其实是图片资源
+Room.DECISION_NAME = {
+	GUO = "btn_pass_cs.png",
+	HU = "btn_win_cs.png",
+	GANG = "btn_gang_cs.png",
+	BUZHANG = "btn_buzhang_cs.png",
+	CHI = "btn_eat_cs.png",
+	PENG = "btn_peng_cs.png",
+}
+
+--优先级
+Room.PRIORITY_SHOW = {
+	GUO = 1, -- 过
+	CHI = 2, --吃
+	PENG = 3, --碰
+	GANG = 4, --杠
+	BUZHANG = 5,--补庄？？
+	HU = 6, --胡
+}
+
+--动画类型
+Room.FLIMTYPE = {
+	FLIMLAYER_BAR = 1,
+	FLIMLAYER_BU = 2,
+}
+--房间的类型，
+Room.Type = {
+	[1] = "zhuanzhuan", --转转
+	[4] = "changsha",   --长沙
+	[gt.RoomType.ROOM_JIPINGHU + 1] =  "jiping", --鸡平胡
+	[gt.RoomType.ROOM_TUIDAOHU + 1] =  "tuidao", --推倒胡
+	[gt.RoomType.ROOM_YIBAI + 1] 	=  "yibai",  --一百
+	[gt.RoomType.ROOM_BAIDA + 1] 	=  "baida", --百搭
+	[gt.RoomType.ROOM_ZUOPAI + 1] 	=  "zuopai", --做牌
+	[gt.RoomType.ROOM_CHAOSHAN +  1]=  "chaoshan",--潮汕
+	[gt.RoomType.ROOM_TUIDAOHU_THREE + 1]=  "tuidao_three", --三人推倒胡
+	[gt.RoomType.ROOM_HUIZHOUZHUANG + 1] = 'huizhouzhuang', --惠州庄
+	[gt.RoomType.ROOM_HONGZHONGWANG + 1] = 'hongzhongwang',
+	[gt.RoomType.ROOM_XIANGGANG + 1] = 'xianggang',
+	[gt.RoomType.ROOM_HUIZHOUZHUANG_BUHUA + 1] = 'huizhouzhuang_buhua',
+	[gt.RoomType.ROOM_HONGZHONG + 1] = 'hongzhong',			--红中麻将
+	[gt.RoomType.ROOM_JIHU_BUHUA + 1] = 'jihu_buhua',
+	[gt.RoomType.ROOM_TUIDAOHU_TWO + 1] = 'tuidao_two',
+	[gt.RoomType.ROOM_GUANGDONG_JIHU + 1] = 'guangdong_jihu', --广东鸡胡
+	[gt.RoomType.ROOM_MEIZHOU_HONGZHONGBAO + 1] = 'meizhou_hongzhongbao', --梅州红中宝
+	[gt.RoomType.ROOM_JIEYANG + 1] = 'jieyang' --揭阳
+
+}
+
+Room.TypeName = {
+	[1] = "转转麻将",
+	[4] = "长沙麻将",
+	[gt.RoomType.ROOM_JIPINGHU + 1] =  "鸡平胡",
+	[gt.RoomType.ROOM_TUIDAOHU + 1] =  "推倒胡",
+	[gt.RoomType.ROOM_YIBAI + 1] 	=  "100张",
+	[gt.RoomType.ROOM_BAIDA + 1] 	=  "百搭鸡胡",
+	[gt.RoomType.ROOM_ZUOPAI + 1] 	=  "做牌推倒胡",
+	[gt.RoomType.ROOM_CHAOSHAN +  1]=  "潮汕麻将",
+	[gt.RoomType.ROOM_TUIDAOHU_THREE + 1]=  "三人推倒胡",
+	[gt.RoomType.ROOM_HUIZHOUZHUANG + 1] = '惠州庄-鬼牌',
+	[gt.RoomType.ROOM_HONGZHONGWANG + 1] = '红中王',
+	[gt.RoomType.ROOM_XIANGGANG + 1] = '香港麻将',
+	[gt.RoomType.ROOM_HUIZHOUZHUANG_BUHUA + 1] = '惠州庄-补花',
+	[gt.RoomType.ROOM_HONGZHONG + 1] = '红中麻将',			--红中麻将
+	[gt.RoomType.ROOM_JIHU_BUHUA + 1] = '鸡胡-补花',
+	[gt.RoomType.ROOM_TUIDAOHU_TWO + 1] = '二人推倒胡',
+	[gt.RoomType.ROOM_GUANGDONG_JIHU + 1] = '广东鸡胡',
+	[gt.RoomType.ROOM_MEIZHOU_HONGZHONGBAO + 1] = '梅州-红中宝',
+	[gt.RoomType.ROOM_JIEYANG + 1] = '揭阳麻将' --揭阳
+}
+--玩法规则类型
+Room.RuleType = {
+	[0] = "无番起胡",
+	[1] = "一番起胡",
+	[3] = "三番起胡",
+	[5] = "七对胡",
+	[2] = "2马",
+	[4] = "4马",
+	[6] = "6马",
+	[7] = "无鬼牌",
+	[8] = "白板做鬼",
+	[9] = "翻鬼",
+	[10] = "不带风",
+	[11] = "自摸胡",
+	[12] = "点炮胡",
+	[13] = "接炮胡(可抢杠)",
+	[14] = "红中赖子",
+	[15] = "庄闲",
+	[16] = "七对加番",
+	[17] = "抢杠全包",
+	[18] = "可抢杠胡",
+	[19] = "无鬼加倍",
+	[20] = "杠爆全包",
+	[21] = "4鬼胡牌",
+	[22] = "4鬼胡牌2倍",
+	-- [23] = "碰碰胡2倍",
+	-- [24] = "清一色4倍",
+	-- [25] = "幺九6倍",
+	-- [26] = "全风8倍",
+	-- [27] = "十三幺8倍",
+	[23] = "碰碰胡",
+	[24] = "清一色",
+	[25] = "幺九",
+	[26] = "全风",
+	[27] = "十三幺",
+	[28] = "双鬼",
+	[29] = '花牌做鬼',
+	[30] = "明杠可抢",
+	[31] = "含19即可",
+	[32] = "七对",
+	[33] = "跟庄",
+	[34] = "奖马",
+	[35] = "马跟底分",
+	[38] = "抢杠胡2倍",
+	[39] = "杠上开花2倍",	
+	[40] = "混一色",
+	[41] = "天地胡",
+	[42] = "抓码",
+	[43] = "节节高",
+	[44] = '双豪华',
+	[45] = '三豪华',
+	[46] = '十八罗汉',
+	[47] = '鸡胡可胡',
+	[48] = '不带万字牌',
+	[49] = "红中当马",
+	[50] = '无红中多2马',
+	[51] = '红中做鬼',
+	[52] = '海底捞月2倍',
+	[53] = '马跟杠',
+	[54] = '十二张落地',
+	[55] = '无花',
+	[56] = '2花',
+	[57] = '4花',
+	[58] = '6花',
+	[59] = '8花',
+	[60] = '小三元',
+	[61] = '小四喜',
+	[62] = '大三元',
+	[63] = '大四喜',
+	[64] = '爆炸马',
+	[65] = '爆炸马加分',
+	[66] = '爆炸马翻倍',
+	[67] = '8马',
+	[68] = '全冲',
+	[69] = '无番起胡',
+	[70] = '一番起胡',
+	[71] = '二番起胡',
+	[72] = '三番起胡',
+	[73] = '五番起胡',
+	[74] = '五番封顶',
+	[75] = '七番封顶',
+	[76] = '十番封顶',
+	[77] = '十三番封顶',
+	[78] = '跟庄 (2分)',
+	[79] = '跟庄 (3分)',
+	[80] = '10马',
+	[105] = '20马',
+	[106] = '四番起胡',
+	[113] = '十倍听牌可接炮',
+	[114] = '十倍听牌免分',
+	[115] = '流局杠算分',
+	[116] = '无封顶',
+	[117] = '一炮多响',
+	[118] = '鸡胡可抢杠',
+}
+
+--玩家总数？？
+Room.PlayerTotal = 4
+--玩家的配置
+Room.maxPlayerConfig = {
+	[gt.RoomType.ROOM_TUIDAOHU_THREE] = 3,
+	[gt.RoomType.ROOM_TUIDAOHU_TWO] = 2,
+}
+
+function Room:ctor()
+	self.m_status = Room.Status.WAIT
+	self.m_ready = {1, 1, 1, 1}
+	self.m_players = {}
+	--鬼牌
+	self.m_gui = nil
+	--红中王玩法中用到的红中数量
+	self.m_redDragonNum = {0,0,0,0};
+	self.m_fillupCards = {
+		{},{},{},{}
+	};
+	self.m_hideRedDragonNode = true;
+end
+
+-- 设置房间号
+function Room:setId(_id)
+	self.m_id = _id
+end
+
+-- 获取房间号
+function Room:getId()
+	return self.m_id
+end
+
+-- 座位偏移值
+function Room:setSeatOffset(_seatOffset)
+	self.m_seatOffset = _seatOffset
+end
+-- 
+function Room:getSeatOffset()
+	return self.m_seatOffset
+end
+
+function Room:getSeatRocation()
+	if self:getMaxPlayerNum() < 4 then
+		return 0
+	else
+		return -self.m_seatOffset * 90
+	end
+end
+
+-- 获得进入房间玩家数量
+function Room:getPlayerTotal()
+	local total = 0
+	table.foreach(self.m_players, function(i, v)
+		total = total + 1
+	end)
+	return total
+end
+
+--判断是否房间已满
+--有可能需要修正
+function Room:isFull()
+	--print("Room:isFull" ..tostring())
+	local num = self:getMaxPlayerNum();
+	--print("Room:isFull " ..tostring(num))
+	if self:getPlayerTotal() == num then --Room.PlayerTotal then
+		return true
+	end
+	return false
+end
+
+-- 向桌子添加一位玩家
+function Room:addPlayer(_player)
+	if not _player.m_seatIdx then
+		return false
+	end
+	self.m_players[_player.m_seatIdx] = _player
+
+	if self.m_gui then
+		self.m_players[_player.m_seatIdx].m_gui = self.m_gui
+	end
+	--三人两人
+	self:fixPlayerDisplayIdx(_player)
+end
+
+--修正玩家的显示索引
+function Room:fixPlayerDisplayIdx( _player )
+	if self:getMaxPlayerNum() == 4 then
+		return true
+	end
+	local displaydIdx = _player:getDisplayIdx()
+
+	if not displaydIdx then
+		return false
+	end
+
+	if self:getMaxPlayerNum() == 3 then
+		if displaydIdx > 1 then -- 2号座位移动到3号
+			_player:setDisplayIdx(displaydIdx + 1)
+		end
+	elseif self:getMaxPlayerNum() == 2 then --两人
+		_player:setDisplayIdx(displaydIdx * 2)
+	end
+	return true
+end
+
+--设置房间人数 4人，3人 或者 2人
+function Room:setMaxPlayerNum( _gameType)
+	self.m_maxPlayrNum = self.maxPlayerConfig[_gameType] or 4
+	print("设置房间人数", self.m_maxPlayrNum)
+end
+
+function Room:getMaxPlayerNum(  )
+	return self.m_maxPlayrNum
+end
+
+-- 通过服务器给定位置m_pos + 1 = _seatIdx获取玩家
+function Room:getPlayer(_seatIdx)
+	return self.m_players[_seatIdx]
+end
+
+-- 移除一个玩家
+function Room:removePlayer(_seatIdx)
+	self.m_players[_seatIdx] = nil
+end
+
+-- 获取玩家列表
+function Room:getPlayers()
+	return self.m_players
+end
+
+-- 设置房间内主视角位置
+function Room:setMainSeatIdx(_mainSeatIdx)
+	self.m_mainSeatIdx = _mainSeatIdx
+end
+
+function Room:getMainSeatIdx()
+	return self.m_mainSeatIdx
+end
+
+-- 获取主视角玩家对象
+function Room:getMainPlayer()
+	return self.m_players[self.m_mainSeatIdx]
+end
+
+-- 上一家出牌
+function Room:setPreShowSeatIdx(_preShowSeatIdx)
+	self.m_preShowSeatIdx = _preShowSeatIdx
+end
+
+function Room:getPreShowSeatIdx()
+	return self.m_preShowSeatIdx
+end
+
+--房间状态
+function Room:getRoomStatus(  )
+	return self.m_status
+end
+
+function Room:setRoomStatus( _status )
+	self.m_status = _status
+end
+
+function Room:setRedDragonNum(arg1, arg2)
+
+	if(arg1 == nil) then 
+		self.m_redDragonNum = {0,0,0,0};
+	elseif(type(arg1) == 'table')then 
+		self.m_redDragonNum = arg1
+	elseif(type(arg1)== 'number' and type(arg2) == 'number') then 
+		self.m_redDragonNum[arg1] = arg2;
+	end 
+end 
+
+function Room:getRedDragonNum(arg1)
+	if(arg1 == nil)then 
+		return self.m_redDragonNum;
+	else
+		--if(type(arg1) == 'number')then 
+			return self.m_redDragonNum[arg1];
+		--end 
+	end 
+end 
+
+function Room:clearRedDragonNum()
+	self.m_redDragonNum = {0,0,0,0};
+end 
+
+--房间局数
+function Room:setRound( _round )
+	self.m_round = _round
+end
+
+function Room:getRuond(  )
+	return self.m_round
+end
+--一局结束
+function Room:endRound(  )
+	self:setRoomStatus(Room.Status.END)
+	self.m_ready = {0, 0, 0, 0}
+	self.m_redDragonNum = {0,0,0,0}
+end
+
+--某一个作为是否准备好
+function Room:getReady(_seatIdx)
+	return self.m_ready[_seatIdx] or 0
+end
+
+function Room:setReady(_seatIdx, _type)
+	self.m_ready[_seatIdx] = _type
+end
+
+--设置鬼牌？？ 
+function Room:setGui( _msgTable, _fix, _isDouble)
+	if not _msgTable then
+		return
+	end
+	self.m_gui = Tools.getGhostTable(_msgTable, _fix, _isDouble)
+	for k,player in pairs(self.m_players) do
+		player.m_gui = self.m_gui
+	end
+end
+
+
+function Room:cleanGui(  )
+	self.m_gui = nil
+	for k,player in pairs(self.m_players) do
+		player.m_gui = nil
+	end
+end
+
+--获取玩家的现实距离
+--这个应该需要手机的定位打开才行了
+--
+function Room:getDistanceDescs()
+	local ret = {"", "", ""}
+	local players = {}
+	local index = 1
+	for i = 1, 4 do
+		if self.m_players[i] and i ~= self.m_mainSeatIdx then
+			local iName = self.m_players[i]:getName()
+			iName = self:getPreName(iName)
+			if self.m_players[i]:getLocation() == "" then
+				ret[index] = "玩家【" .. iName .. "】的位置无法获取"
+				index = index + 1
+			else
+				for j = 1, #players do
+					local distance = Tools.getDistanceByStrs(self.m_players[i]:getLocation(), players[j]:getLocation())
+					if distance then
+						if distance >= 1000 then
+							distance = math.round(distance/1000) .. "km"
+						else
+							distance = distance .. "m"
+						end
+						local jName = players[j]:getName()
+						jName = self:getPreName(jName)
+						ret[index] = "玩家【" .. iName .. "】与【" .. jName .. "】的距离为" .. distance
+						index = index + 1
+					end
+				end
+				players[#players+1] = self.m_players[i]
+			end
+		end
+	end
+	return ret
+end
+
+--取得前一个玩家的名字
+function Room:getPreName(name)
+	local nameLen = #name
+	if(nameLen == 0)then 
+		return ""
+	end 
+	local tab = gt.splitStringForWidth(name, "", 1, 8)
+	local ret = tab[1]
+	if #tab[1] < #name then
+		ret = tab[1] .. "."
+	end
+	return ret
+end
+
+function Room:setCanInteraction(canInteraction)
+	print('Room:setCanInteraction '..tostring(canInteraction))
+	self.mCanInteraction = canInteraction
+end 
+
+function Room:getCanInteraction()
+	return self.mCanInteraction;
+end 
+
+function Room:setAntiCheat(antiCheat)
+	self.m_antiCheat =antiCheat;
+end 
+
+function Room:getAntiCheat()
+	return self.m_antiCheat;
+end 
+
+return Room

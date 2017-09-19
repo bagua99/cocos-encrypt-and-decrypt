@@ -1,0 +1,46 @@
+local function reloadModule(moduleName)
+    package.loaded[moduleName] = nil
+    return require(moduleName)
+end
+
+-- tools
+Tools = reloadModule("app/views/base/Tools")
+
+HeadManager = reloadModule("app/PlayerHeadManager")
+
+-- modules
+Room = reloadModule("app/modules/Room")
+Player = reloadModule("app/modules/Player")
+MahjongTile = reloadModule("app/modules/MahjongTile")
+MJTilesReferPos = reloadModule("app/modules/MJTilesReferPos")
+
+-- views base
+BaseRoomScene = reloadModule("app/views/base/room/RoomScene")
+BaseRoomAgreement = reloadModule("app/views/base/room/BaseRoomAgreement")
+BaseRoundReport = reloadModule("app/views/base/room/RoundReport")
+BaseFinalReport = reloadModule("app/views/base/room/FinalReport")
+
+BaseRoomSelect = reloadModule("app/views/base/hall/RoomSelect")
+BaseRoomOptions = reloadModule("app/views/base/hall/RoomOptions")
+
+-- base agreements
+BaseRcvAddPlayer = reloadModule("app/views/base/room/agreements/RcvAddPlayer")
+BaseRcvChatMsg = reloadModule("app/views/base/room/agreements/RcvChatMsg")
+BaseRcvDismissRoom = reloadModule("app/views/base/room/agreements/RcvDismissRoom")
+BaseRcvEnterRoom = reloadModule("app/views/base/room/agreements/RcvEnterRoom")
+BaseRcvFinalReport = reloadModule("app/views/base/room/agreements/RcvFinalReport")
+BaseRcvMakeDecision = reloadModule("app/views/base/room/agreements/RcvMakeDecision")
+BaseRcvOffLineState = reloadModule("app/views/base/room/agreements/RcvOffLineState")
+BaseRcvQuitRoom = reloadModule("app/views/base/room/agreements/RcvQuitRoom")
+BaseRcvReady = reloadModule("app/views/base/room/agreements/RcvReady")
+BaseRcvRemovePlayer = reloadModule("app/views/base/room/agreements/RcvRemovePlayer")
+BaseRcvRoomCard = reloadModule("app/views/base/room/agreements/RcvRoomCard")
+BaseRcvRoundReport = reloadModule("app/views/base/room/agreements/RcvRoundReport")
+BaseRcvRoundState = reloadModule("app/views/base/room/agreements/RcvRoundState")
+BaseRcvStartGame = reloadModule("app/views/base/room/agreements/RcvStartGame")
+BaseRcvSyncMakeDecision = reloadModule("app/views/base/room/agreements/RcvSyncMakeDecision")
+BaseRcvSyncRoomState = reloadModule("app/views/base/room/agreements/RcvSyncRoomState")
+BaseRcvSyncShowMjTile = reloadModule("app/views/base/room/agreements/RcvSyncShowMjTile")
+BaseRcvTurnShowMjTile = reloadModule("app/views/base/room/agreements/RcvTurnShowMjTile")
+BaseRcvGhostMsg = reloadModule("app/views/base/room/agreements/RcvGhostMsg")
+

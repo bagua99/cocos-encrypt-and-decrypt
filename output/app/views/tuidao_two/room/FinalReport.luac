@@ -1,0 +1,82 @@
+--region app.views.tuidao_two.FinalReport
+--desc:  红中王的最终结算
+--endregion
+--2016-11-29
+
+
+local FinalReport = class("FinalReport",  BaseFinalReport)
+
+function FinalReport:ctor()
+	FinalReport.super.ctor(self)
+end
+
+function FinalReport:init(roomPlayers, rptMsgTbl)
+	-- body
+	FinalReport.super.init(self,roomPlayers,rptMsgTbl);
+
+	local userNum = #roomPlayers
+	local MAX_USER = 4;
+	for i = (MAX_USER - userNum + 1),MAX_USER do 
+		local nodeUserInfo = gt.seekNodeByName(self.rootNode, "Node_playerReport_"..tostring(i));
+		--nodeUserInfo:setEnable(false);
+		nodeUserInfo:setVisible(false);
+	end
+
+	if(userNum == 2) then 
+		
+		local baseNode = gt.seekNodeByName(self.rootNode, "Node_playerReport_1");
+		--local baseNode = gt.seekNodeByName(nodeUserInfo,'Sprite_diban');
+		baseNode:setPositionX(300);
+
+		baseNode = gt.seekNodeByName(self.rootNode, "Node_playerReport_2");
+		--local baseNode = gt.seekNodeByName(nodeUserInfo,'Sprite_diban');
+		baseNode:setPositionX(800);
+	end 
+end
+function FinalReport:setHuCount(Node_resultDes_td, rptMsgTbl, seatIdx)
+	dump(rptMsgTbl, 'FinalReport:setHuCount rptMsgTbl');
+	
+	if not Node_resultDes_td then
+		return
+	end
+
+	-- 无鬼自摸次数
+	local wuGhostCountLable = gt.seekNodeByName(Node_resultDes_td, "Label_wugui_count")
+	if rptMsgTbl.m_noghostZimo then
+		wuGhostCountLable:setString(tostring(rptMsgTbl.m_noghostZimo[seatIdx]))
+	else
+		wuGhostCountLable:setString("-")
+	end
+
+	-- 无鬼自摸次数
+	local ghostCountLable = gt.seekNodeByName(Node_resultDes_td, "Label_yougui_count")
+	if rptMsgTbl.m_ghostZimo then
+		ghostCountLable:setString(tostring(rptMsgTbl.m_ghostZimo[seatIdx]))
+	else
+		ghostCountLable:setString("-")
+	end
+
+	-- 暗杠次数
+	local darkBarCountLabel = gt.seekNodeByName(Node_resultDes_td, "Label_angang_count")
+	darkBarCountLabel:setString(tostring(rptMsgTbl.m_agang[seatIdx]))
+
+	-- 明杠次数
+	local brightBarCountLabel = gt.seekNodeByName(Node_resultDes_td, "Label_minggang_count")
+	brightBarCountLabel:setString(tostring(rptMsgTbl.m_mgang[seatIdx]))
+
+	--中马总数
+	local maCountLabel = gt.seekNodeByName(Node_resultDes_td, "Label_ma_count")
+	if rptMsgTbl.m_maNum then
+		maCountLabel:setString(rptMsgTbl.m_maNum[seatIdx])
+	else
+		maCountLabel:setString("-")
+	end
+end
+
+--胡牌类型的名字
+function FinalReport:getHuCountNodeName(  )
+	return "Node_resultDes_td"
+end
+
+return FinalReport
+

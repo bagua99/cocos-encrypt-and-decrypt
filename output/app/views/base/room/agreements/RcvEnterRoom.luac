@@ -1,0 +1,21 @@
+local RcvEnterRoom = class("RcvEnterRoom", BaseRoomAgreement)
+
+-- 玩家自己进入房间 30
+function RcvEnterRoom:ctor()
+	self:registerMsgListener(gt.GC_ENTER_ROOM, self, self.onRcvEnterRoom)
+end
+
+function RcvEnterRoom:onRcvEnterRoom(msgTbl)
+	gt.removeLoadingTips()
+
+	--设置房间状态
+	local room = self.m_scene:getRoom()
+	room:setRoomStatus(Room.Status.WAIT)
+
+	self.m_scene:cleanAllMahjong()
+	
+	self.m_scene:enterRoom(msgTbl)
+end
+
+
+return RcvEnterRoom

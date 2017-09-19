@@ -1,0 +1,31 @@
+local RcvSyncRoomState = class("RcvSyncRoomState", BaseRcvSyncRoomState)
+
+-- 同步房间状态 35
+function RcvSyncRoomState:ctor()
+	self:registerMsgListener(gt.GC_SYNC_ROOM_STATE, self, self.onRcvSyncRoomState)
+end
+
+function RcvSyncRoomState:onRcvSyncRoomState(msgTbl)
+	if msgTbl.m_msgId == gt.GC_SYNC_ROOM_STATE then
+		if msgTbl.m_number and msgTbl.m_color and msgTbl.m_number > 0 and msgTbl.m_color > 0 then
+			if self.m_scene.m_ghost_type == 28 then
+				self.m_scene:getRoom():setGui(msgTbl, true, true)
+			else
+				self.m_scene:getRoom():setGui(msgTbl, true)
+			end
+		end
+	elseif self.m_scene.m_ghost_type and self.m_scene.m_ghost_type ~= 8 then
+		self.m_scene:getRoom():cleanGui()
+	end
+
+	RcvSyncRoomState.super.onRcvSyncRoomState(self, msgTbl)
+
+	-- 设置鬼牌
+	if msgTbl.m_msgId == gt.GC_SYNC_ROOM_STATE then
+		if msgTbl.m_number and msgTbl.m_color and msgTbl.m_number > 0 and msgTbl.m_color > 0 then
+			self.m_scene:setGhost( msgTbl )
+		end		
+	end
+end
+
+return RcvSyncRoomState

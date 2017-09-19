@@ -1,0 +1,1702 @@
+
+local gt = cc.exports.gt
+
+local MainScene = class("MainScene", function()
+	return cc.Scene:create()
+end)
+
+MainScene.ZOrder = {
+	HISTORY_RECORD			= 5,
+	CREATE_ROOM				= 6,
+	JOIN_ROOM				= 7,
+	PLAYER_INFO_TIPS		= 9,
+	OFFICAL_TIPS = 10,
+	CONFIRM = 11,
+}
+
+local ACTIVITY_WUYI_TAG = 1001
+
+
+local headIndex = 1;
+
+function MainScene:ctor(isNewPlayer, isRoomCreater, roomID)
+	self.isNewPlayer = isNewPlayer
+	self.isRoomCreater = isRoomCreater
+
+	-- 注册节点事件
+	self:registerScriptHandler(handler(self, self.onNodeEvent))
+
+	local csbNode = cc.CSLoader:createNode("MainScene.csb")
+	csbNode:setAnchorPoint(0.5, 0.5)
+	csbNode:setPosition(gt.winCenter)
+	self:addChild(csbNode)
+	self.rootNode = csbNode
+
+	--显示函数
+	local function initPublicNotice()
+		print('initPublicNotice');
+		--local noticeBg = gt.seekNodeByName(csbNode,'Image_PublicNotice');
+		--local noticeTitle = gt.seekNodeByName(noticeBg,'Text_Title');
+		local noticeContent1 = gt.seekNodeByName(csbNode,'Text_Content_1');
+		local noticeContent2 = gt.seekNodeByName(csbNode,'Text_Content_2');
+
+		--if(gt.isInReview) then 
+			noticeContent1:setString("适度游戏健脑\n沉迷游戏伤身");
+			noticeContent2:setString("合理安排时间\n享受健康生活");
+		-- else 
+		-- 	noticeContent1:setString("房卡咨询请加官\n方微信公众号");
+		-- 	--local text2 = "闲来广东麻将\nxlgdmj6"
+		-- 	local text2 = "自觉远离\n赌博等非法行为"
+		-- 	noticeContent2:setString(text2)
+		-- end 
+	end 
+	initPublicNotice()
+
+	local playerData = gt.playerData
+	-- 玩家信息
+	local playerInfoNode = gt.seekNodeByName(csbNode, "Node_playerInfo")
+	-- 头像
+	local headSpr = gt.seekNodeByName(playerInfoNode, "Spr_head")
+	self.m_headSpr = headSpr
+	local playerHeadMgr = require("app/PlayerHeadManager"):create()
+	playerHeadMgr:attach(headSpr, playerData.uid, playerData.headURL)
+	self:addChild(playerHeadMgr)
+	-- 昵称
+	local nicknameLabel = gt.seekNodeByName(playerInfoNode, "Label_nickname")
+	nicknameLabel:setString(playerData.nickname)
+	-- 点击头像显示信息
+	local headFrameBtn = gt.seekNodeByName(playerInfoNode, "Btn_headFrame")
+	local pos  = cc.p(headFrameBtn:getPosition());
+
+	self.headFrameBtn = headFrameBtn;
+	self.headFramePos = pos;
+
+	local curHeadIcon = gt.playerData.curHeadIcon + 1;
+	-- local str = string.format("res/sd/images/otherImages/headframes/%03d.png",curHeadIcon)
+	-- headFrameBtn:setContentSize(cc.size(0,0));
+	-- headFrameBtn:loadTextures(str,str,str)
+	--headFrameBtn:setPosition(cc.p(pos.x-2,pos.y +12));
+	--headFrameBtn:setScale(0.95);
+
+	--gt.addHeadFrames_Button(headFrameBtn,curHeadIcon,0.95);
+	gt.addHeadFrames_Button(headFrameBtn,curHeadIcon);
+
+	headFrameBtn:addClickEventListener(function(sender)
+		print("sender "..tostring(sender));
+			-- if(false) then
+			-- 	print("headIndex "..headIndex); 
+			-- 	headFrameBtn:setContentSize(cc.size(0,0));
+			-- 	if(headIndex == 1) then
+			-- 		--headFrameBtn:loadTextures("public_frame_head.png","public_frame_head.png","public_frame_head.png",1);
+			-- 		--headFrameBtn:setPosition(pos);
+			-- 	else 
+			-- 		local str = string.format("res/sd/images/otherImages/headframes/%03d.png",headIndex)
+			-- 		headFrameBtn:loadTextures(str,str,str)
+			-- 		--headFrameBtn:setPosition(cc.p(pos.x,pos.y));
+			-- 	end 
+			-- 	headIndex = (headIndex + 1) %32;
+			-- 	if(headIndex == 0)then
+			-- 		headIndex  = 1;
+			-- 	end 
+			-- 	return;
+			-- end 
+			--getCopyStr
+			local playerInfoTips = require("app/views/PlayerInfoTips"):create(gt.playerData)
+			self:addChild(playerInfoTips, MainScene.ZOrder.PLAYER_INFO_TIPS)
+	 end)
+	local frameSize = headFrameBtn:getContentSize()
+	-- 房卡信息
+	-- local roomCardLabel = gt.seekNodeByName(playerInfoNode, "Label_cardInfo")
+	--roomCardLabel:setString(gt.getLocationString("LTKey_0004", playerData.roomCardsCount[2], playerData.roomCardsCount[3]))
+
+    local ttf_eight = gt.seekNodeByName(playerInfoNode, "Txt_numbereight")
+	ttf_eight:setString(playerData.roomCardsCount[2])
+	-- local ttf_sixteen = gt.seekNodeByName(playerInfoNode, "Text_numbersixteen")
+	-- ttf_sixteen:setString(playerData.roomCardsCount[3])
+	-- 房卡信息底图
+	local Spr_cardBg = gt.seekNodeByName(playerInfoNode, "Spr_cardBg")
+	-- 8局16局图片
+	local Spr_numbereight = gt.seekNodeByName(playerInfoNode, "Spr_numbereight")
+	-- local Spr_numbersixteen = gt.seekNodeByName(playerInfoNode, "Spr_numbersixteen")
+	if gt.isInReview then
+		-- Spr_cardBg:setVisible(false)
+		-- ttf_eight:setVisible(false)
+		-- -- ttf_sixteen:setVisible(false)
+		-- Spr_numbereight:setVisible(false)
+		-- Spr_numbersixteen:setVisible(false)
+	else
+		Spr_cardBg:setVisible(true)
+		ttf_eight:setVisible(true)
+		-- ttf_sixteen:setVisible(true)
+		Spr_numbereight:setVisible(true)
+		-- Spr_numbersixteen:setVisible(true)
+	end
+
+	-- 玩家id信息
+	local  label_forID = gt.seekNodeByName(playerInfoNode, "Label_ID")
+	label_forID:setString( "ID：" .. gt.playerData.uid);
+	--Label_forID:setString(gt.getCopyStr("curHeadIcon "..gt.playerData.curHeadIcon + 1);)
+
+	local buyCardBtn = gt.seekNodeByName(playerInfoNode, "Btn_buyCard")
+	gt.addBtnPressedListener(buyCardBtn, function()
+		-- 弹出房卡购买提示
+
+		--self:checkIap();
+		if gt.isOpenIAP then
+			local layer = require("app/views/Purchase/RechargeLayer"):create( )
+			self:addChild(layer, 50)
+		else
+			if gt.AndroidIsInReview then
+				require("app/views/NoticeTipsForFangKa"):create(gt.getLocationString("LTKey_0007"), "房卡不足", nil, nil, true)
+			else
+				require("app/views/NoticeTipsForFangKa"):create(gt.getLocationString("LTKey_0007"), gt.roomCardBuyInfo, nil, nil, true)
+			end
+		end 
+	end)
+	
+
+	-- 透明弹框
+	local buyCardFullBtn = gt.seekNodeByName(playerInfoNode, "Btn_full")
+	gt.addBtnPressedListener(buyCardFullBtn, function()
+		-- 弹出房卡购买提示
+		if gt.isOpenIAP then
+			local layer = require("app/views/Purchase/RechargeLayer"):create( )
+			self:addChild(layer, 50)
+		else 
+			require("app/views/NoticeTipsForFangKa"):create(gt.getLocationString("LTKey_0007"), gt.roomCardBuyInfo, nil, nil, true)
+		end 
+	end) 
+
+	-- if gt.isInReview or gt.AndroidIsInReview then
+	-- 	buyCardFullBtn:setVisible(false)
+	-- else
+	-- 	buyCardFullBtn:setVisible(true)
+	-- end
+
+	-- 跑马灯
+	if not gt.AndroidIsInReview then
+		local marqueeNode = gt.seekNodeByName(csbNode, "Node_marquee")
+		local marqueeMsg = require("app/MarqueeMsg"):create()	
+		marqueeNode:addChild(marqueeMsg)
+		self.marqueeMsg = marqueeMsg
+		self:requestMarquee()
+	end
+
+	
+	-- 创建/返回房间
+	local createRoomPanel = gt.seekNodeByName(csbNode, "Panel_createRoom")
+	createRoomPanel:addClickEventListener(function()
+		if self.isRoomCreater then
+			-- 房主返回房间
+			-- 发送进入房间消息
+			gt.showLoadingTips(gt.getLocationString("LTKey_0006"))
+
+			local msgToSend = {}
+			msgToSend.m_msgId = gt.CG_JOIN_ROOM
+			msgToSend.m_deskId = roomID
+			msgToSend.m_location = Tools.getLocationStr()
+			gt.socketClient:sendMessage(msgToSend)
+		else
+			local createRoomLayer = require("app/views/base/hall/CreateRoom"):create()
+			self:addChild(createRoomLayer, MainScene.ZOrder.CREATE_ROOM)
+		end
+	end)
+	-- 创建房间
+	self.createRoomSpr = gt.seekNodeByName(createRoomPanel, "Spr_createRoom")
+	-- 返回房间
+	self.backRoomSpr = gt.seekNodeByName(createRoomPanel, "Spr_backRoom")
+	-- 限时免费spr
+	self.roomFreeSpr = gt.seekNodeByName(createRoomPanel,"Sprite_free")
+	self.roomFreeSpr:setVisible(false);
+
+	--限时免费提示
+	self.roomFreeText = gt.seekNodeByName(createRoomPanel, "Text_freetime")
+	self.roomFreeText:setString(" ")
+
+	self:setRoomCreater(self.isRoomCreater)
+
+	-- 进入房间
+	local joinRoomPanel = gt.seekNodeByName(csbNode, "Panel_joinRoom")
+	joinRoomPanel:addClickEventListener(function()
+		if self.isRoomCreater then
+			-- 房主返回房间
+			-- 发送进入房间消息
+			require("app/views/NoticeTips"):create(gt.getLocationString("LTKey_0007"),
+				gt.getLocationString("LTKey_0052"),
+				function()
+					local msgToSend = {}
+					msgToSend.m_msgId = gt.CG_JOIN_ROOM
+					msgToSend.m_deskId = roomID
+					msgToSend.m_location = Tools.getLocationStr()
+					gt.socketClient:sendMessage(msgToSend)
+				end, nil, false)			
+		else
+			local joinRoomLayer = require("app/views/JoinRoom"):create()
+			self:addChild(joinRoomLayer, MainScene.ZOrder.JOIN_ROOM)
+		end
+	end)
+	-- 进入房间
+	gt.socketClient:registerMsgListener(gt.GC_ENTER_ROOM, self, self.onRcvEnterRoom)
+--	gt.socketClient:registerMsgListener(gt.GC_SIGNIN_RES, self, self.onRcvSignInRes);
+	gt.socketClient:registerMsgListener(gt.GC_SIGNIN_INFO_RES,self,self.onRcvAllSignInfoRes);
+	gt.socketClient:registerMsgListener(gt.GC_SHARE_SUCCESS,self,self.onRcvShareSuccess);
+
+	local btnBundleNode = gt.seekNodeByName(csbNode, "Node_btnBundle")
+
+	-- 消息
+	local messageBtn = gt.seekNodeByName(btnBundleNode, "Btn_message")
+	gt.addBtnPressedListener(messageBtn, function()
+		local joinRoomLayer = require("app/views/ActivityMsg"):create()
+		self:addChild(joinRoomLayer, MainScene.ZOrder.JOIN_ROOM)
+
+		-- self.msgShowSp:setVisible( false )
+		cc.UserDefault:getInstance():setStringForKey("msgShowFlag", "1")
+	end)
+	self.msgShowSp = cc.Sprite:create("sd/images/otherImages/msgshow.png")
+	messageBtn:addChild(self.msgShowSp)
+	self.msgShowSp:setScale(0.8)
+	self.msgShowSp:setPosition(62,52)
+	self:checkNewMsg()
+
+	-- local msgShowFlag = cc.UserDefault:getInstance():getStringForKey("msgShowFlag")
+	-- if string.len(msgShowFlag) == 0 then -- 没有看过
+	-- 	self.msgShowSp:setVisible( true )
+	-- else
+	-- 	self.msgShowSp:setVisible( false )
+	-- end
+	-- 新版本，隐藏红色按钮
+	-- self.msgShowSp:setVisible( false )
+
+
+	-- 退出
+	local exitBtn = gt.seekNodeByName(btnBundleNode, "Btn_exit")
+	gt.addBtnPressedListener(exitBtn, function()
+		local settingPanel = require("app/views/SettingMain"):create()
+		self:addChild(settingPanel, 666)
+	end)
+	if (gt.isInReview) then
+		exitBtn:setVisible(false)
+	else
+		exitBtn:setVisible(true)
+	end
+	
+	self:checkIap(  )
+	-- 战绩
+	local historyBtn = gt.seekNodeByName(btnBundleNode, "Btn_history")
+	gt.addBtnPressedListener(historyBtn, function()
+		if gt.isGM == 1 then
+			local checkHistory = require("app/views/GMCheckHistory"):create()
+			self:addChild(checkHistory, MainScene.ZOrder.HISTORY_RECORD)
+		else
+			local historyRecord = require("app/views/HistoryRecord"):create()
+			self:addChild(historyRecord, MainScene.ZOrder.HISTORY_RECORD)
+		end
+	end)
+
+	-- 玩法
+	local helpBtn = gt.seekNodeByName(btnBundleNode, "Btn_help_1")
+	gt.addBtnPressedListener(helpBtn, function()
+		--local helpLayer = require("app/views/NewHelpScene"):create()
+		local helpLayer = require("app/views/help/HelpLayer"):create()
+		self:addChild(helpLayer, 8)
+	end)
+
+	-- 分享
+	local Btn_share = gt.seekNodeByName(btnBundleNode, "Btn_share")
+	gt.addBtnPressedListener(Btn_share, function()
+		local shareSelect = require("app/views/ShareSelect"):create()
+		self:addChild(shareSelect, 8)
+	end)
+	-- 	招募代理
+	local PanelAgent = gt.seekNodeByName(csbNode,'Panel_agent')
+	local beginAnimateNode, beginAnimate = gt.createCSAnimation("res/LB_tx.csb")
+	-- beginAnimateNode:setPosition(gt.winCenter)
+	beginAnimateNode:setTag(1000);
+	PanelAgent:addChild(beginAnimateNode);
+	beginAnimate:play("LB_tx", true)
+	beginAnimate:gotoFrameAndPlay(beginAnimate:getEndFrame())
+
+	PanelAgent:addTouchEventListener(function(uiwidget, eventType)
+		if eventType == 0 then
+			local activityAgent = require("app/views/ActivityAgent"):create()
+			self:addChild(activityAgent, 8)
+		end
+		return true
+	end)
+	--	每日免费获得房卡
+	gt.shareAndFreeCard = gt.shareAndFreeCard or 0
+	local Button_freecard = gt.seekNodeByName(csbNode,'Button_freecard')
+	if Button_freecard then
+		local date = os.date("%d") % 5 * 2 
+		Button_freecard:setVisible((gt.playerData.uid % 10) == date or (gt.playerData.uid % 10 == date  + 1))
+		local btnFreeCardSize = Button_freecard:getContentSize()
+		local beginAnimateNode, beginAnimate = gt.createCSAnimation("res/da/LN_fk_tx.csb")
+		beginAnimateNode:setTag(1001);
+		beginAnimateNode:setAnchorPoint(cc.p(0.5,0.5))
+		beginAnimateNode:setPosition(btnFreeCardSize.width * 0.5 ,btnFreeCardSize.height * 0.5)
+		Button_freecard:addChild(beginAnimateNode);
+		beginAnimate:play("LB_tx", true)
+		beginAnimate:gotoFrameAndPlay(beginAnimate:getEndFrame())
+		self.clickedFreecard = false
+		Button_freecard:addTouchEventListener(function(uiwidget, eventType)
+			if eventType == 0 then
+				self:btnFreeCardHandler()
+			end
+			return true
+		end)
+	end
+	gt.registerEventListener(gt.EventType.SHARE_SUCCESS,self,self.sendServerFreeCard)
+	-- gt.addBtnPressedListener(PanelAgent,function()
+	-- 	local activityAgent = require("app/views/ActivityAgent"):create()
+	-- 	self:addChild(activityAgent, 8)
+	-- end)
+	local agentKey = cc.UserDefault:getInstance():getStringForKey("Agent_Recruit") or ""
+	if btnAgent  then
+		btnAgent:setVisible(agentKey ~= "")
+		cc.UserDefault:getInstance():setStringForKey("Agent_Recruit","true")
+	end
+	-- 活动按钮
+	local activityBtn = gt.seekNodeByName(btnBundleNode, "Btn_activity")
+	if activityBtn then
+		gt.addBtnPressedListener(activityBtn, function()
+			if gt.lotteryInfoTab then
+				local activityMotherDayLayer = require("app/views/Activities/ActivityMotherDay"):create()
+				self:addChild(activityMotherDayLayer, 8)
+			else
+				require("app/views/NoticeTips"):create("提示", "亲,请等待活动通知哦!", nil, nil, true)
+			end
+		end)
+		local scaleToAction1 = cc.ScaleTo:create(0.9, 1.2)
+		local scaleToAction2 = cc.DelayTime:create(0.2)
+		local scaleToAction3 = cc.ScaleTo:create(0.9, 1)
+		local seqAction = cc.Sequence:create(scaleToAction1, scaleToAction2, scaleToAction3)
+		activityBtn:runAction(cc.RepeatForever:create(seqAction))
+	end
+
+	--反馈
+	local Btn_fankui = gt.seekNodeByName(csbNode, "Button_fankui")
+	gt.addBtnPressedListener(Btn_fankui, function()
+		self:openFeedback()
+	end)
+	Btn_fankui:setVisible(not Tools.hasQiYu())
+	--在线客服
+	local Btn_kefu = gt.seekNodeByName(csbNode,"Button_kefu")
+	gt.addBtnPressedListener(Btn_kefu, function()
+		self:openOnlineCustomerService()
+	end)
+	Btn_kefu:setVisible(Tools.hasQiYu())
+	local btnBuyCardInfo = gt.seekNodeByName(csbNode, "Button_buycard")
+	gt.addBtnPressedListener(btnBuyCardInfo, function(...)
+		self:openBuyCardInfo()
+	end)
+	local btnXinchun = gt.seekNodeByName(csbNode,"Button_xinchun")
+	if(btnXinchun) then 
+		btnXinchun:hide();
+		-- gt.addBtnPressedListener(btnXinchun, function(...)
+		-- 	self:showFDInvitationByWeb();
+		-- 	--gt.copyStr("curHeadIcon "..gt.playerData.curHeadIcon + 1);
+		-- 	-- local  label_forID = gt.seekNodeByName(csbNode, "Label_ID")
+		-- 	-- label_forID:setString('Icon '..gt.getCopyStr())
+		-- 	--return;
+		-- end)
+		-- local scaleToAction1 = cc.ScaleTo:create(0.9, 1.2)
+		-- local scaleToAction2 = cc.DelayTime:create(0.2)
+		-- local scaleToAction3 = cc.ScaleTo:create(0.9, 1)
+		-- local seqAction = cc.Sequence:create(scaleToAction1, scaleToAction2, scaleToAction3)
+		-- btnXinchun:runAction(cc.RepeatForever:create(seqAction))
+	end
+
+	local btnWuyi = gt.seekNodeByName(csbNode,"Button_wuyi")
+	if(btnWuyi) then 
+		btnWuyi:hide();
+		self:onSignInfoCheck();
+		gt.addBtnPressedListener(btnWuyi, function()
+			if(not self:getChildByTag(ACTIVITY_WUYI_TAG)) then 
+				local activityWuyi = require("app/views/ActivityWuyi"):create()
+				activityWuyi:setTag(ACTIVITY_WUYI_TAG)
+				self:addChild(activityWuyi, 8)
+				local msgToSend = {}
+				msgToSend.m_msgId  = gt.CG_SIGNIN_INFO_REQ
+				gt.socketClient:sendMessage(msgToSend)
+				gt.showLoadingTips(gt.getLocationString("LTKey_0071"))
+			end 
+		end)
+		local scaleToAction1 = cc.ScaleTo:create(0.9, 1.2)
+		local scaleToAction2 = cc.DelayTime:create(0.2)
+		local scaleToAction3 = cc.ScaleTo:create(0.9, 1)
+		local seqAction = cc.Sequence:create(scaleToAction1, scaleToAction2, scaleToAction3)
+		btnWuyi:runAction(cc.RepeatForever:create(seqAction))
+	end 
+
+
+	local btnGiveLove = gt.seekNodeByName(csbNode,"Button_give_love");
+	if(btnGiveLove) then 
+		btnGiveLove:setVisible(false);
+		-- gt.addBtnPressedListener(btnGiveLove,function(...)
+		-- 	--print("Hello Give love");
+		-- 	--local givelove = csb
+		-- 	local actLayer = cc.CSLoader:createNode("ExActivitylayer.csb")
+		-- 	actLayer:setAnchorPoint(0.5, 0.5)
+		-- 	actLayer:setPosition(gt.winCenter)
+		-- 	self:addChild(actLayer,10087);
+		-- 	--self.ExtActivityNode = ExtActivityNode
+
+		-- 	local img = gt.seekNodeByName(actLayer,'Image_3');
+		-- 	img:loadTexture("images/otherImages/huodong_love.png");
+
+		-- 	local btn_Close = gt.seekNodeByName(actLayer,"Btn_Close")
+		-- 	gt.addBtnPressedListener(btn_Close,function ()
+		-- 		actLayer:removeFromParent()
+		-- 	end)
+
+		-- end)
+
+		-- local scaleToAction1 = cc.ScaleTo:create(0.9, 1.2)
+		-- local scaleToAction2 = cc.DelayTime:create(0.2)
+		-- local scaleToAction3 = cc.ScaleTo:create(0.9, 1)
+		-- local seqAction = cc.Sequence:create(scaleToAction1, scaleToAction2, scaleToAction3)
+		-- btnGiveLove:runAction(cc.RepeatForever:create(seqAction))
+		--btnGiveLove:setLocalZOrder(6);
+	end 
+	-- btnXinchun:setVisible(false);
+	-- btnXinchun:setEnabled(false);
+
+
+	if gt.isInReview or gt.AndroidIsInReview then
+		Btn_fankui:setVisible(false)
+	end
+
+	if gt.isIOSPlatform() and gt.isInReview then
+		activityBtn:setVisible( false )
+		Btn_share:setVisible(false)
+	end
+	if gt.lotteryInfoTab then
+		activityBtn:setVisible( true )
+	else
+		activityBtn:setVisible( false )
+	end
+	self.m_activityBtn = activityBtn
+	--activityBtn:setVisible(true);
+	-- 注册消息回调
+	gt.socketClient:registerMsgListener(gt.GC_LOGIN_SERVER, self, self.onRcvLoginServer)
+	gt.socketClient:registerMsgListener(gt.GC_ROOM_CARD, self, self.onRcvRoomCard)
+	gt.socketClient:registerMsgListener(gt.GC_MARQUEE, self, self.onRcvMarquee)
+	-- 服务器推送活动信息
+	gt.socketClient:registerMsgListener(gt.GC_LOTTERY, self, self.onRecvLotteryInfo)
+
+	gt.registerEventListener(gt.EventType.GM_CHECK_HISTORY, self, self.gmCheckHistoryEvt)
+
+	-- 断线重连
+	gt.socketClient:registerMsgListener(gt.GC_LOGIN, self, self.onRcvLogin)
+
+	--进入房间
+	gt.socketClient:registerMsgListener(gt.GC_JOIN_ROOM, self, self.onRcvJoinRoom)
+	--在大厅里收到解散房间消息
+	gt.socketClient:registerMsgListener(gt.GC_DISMISS_ROOM, self, self.onRcvDismissRoom)
+	--更新头像框
+	gt.socketClient:registerMsgListener(gt.GC_MODIFY_HEAD_RRAME,self,self.onRcvModifyHeadFrame)
+
+	gt.socketClient:registerMsgListener(gt.GC_GAIN_NEW_HEADICON,self,self.onRcvGainHeadIcon);
+	--牌局结束
+	if self.isRoomCreater then
+		gt.socketClient:registerMsgListener(gt.GC_FINAL_REPORT, self, self.onRcvFinalReport)
+	end
+	
+	--更新检测
+	if gt.targetPlatform ~= cc.PLATFORM_OS_WINDOWS and not gt.debugInfo.Update then
+		-- self:updateAppVersion()
+		self:requestVersion()
+	end
+	self:checkUpdateSuccessTip()
+	--实名认证
+	self:checkID()
+
+	if gt.isInReview or gt.AndroidIsInReview then
+		--buyCardBtn:setVisible(false)
+		activityBtn:setVisible( false )
+		Btn_share:setVisible(false)
+		historyBtn:setVisible(false)
+		helpBtn:setVisible(false)
+		messageBtn:setVisible(false)
+		local noticeBg = gt.seekNodeByName(csbNode,'Image_PublicNotice')
+		noticeBg:setVisible(false)
+		btnAgent:setVisible(false)
+	else
+		buyCardBtn:setVisible(true)
+	end
+
+	-- 支付检测
+	if gt.isOpenIAP == true and not gt.isCheckUncompOrder then
+		gt.isCheckUncompOrder = true
+		Charge.checkUncompleteOrder()
+	end
+
+	self.moreGamePanel = gt.seekNodeByName(csbNode,'more_game_panel')
+	if self.moreGamePanel then
+		self.moreGamePanelIsShowing = false;
+		self.moreGamePanel:setSwallowTouches(self.moreGamePanelIsShowing)
+		self.moreGamePanel:addTouchEventListener(function(uiwidget, eventType)
+			if eventType == 0 and self.moreGamePanelIsShowing then
+				self:showMoreGamePanel()
+				return true
+			end
+			return true
+		end)
+		--其他游戏
+		local otherGame = gt.seekNodeByName(self.moreGamePanel, "panel_bg")
+		local openUrl = {
+			"http://a.app.qq.com/o/simple.jsp?pkgname=com.xianlai.ddz",
+			--"http://a.app.qq.com/o/simple.jsp?pkgname=com.xianlai.mahjongguangxi",
+			'http://a.app.qq.com/o/simple.jsp?pkgname=com.mahjong.jiangsu&fromcase=20000&ckey=CK1359549401032&g_f=1002725',
+			--"http://a.app.qq.com/o/simple.jsp?pkgname=com.xianlai.mahjongsyxm",
+			'http://a.app.qq.com/o/simple.jsp?pkgname=com.ixianlai.mahjonghefei',--安徽麻将
+			"http://a.app.qq.com/o/simple.jsp?pkgname=com.xianlai.mahjongfujian",
+			--"http://a.app.qq.com/o/simple.jsp?pkgname=com.xianlai.mahjonghainan",
+			"http://a.app.qq.com/o/simple.jsp?pkgname=com.xianlai.mahjonghb",
+		  	--"http://a.app.qq.com/o/simple.jsp?pkgname=com.xianlai.mahjongjx", --
+			--"http://a.app.qq.com/o/simple.jsp?pkgname=com.xianlai.yunnanmahjong",--云南
+			--"http://a.app.qq.com/o/simple.jsp?pkgname=com.xianlai.mahjongguiyang",
+			--"http://a.app.qq.com/o/simple.jsp?pkgname=com.xianlai.mahjongzhejiang",
+			"http://a.app.qq.com/o/simple.jsp?pkgname=com.xianlai.mahjongguangxi",
+			--"http://app.xianlaivip.com/?downloadfrom=buyu" --捕鱼
+			"http://3g.tuyoo.com/landing/ldy1_2/2017-04-17/220.html",
+			"http://3g.tuyoo.com/html/dzpknew/new_xianlai_dzpk.html" --欢乐德州
+		}
+		local hldz_btn = gt.seekNodeByName(self.moreGamePanel, "Button_8")
+		gt.addBtnPressedListener(hldz_btn,function( ... )
+			Tools.openUrl(openUrl[8])
+		end)
+		hldz_btn:setVisible(true);
+		if otherGame then
+			if gt.isInReview then
+				otherGame:setVisible(false)
+			else
+				otherGame:setVisible(true)
+				for i=1,#openUrl do
+					local button = gt.seekNodeByName(otherGame, "Button_" .. i)
+					gt.addBtnPressedListener(button, function( ... )
+						Tools.openUrl(openUrl[i])
+					end)
+				end
+			end
+		end
+		self.otherGamePanelPosX,self.otherGamePanelPosY = otherGame:getPosition();
+		self.otherGame = otherGame
+		self.btnMoreGame = gt.seekNodeByName(otherGame, "btn_more_game")
+		self.btnMoreGame:setVisible(self.moreGamePanelIsShowing)
+		self.btnMoreGameShow = gt.seekNodeByName(otherGame, "btn_more_game_show")
+		self.btnMoreGameShow:setVisible(not self.moreGamePanelIsShowing)
+
+		gt.addBtnPressedListener(self.btnMoreGame,handler(self,self.showMoreGamePanel))
+		gt.addBtnPressedListener(self.btnMoreGameShow,handler(self,self.showMoreGamePanel))
+
+		-- 	手机号绑定
+		self.btnPhoneBind = gt.seekNodeByName(csbNode, "Button_phone_bind")
+		if self.btnPhoneBind and string.len(gt.playerData.phone) == 0 then
+			self.btnPhoneBind:setVisible(true)
+			gt.addBtnPressedListener(self.btnPhoneBind,function (  )
+				local phoneBindLayer = require("app/views/PhoneBindLayer"):create(function (  )
+					self.btnPhoneBind:setVisible(false)
+				end)
+				self:addChild(phoneBindLayer, 8)
+			end)
+		end	
+		-- if(self.btnPhoneBind )then 
+		-- 	self.btnPhoneBind:setVisible(false);
+		-- end 
+	end
+
+	-- 	先请求一下活动数据
+	local msgToSend = {}
+	msgToSend.m_msgId  = gt.CG_SIGNIN_INFO_REQ
+	gt.socketClient:sendMessage(msgToSend)
+
+	--	端午节代理投票活动
+	self:getDragonBoatData()
+	
+end
+
+--	显示or隐藏更多游戏面板
+function MainScene:showMoreGamePanel(  )
+	self.otherGame:stopAllActions()
+	self.moreGamePanelIsShowing = not self.moreGamePanelIsShowing
+	if self.moreGamePanelIsShowing then
+		self.moreGamePanel:setSwallowTouches(self.moreGamePanelIsShowing)
+	end
+	
+	local moveAction
+	local otherGamePanelWidth = self.otherGame:getContentSize().width
+	local targetPosX = self.otherGamePanelPosX + otherGamePanelWidth - 10
+	local currPosX = self.otherGame:getPositionX()
+	local speed = 400
+	if self.moreGamePanelIsShowing then
+		moveAction = cc.MoveTo:create((targetPosX - currPosX)/speed, cc.p(targetPosX, self.otherGamePanelPosY))
+	else
+		moveAction = cc.MoveTo:create((currPosX - self.otherGamePanelPosX)/speed, cc.p(self.otherGamePanelPosX, self.otherGamePanelPosY))
+	end
+	self.otherGame:runAction(cc.Sequence:create(moveAction,cc.CallFunc:create(function (  )
+		self.btnMoreGame:setVisible(self.moreGamePanelIsShowing)
+		self.btnMoreGameShow:setVisible(not self.moreGamePanelIsShowing)
+		self.moreGamePanel:setSwallowTouches(self.moreGamePanelIsShowing)
+	end)))
+end
+
+-- 断线重连,走一次登录流程
+function MainScene:reLogin()
+	-- print("========重连登录1")
+	local accessToken 	= cc.UserDefault:getInstance():getStringForKey( "WX_Access_Token" )
+	local refreshToken 	= cc.UserDefault:getInstance():getStringForKey( "WX_Refresh_Token" )
+	local openid 		= cc.UserDefault:getInstance():getStringForKey( "WX_OpenId" )
+
+	local unionid 		= cc.UserDefault:getInstance():getStringForKey( "WX_Uuid" )
+	local sex 			= cc.UserDefault:getInstance():getStringForKey( "WX_Sex" )
+	local nickname 		= gt.wxNickName--cc.UserDefault:getInstance():getStringForKey( "WX_Nickname" )
+	local headimgurl 	= cc.UserDefault:getInstance():getStringForKey( "WX_ImageUrl" )
+
+	local msgToSend = {}
+	msgToSend.m_msgId = gt.CG_LOGIN
+	msgToSend.m_plate = "olduser"
+	msgToSend.m_accessToken = accessToken
+	msgToSend.m_refreshToken = refreshToken
+	msgToSend.m_openId = openid
+	msgToSend.m_severID =  gt.AppID  --10001
+	msgToSend.m_uuid = unionid
+	msgToSend.m_sex = tonumber(sex)
+	msgToSend.m_nikename = nickname
+	msgToSend.m_imageUrl = headimgurl
+	gt.unionid = unionid;
+
+	local catStr = string.format("%s%s%s%s", openid, accessToken, refreshToken, unionid)
+	msgToSend.m_md5 = cc.UtilityExtension:generateMD5(catStr, string.len(catStr))
+	gt.socketClient:sendMessage(msgToSend)
+	-- print("========重连登录2")
+end
+
+function MainScene:onRcvLogin(msgTbl)
+	-- print("========重连登录3")
+	if msgTbl.m_errorCode == 5 then
+		-- 去掉转圈
+		gt.removeLoadingTips()
+		require("app/views/NoticeTips"):create("提示",	"您尚未在"..msgTbl.m_errorMsg.."退出游戏，请先退出后再登陆此游戏！", nil, nil, true)
+		return
+	end
+	-- print("========重连登录4")
+	-- 去掉转圈
+	gt.removeLoadingTips()
+
+	-- 发送登录gate消息
+	gt.loginSeed 		= msgTbl.m_seed
+	gt.GateServer.ip 	= gt.socketClient.serverIp
+	gt.GateServer.port 	= tostring(msgTbl.m_gatePort)
+
+	gt.socketClient:close()
+	-- print("===走这里,那么ip port是什么?",gt.GateServer.ip, gt.GateServer.port)
+	gt.socketClient:connect(gt.GateServer.ip, gt.GateServer.port, true)
+	local msgToSend = {}
+	msgToSend.m_msgId = gt.CG_LOGIN_SERVER
+	msgToSend.m_seed = msgTbl.m_seed
+	msgToSend.m_id = msgTbl.m_id
+	local catStr = tostring(gt.loginSeed)
+	msgToSend.m_md5 = cc.UtilityExtension:generateMD5(catStr, string.len(catStr))
+	gt.socketClient:sendMessage(msgToSend)
+	-- print("========重连登录5")
+end
+
+function MainScene:onNodeEvent(eventName)
+	if "enter" == eventName then
+		--清理纹理
+		cc.SpriteFrameCache:getInstance():removeUnusedSpriteFrames()
+		cc.Director:getInstance():getTextureCache():removeAllTextures()
+
+		if gt.activityControl and not gt.AndroidIsInReview then
+			local ExtActivityNode = cc.CSLoader:createNode("ExActivitylayer.csb")
+			ExtActivityNode:setAnchorPoint(0.5, 0.5)
+			ExtActivityNode:setPosition(gt.winCenter)
+			self:addChild(ExtActivityNode,10086)
+			self.ExtActivityNode = ExtActivityNode
+
+			local btn_Close = gt.seekNodeByName(ExtActivityNode,"Btn_Close")
+			gt.addBtnPressedListener(btn_Close,function ()
+				self.ExtActivityNode:removeFromParent()
+				gt.activityControl = false
+			end)
+		end
+
+		
+		if self.isNewPlayer then
+			-- 显示新玩家奖励牌提示
+			local str_des = gt.getLocationString("LTKey_0029", gt.playerData.roomCardsCount[2])
+			if gt.isIOSPlatform() and gt.isInReview then
+				str_des = gt.getLocationString("LTKey_0029_1")
+			end
+			require("app/views/NoticeTips"):create(gt.getLocationString("LTKey_0007"),
+				str_des, nil, nil, true)
+		end
+
+		 if gt.loginPlate ~= nil and gt.loginPlate == "olduser" then
+			self:requestUserInfo()
+			gt.loginPlate = nil
+		end
+
+		-- 逻辑更新定时器
+		if not gt.isInReview then
+			self.scheduleHandler = gt.scheduler:scheduleScriptFunc(handler(self, self.update), 0, false)
+		end
+
+		gt.CommonEvent:addEventListener("EVENT_MAIN_SCENE_UPDATE_HEAD_FRAME",function(event)
+			self:onRcvModifyHeadFrame(event.msgTbl);
+		end)
+
+		if(false) then
+			local extTheme = cc.Sprite:create("res/sd/images/otherImages/theme_yuandan.png")
+			self:addChild(extTheme);
+			extTheme:setTag(999)
+			extTheme:setPosition(gt.winCenter);
+			 
+			local beginAnimateNode, beginAnimate = gt.createCSAnimation("res/da/yuandanhuodong.csb")
+			beginAnimateNode:setPosition(gt.winCenter)
+			beginAnimateNode:setTag(1000);
+			self:addChild(beginAnimateNode);
+			beginAnimate:play("yuandandonghua", true)
+			beginAnimate:gotoFrameAndPlay(beginAnimate:getEndFrame())
+		end 
+
+	elseif "exit" == eventName then
+		if self.scheduleHandler then
+			gt.scheduler:unscheduleScriptEntry(self.scheduleHandler)
+		end
+				
+		gt.CommonEvent:removeEventListenersByEvent("EVENT_MAIN_SCENE_UPDATE_HEAD_FRAME");
+		self:removeChildByTag(1000);
+		self:removeChildByTag(999);
+		gt.removeTargetAllEventListener(self)
+	end
+end
+
+function MainScene:update(  )
+	local curTime = os.time()
+	if not self.m_lastUp or curTime > self.m_lastUp then
+		if Tools.checkVersion("1.2.0") then
+			self:checkAction()
+		end
+		self:setFreeTime(curTime)
+		self.m_lastUp = curTime
+	end
+end
+
+-- 服务器推送活动信息
+function MainScene:onRecvLotteryInfo( msgTbl )
+	if self.m_activityBtn then
+		self.m_activityBtn:setVisible( true )
+	end
+	gt.lotteryInfoTab	= {}
+	gt.lotteryInfoTab.m_activeID 		= msgTbl.m_activeID
+	gt.lotteryInfoTab.m_RewardID  		= msgTbl.m_RewardID
+	gt.lotteryInfoTab.m_LastJoinDate 	= msgTbl.m_LastJoinDate
+	gt.lotteryInfoTab.m_LastGiftState 	= msgTbl.m_LastGiftState
+	gt.lotteryInfoTab.m_NeedPhoneNum 	= msgTbl.m_NeedPhoneNum
+	
+	if msgTbl.m_LastGiftState == 0 then
+		local activityMotherDayLayer = require("app/views/Activities/ActivityMotherDay"):create()
+		self:addChild(activityMotherDayLayer, 8)
+	end
+end
+
+function MainScene:onRcvLoginServer(msgTbl)
+	-- 去除正在返回游戏提示
+	gt.removeLoadingTips()
+	if msgTbl.m_state == 0 then
+		self:setRoomCreater(false)
+	end
+end
+
+
+
+function MainScene:onRcvAllSignInfoRes(msgTbl)
+	print("MainScene:onRcvSignInfoRes");
+	gt.m_SignInInfo = msgTbl.m_SignInInfo or {}; --还是保证是个空表方便一些
+	print(json.encode(gt.m_SignInInfo))
+	--在这里再显示按钮的话就好了
+	gt.removeLoadingTips();
+	if(not gt.isInReview) then 
+		self:onSignInfoCheck();
+		--今天没有人签到的话，整个页面弹出
+		for _,v in ipairs(gt.m_SignInInfo) do
+			if(v[2] == 2) then 
+				if(not self:getChildByTag(ACTIVITY_WUYI_TAG)) then 
+					local activityWuyi = require("app/views/ActivityWuyi"):create()
+					activityWuyi:setTag(ACTIVITY_WUYI_TAG)
+					self:addChild(activityWuyi, 8)
+				end 
+				break;
+			end 
+		end
+		gt.CommonEvent:pushEvent("ACTIVITY_WUYI_UPDATE");
+		--	临时弹出活动宣传页面
+		--	加一个临时性的保护（并不准确，五一之后需要删掉）
+		-- local tmpData = os.date("%Y%m%d",gt.roomFreeEndTime or os.time())
+		-- if not gt.activityViewIsShowed["ActivityWuyiPreview"] and
+		--  not self:getChildByTag(ACTIVITY_WUYI_TAG) and #gt.m_SignInInfo < 1 then
+		-- 	local activityWuyiPreview = require("app/views/ActivityWuyiPreview"):create()
+		-- 	self:addChild(activityWuyiPreview, 8)
+		-- 	gt.activityViewIsShowed["ActivityWuyiPreview"] = true
+		-- end
+	end 
+
+end 
+-- start --
+--------------------------------
+-- @class function
+-- @description 进入房间消息
+-- @param msgTbl 消息体
+-- end --
+function MainScene:onRcvEnterRoom(msgTbl)
+	gt.removeLoadingTips()
+
+	gt.socketClient:unregisterMsgListener(gt.GC_LOGIN_SERVER)
+	gt.socketClient:unregisterMsgListener(gt.GC_ENTER_ROOM)
+	gt.socketClient:unregisterMsgListener(gt.GC_ROOM_CARD)
+	gt.socketClient:unregisterMsgListener(gt.GC_MARQUEE)
+	gt.socketClient:unregisterMsgListener(gt.GC_LOTTERY)
+	gt.socketClient:unregisterMsgListener(gt.GC_LOGIN)
+	gt.socketClient:unregisterMsgListener(gt.GC_JOIN_ROOM)
+	gt.socketClient:unregisterMsgListener(gt.GC_FINAL_REPORT)
+	gt.socketClient:unregisterMsgListener(gt.GC_SIGNIN_INFO_RES)
+	gt.socketClient:unregisterMsgListener(gt.GC_SHARE_SUCCESS)
+	--gt.socketClient:unregisterMsgListener(gt.GC_SIGNIN_RES)
+
+	gt.removeTargetAllEventListener(self)
+
+	-- local playScene = require("app/views/PlaySceneCS"):create(msgTbl)
+	-- cc.Director:getInstance():replaceScene(playScene)
+	self.game_statu = msgTbl.m_state
+	local gameType = Tools.GAME_TYPE[msgTbl.m_state + 1]
+	if gameType then
+		local roomScene = require("app/views/" .. gameType .. "/room/RoomScene"):create(msgTbl)
+		cc.Director:getInstance():replaceScene(roomScene)
+	else
+		gt.log("game type error msgTbl.m_state = " .. msgTbl.m_state)
+	end
+end
+
+-- start --
+--------------------------------
+-- @class function
+-- @description 接收房卡信息
+-- @param msgTbl 消息体
+-- end --
+function MainScene:onRcvRoomCard(msgTbl)
+	local playerData = gt.playerData
+	playerData.roomCardsCount = {msgTbl.m_card1, msgTbl.m_card2, msgTbl.m_card3}
+	-- 玩家信息
+	local playerInfoNode = gt.seekNodeByName(self.rootNode, "Node_playerInfo")
+	-- 房卡信息
+	local ttf_eight = gt.seekNodeByName(playerInfoNode, "Txt_numbereight")
+	ttf_eight:setString(playerData.roomCardsCount[2])
+end
+
+-- start --
+--------------------------------
+-- @class function
+-- @description 接收跑马灯消息
+-- @param msgTbl 消息体
+-- end --
+function MainScene:onRcvMarquee(msgTbl)
+	-- if gt.isIOSPlatform() and gt.isInReview then
+	-- 	local str_des = gt.getLocationString("LTKey_0048")
+	-- 	str_des = gt.getLocationString("LTKey_0064") 
+	-- 	if not gt.AndroidIsInReview then
+	-- 		self.marqueeMsg:showMsg(str_des)
+	-- 	end
+	-- 	gt.marqueeMsgTemp = str_des;
+	-- else
+	-- 	gt.marqueeMsgTemp = msgTbl.m_str
+	-- 	if not gt.AndroidIsInReview then
+	-- 		self.marqueeMsg:showMsg(gt.marqueeMsgTemp)
+	-- 	end
+	-- end
+end
+
+function MainScene:gmCheckHistoryEvt(eventType, uid)
+	local historyRecord = require("app/views/HistoryRecord"):create(uid)
+	self:addChild(historyRecord, MainScene.ZOrder.HISTORY_RECORD)
+end
+
+--	反馈
+function MainScene:openFeedback(  )
+	local luaBridge = Tools.getLuaBridge()
+	if gt.isIOSPlatform() then
+		local ok, ret = luaBridge.callStaticMethod("AppController", "openFeedback")
+	elseif gt.isAndroidPlatform() then
+		local ok, ret = luaBridge.callStaticMethod("org/cocos2dx/lua/AppActivity", "openFeedback",nil,"()V")
+	end
+	
+end
+
+--	在线客服
+function MainScene:openOnlineCustomerService(  )
+	if Tools.openQiYu then 
+		local param = {}
+		if gt.playerData then 
+			param.nickname = gt.playerData.nickname
+			param.uid = gt.playerData.uid
+			param.unionid = gt.playerData.unionid 
+			param.ip = gt.playerData.ip 
+			-- param.headURL = gt.playerData.headURL   
+			-- print('headURL:' .. param.headURL)
+		end 
+		--param.staffId = "120951"
+		param.source = "主界面"
+		param.resVersion = gt.resVersion
+		-- param.isOldPlayer = tostring(gt.isOldPlayer) 
+		-- param.totalPlayNum = tostring(gt.totalPlayNum)
+		local isCanOpenQiYu = Tools.openQiYu(param)
+		print('调用客服系统成功了么:' .. tostring(isCanOpenQiYu))
+	end 
+end
+
+function MainScene:openBuyCardInfo(  )
+
+	local officalTips = require("app/views/OfficalTips"):create();
+	self:addChild(officalTips, MainScene.ZOrder.OFFICAL_TIPS)
+	
+end
+
+
+-- 请求热更版本
+function MainScene:requestVersion()
+	local ver_filename  = "version.manifest"
+    local remoteVersionUrl = nil
+    self.curVersion = nil
+    local cpath = cc.FileUtils:getInstance():isFileExist(ver_filename)
+    if cpath then
+        local fileData = cc.FileUtils:getInstance():getStringFromFile(ver_filename)
+        require("json")
+        local filelist = json.decode(fileData)
+        if filelist then
+            remoteVersionUrl = filelist.remoteVersionUrl
+            self.curVersion = filelist.version
+        end
+    end
+
+    if gt.isDebugPackage and gt.debugInfo and gt.debugInfo.assets and string.len(gt.debugInfo.assets) ~= 0 then
+        remoteVersionUrl = gt.debugInfo.assets .. "version.manifest"
+    end
+
+    if remoteVersionUrl == nil then
+        return
+    end
+    
+    if not self.xhr then
+	    self.xhr = cc.XMLHttpRequest:new()
+	    self.xhr:retain()
+	    self.xhr.timeout = 30 -- 设置超时时间
+    end
+    self.xhr.responseType = cc.XMLHTTPREQUEST_RESPONSE_JSON
+    self.xhr:open("GET", remoteVersionUrl)
+    self.xhr:registerScriptHandler( handler(self,self.onResp) )
+    self.xhr:send()
+end
+
+function MainScene:onResp()
+	if not self.xhr then
+		return
+	end
+    if self.xhr.readyState == 4 then
+    	if self.xhr.status == 200 then
+    		-- require("json")
+	        local data = json.decode(self.xhr.response)
+	        if self.getMaxVersion and self:getMaxVersion(data.version, self.curVersion) ~= self.curVersion then
+	        -- if data.version ~= self.curVersion then
+	        	local function ok ()
+					gt.socketClient:close()
+	        		self:clearLoadedFiles()
+	        		local updateScene = require("app/views/UpdateScene"):create()
+	        		cc.Director:getInstance():replaceScene(updateScene)
+	        	end
+	        	require("app/views/NoticeTips"):create(gt.getLocationString("LTKey_0007"), "游戏版本过低，点击【确定】按钮，系统会自动为您更新至最新版本哦~", ok, nil, true)
+	        end
+    	else
+        	-- require("app/views/NoticeTips"):create(gt.getLocationString("LTKey_0007"), gt.getLocationString("LTKey_0014"), nil, nil, true)    		
+    	end        
+    elseif self.xhr.readyState == 1 and self.xhr.status == 0 then
+        -- 网络问题,异常断开
+        require("app/views/NoticeTips"):create(gt.getLocationString("LTKey_0007"), gt.getLocationString("LTKey_0014"), nil, nil, true)
+    end
+    self.xhr:unregisterScriptHandler()
+end
+
+function MainScene:clearLoadedFiles()
+	for k, v in pairs(package.loaded) do
+		if string.sub(k, 1, 4) == "app/" then
+			package.loaded[k] = nil
+		end 
+	end
+
+	cc.SpriteFrameCache:getInstance():removeSpriteFrames()
+	cc.Director:getInstance():getTextureCache():removeAllTextures()
+end
+
+-- 检测强更
+function MainScene:updateAppVersion()
+	-- body
+	-- print("appVersionUpdateFinish..........")
+
+	local xhr = cc.XMLHttpRequest:new()
+	xhr.responseType = cc.XMLHTTPREQUEST_RESPONSE_JSON
+	local accessTokenURL = "https://www.ixianlai.com/updateInfo_gd.php"
+	xhr:open("GET", accessTokenURL)
+	local function onResp()
+		if xhr.readyState == 4 then
+			if xhr.status == 200 then
+				local response = xhr.response
+				require("json")
+				local respJson = json.decode(response)
+				local Version = respJson.Version
+				local State = respJson.State
+				local msg = respJson.msg
+
+				gt.log("the update version is :" .. Version)
+
+				if gt.isIOSPlatform() then
+					self.luaBridge = require("cocos/cocos2d/luaoc")
+				elseif gt.isAndroidPlatform() then
+					self.luaBridge = require("cocos/cocos2d/luaj")
+				end
+
+				local ok, appVersion = nil
+				if gt.isIOSPlatform() then
+					ok, appVersion = self.luaBridge.callStaticMethod("AppController", "getVersionName")
+				elseif gt.isAndroidPlatform() then
+					ok, appVersion = self.luaBridge.callStaticMethod("org/cocos2dx/lua/AppActivity", "getAppVersionName", nil, "()Ljava/lang/String;")
+
+				end
+
+				gt.log("the appVersion is :" .. appVersion)
+				if self.getMaxVersion and self:getMaxVersion(Version, appVersion) ~= appVersion then
+				-- if   appVersion ~= Version then
+					--提示更新
+					local appUpdateLayer = require("app/views/UpdateVersion"):create(appVersion..msg,State)
+	  	 			self:addChild(appUpdateLayer, 100)
+	  	 		else
+	  	 			self:requestVersion()
+		  	 	end
+			end
+		elseif xhr.readyState == 1 and xhr.status == 0 then
+			-- 本地网络连接断开
+			require("app/views/NoticeTips"):create(gt.getLocationString("LTKey_0007"), gt.getLocationString("LTKey_0014"), nil, nil, true)
+		end
+		xhr:unregisterScriptHandler()
+	end
+	xhr:registerScriptHandler(onResp)
+	xhr:send()
+end
+
+function MainScene:getMaxVersion( _newversion, _oldversion )
+	if _oldversion == _newversion then
+		return _newversion
+	end
+
+	local newList = string.split(_newversion, ".")
+	local oldList = string.split(_oldversion, ".")
+
+	local maxLen = (#newList > #oldList and #newList )or #oldList
+	for i=1,maxLen do
+		if not oldList[i] then
+			return _newversion
+		elseif not newList[i] then
+			return _oldversion
+		else
+			if oldList[i] ~= newList[i] then
+				return (tonumber(oldList[i]) > tonumber(newList[i]) and _oldversion) or _newversion
+			end
+		end
+	end
+
+	return _newversion
+end
+
+--检查是否有外部请求
+function MainScene:checkAction( )
+	local actionMessage = Tools.getAction()
+ 	
+ 	if actionMessage ~= nil and actionMessage ~= "" then
+ 		Tools.cleanAction()
+
+		--actionMessage = "https:\/\/a.mlinks.cc\/AAsJ?action=enterroom&code=926242&from=singlemessage&isappinstalled=1"
+		--去掉所有的'\'
+		local msg = string.gsub(actionMessage,'\\','');
+		require("json")
+	 	local paramTable = json.decode(msg) --string.split("&")
+	 	if paramTable["action"] then
+	 		if paramTable["action"] == gt.OpenAppAction.ENTERROOM then
+	 			self:enterRoom(paramTable)
+	 		elseif paramTable["action"] == gt.OpenAppAction.REPLAYVIEW then
+	 			self:replay(paramTable)
+	 		end
+	 	end
+	end
+end
+
+--外部请求进入房间
+function MainScene:enterRoom( _data )
+	if not _data["code"] then
+		return
+	end
+
+	gt.showLoadingTips(gt.getLocationString("LTKey_0054"))
+	--正在进入
+	local sequence =  cc.Sequence:create(cc.DelayTime:create(2), cc.CallFunc:create(function(  )
+		gt.removeLoadingTips()
+		local codeStr = _data["code"]
+		local codeNum = tonumber(codeStr)
+		if codeNum then
+			-- 发送进入房间消息		
+			local msgToSend = {}
+			msgToSend.m_msgId = gt.CG_JOIN_ROOM
+			msgToSend.m_deskId = codeNum
+			msgToSend.m_location = Tools.getLocationStr()
+			gt.socketClient:sendMessage(msgToSend)
+
+			gt.showLoadingTips(gt.getLocationString("LTKey_0006"))
+		else
+			gt.floatText("房间号有误")
+		end
+	end))
+
+	self:runAction(sequence)	
+end
+
+function MainScene:onRcvJoinRoom(msgTbl)
+	gt.removeLoadingTips()
+	if msgTbl.m_errorCode ~= 0 then
+		-- 进入房间失败		
+		if msgTbl.m_errorCode == 1 then
+			-- 房间人已满
+			require("app/views/NoticeTips"):create(gt.getLocationString("LTKey_0007"), gt.getLocationString("LTKey_0018"), nil, nil, true)
+		elseif msgTbl.m_errorCode == 2 then
+			-- 房间不存在
+			require("app/views/NoticeTips"):create(gt.getLocationString("LTKey_0007"), gt.getLocationString("LTKey_0015"), nil, nil, true)
+		elseif msgTbl.m_errorCode == 3 then 
+			-- 3 bug 5176 同样提示 房间不存在
+			require("app/views/NoticeTips"):create(gt.getLocationString("LTKey_0007"), gt.getLocationString("LTKey_0015"), nil, nil, true)
+		elseif msgTbl.m_errorCode == 4 then 
+			--作弊嫌疑
+			require("app/views/NoticeTips"):create(gt.getLocationString("LTKey_0007"), gt.getLocationString("LTKey_0072"), nil, nil, true)
+		else
+			require("app/views/NoticeTips"):create(gt.getLocationString("LTKey_0007"), gt.getLocationString("LTKey_0059"), nil, nil, true)			
+		end
+	end
+end
+
+function MainScene:onRcvDismissRoom(msgTbl)
+	if msgTbl.m_errorCode == 1 then --时间到，解散了
+		require("app/views/NoticeTips"):create(gt.getLocationString("LTKey_0007"),gt.getLocationString("LTKey_0062"),
+			function()
+				self.isRoomCreater = false
+				self.createRoomSpr:setVisible(true)
+				self.backRoomSpr:setVisible(false)
+				--设置活动
+				if not gt.isInReview then
+					self:setFreeButton()
+				end
+			end, nil, true)
+	end
+end
+
+function MainScene:onRcvGainHeadIcon(msgTbl)
+	print("MainScene:onRcvGainHeadIcon");
+	--gt.playerData.curHeadIcon
+	table.insert(gt.playerData.gainHeadIcons,msgTbl.m_headIconId);
+	local isHeadIconAdd = false;
+	
+	for _,v in ipairs(gt.playerData.gainHeadIcons) do 
+		if(v == msgTbl.m_headIconId) then 
+			isHeadIconAdd = true;
+			break;
+		end 
+	end 
+	if(not isHeadIconAdd) then 
+		table.insert(gt.playerData.gainHeadIcons,msgTbl.m_headIconId);
+	end 
+	dump(gt.playerData.gainHeadIcons,'gainHeadIcons');
+
+end 
+function MainScene:onRcvModifyHeadFrame(msgTbl)
+	-- print("MainScene:onRcvModifyHeadFrame" );ƒ
+	-- dump(msgTbl);
+	gt.removeLoadingTips()
+	local errorCode = msgTbl.m_errorCode;
+	if(errorCode == 0) then 
+		local headIndex = msgTbl.m_headIconId + 1;
+		local headFrameBtn = gt.seekNodeByName(self.rootNode,"Btn_headFrame")
+		-- if(headFrameBtn) then 
+		-- 	headFrameBtn:setContentSize(cc.size(0,0));
+		-- 	local str = string.format("res/sd/images/otherImages/headframes/%03d.png",headIndex)
+		-- 	headFrameBtn:loadTextures(str,str,str)
+		-- 	headFrameBtn:setScale(0.95);
+	    -- end
+		gt.addHeadFrames_Button(headFrameBtn,headIndex);
+    elseif(errorCode == 1) then --INVALID VALUE 无效值
+		require("app/views/NoticeTips"):create("提示", "无效的值，请重新选择头像框", nil, nil, true) 
+    elseif(errorCode == 2) then --already used 已经在使用了
+		require("app/views/NoticeTips"):create("提示", "当前头像框已经在使用", nil, nil, true) 
+    elseif(errorCode == 3) then --NOTGAIN 没有获得
+		require("app/views/NoticeTips"):create("提示", "当前头像框尚未解锁", nil, nil, true) 
+    end 
+end
+
+--外部请求，查看战绩
+function MainScene:replay( _data )
+	if not _data["code"] then
+		return
+	end
+	
+	gt.showLoadingTips(gt.getLocationString("LTKey_0055"))
+	--正在进入
+	local sequence =  cc.Sequence:create(cc.DelayTime:create(2), cc.CallFunc:create(function(  )
+		gt.removeLoadingTips()
+
+		local codeStr = _data["code"]
+		local codeNum = tonumber(codeStr)
+		if codeNum then
+			--打开界面
+			local viewOtherRecord = require("app/views/ViewOtherRecord"):create(self)
+			self:addChild(viewOtherRecord, MainScene.ZOrder.HISTORY_RECORD + 1)
+
+			-- 发送请求战绩消息
+			local msgToSend = {}
+			msgToSend.m_msgId = gt.CG_SHARE_REPLAY
+			msgToSend.m_shareID = codeNum
+			gt.socketClient:sendMessage(msgToSend)
+		else
+			gt.floatText("回放码有误")
+		end
+	end))	
+
+	self:runAction(sequence)
+end
+
+function MainScene:checkNewMsg( )
+	if not gt.commonNoticData or gt.commonNoticData.m_strId == "" then
+		self.msgShowSp:setVisible(false)
+		return
+	end
+
+	local readedId = Tools.getValue(gt.ReadedCommonMsgKey) or "0"
+	self.msgShowSp:setVisible(readedId ~= gt.commonNoticData.m_strId)
+end
+
+
+function MainScene:checkUpdateSuccessTip()
+	local file = cc.FileUtils:getInstance()
+	local app, res = self:checkAppUpdate(), self:checkResUpdate()
+	if app or res then
+		local data = require("app/views/UpdateInfo")
+		if data and data ~="" then
+			local tip = require("app/views/UpdateSuccess"):create(data)
+			self:addChild(tip, 100)
+	    end
+	end
+end
+
+function MainScene:getAppVersion()
+    local ok, appVersion = nil
+    if gt.isIOSPlatform() then
+        local luaBridge = require("cocos/cocos2d/luaoc")
+        ok, appVersion = luaBridge.callStaticMethod("AppController", "getVersionName")
+        return appVersion
+    elseif gt.isAndroidPlatform() then
+        local luaBridge = require("cocos/cocos2d/luaj")
+        ok, appVersion = luaBridge.callStaticMethod("org/cocos2dx/lua/AppActivity", "getAppVersionName", nil, "()Ljava/lang/String;")
+        return appVersion
+    else
+        return "1.0.0"
+    end
+end
+
+function MainScene:checkAppUpdate()
+    local userD = cc.UserDefault:getInstance()
+    local preAppVer = userD:getStringForKey("PRE_APP_VERSION")
+    local curAppVer = self:getAppVersion()
+    local ret = false
+    if preAppVer == "" or Tools.getMaxVersion(curAppVer, preAppVer) ~= preAppVer then
+    	ret = true
+    end
+    userD:setStringForKey("PRE_APP_VERSION", curAppVer)
+    return ret
+end
+
+function MainScene:checkResUpdate()
+	if not gt.resVersion then
+		return
+	end
+	local ret = false
+	local user = cc.UserDefault:getInstance()
+	local lastVer = user:getStringForKey("LAST_VERSION")
+	if lastVer == "" or Tools.getMaxVersion(gt.resVersion, lastVer) ~= lastVer then
+		ret = true
+	end
+	user:setStringForKey("LAST_VERSION", gt.resVersion)
+	return ret
+end
+
+-- 在主界面时房间被解散
+function MainScene:onRcvFinalReport( msgTbl )
+	self:setRoomCreater(false)
+end
+
+--设置自己房间状态
+function MainScene:setRoomCreater( _status )
+	if _status == false and self.isRoomCreater == true then
+		require("app/views/NoticeTips"):create(gt.getLocationString("LTKey_0007"), gt.getLocationString("LTKey_0060"), nil, nil, true)		
+	end
+
+	self.isRoomCreater = _status
+	if self.isRoomCreater then
+		self.createRoomSpr:setVisible(false)
+		self.backRoomSpr:setVisible(true)
+	else
+		self.createRoomSpr:setVisible(true)
+		self.backRoomSpr:setVisible(false)
+		--设置活动
+		if not gt.isInReview then
+			self:setFreeButton()
+		end
+	end
+end
+
+--设置活动状态
+function MainScene:setFreeButton(  )
+	if gt.roomFreeEndTime and os.time() < gt.roomFreeEndTime then
+		self.isFree = true
+		--self.createRoomSpr:setTexture("images/otherImages/main_cjfj_free.png")
+		--self.createRoomSpr:setPositionY(35)
+		--self.roomFreeText:setPositionY(-1)
+		self.roomFreeSpr:setVisible(true);
+	else
+		self.isFree = false
+		--self.createRoomSpr:setSpriteFrame("chuangjianfangjian.png")
+		--self.createRoomSpr:setPositionY(14)
+		self.roomFreeSpr:setVisible(false);
+	end
+end
+
+function MainScene:setFreeTime( curTime )
+	if self.isRoomCreater then
+		return
+	end
+
+	if not gt.roomFreeEndTime then
+		return
+	end
+	
+	if curTime < gt.roomFreeEndTime then
+		self.roomFreeText:setString(Tools.getTime(gt.roomFreeEndTime - curTime) or " ")
+		if not self.isFree then
+			self:setFreeButton()
+		end
+	else
+		self.roomFreeText:setString(" ")
+		if self.isFree then
+			self:setFreeButton()
+		end
+		gt.roomFreeEndTime = nil
+	end
+end
+
+function MainScene:checkID(  )
+	local button = gt.seekNodeByName(self.rootNode, "Btn_id")
+
+	if gt.isInReview then
+		button:setVisible(false)
+		return
+	end
+
+	if gt.playerData.uid then
+		local idMsg = Tools.getValue("id_" .. gt.playerData.uid)
+		if idMsg and idMsg ~= "" then
+			button:setVisible(false)
+			self.m_headSpr:removeAllChildren()
+			local rzSpr = cc.Sprite:create("images/otherImages/id_renzheng.png")
+			rzSpr:setAnchorPoint(cc.p(1, 0))
+			rzSpr:setPosition(cc.p(self.m_headSpr:getContentSize().width - 4 , 4))
+			self.m_headSpr:addChild(rzSpr)
+		else
+			button:setVisible(true)
+			gt.addBtnPressedListener(button, function ( ... )
+				local layer = require("app/views/Activities/IDTip"):create( )
+				self:addChild(layer, 50)
+			end)
+		end 
+	end
+end
+
+-- 此函数可以去微信请求个人 昵称,性别,头像url等内容,并缓存到本地
+function MainScene:requestUserInfo()
+
+	local accessToken 	= cc.UserDefault:getInstance():getStringForKey( "WX_Access_Token" )
+	local refreshToken 	= cc.UserDefault:getInstance():getStringForKey( "WX_Refresh_Token" )
+	local openid 		= cc.UserDefault:getInstance():getStringForKey( "WX_OpenId" )
+
+	local xhr = cc.XMLHttpRequest:new()
+	xhr.responseType = cc.XMLHTTPREQUEST_RESPONSE_JSON
+	local userInfoURL = string.format("https://api.weixin.qq.com/sns/userinfo?access_token=%s&openid=%s", accessToken, openid)
+	xhr:open("GET", userInfoURL)
+	local function onResp()
+		if xhr.readyState == 4 and xhr.status == 200 and xhr.response ~= ""  then
+			local response = xhr.response
+			require("json")
+			response = string.gsub(response,"\\","")
+			--print('response '.. tostring(response));
+			local function godNick(text) 
+			-- 移动到这里吧。如果 出现 收到这个消息而 而当前界面不是MainScene，调用  
+			 --MainScene:godNick 貌似报错
+				if(string.len(text) == 0) then
+					return ''; 
+				end 
+				
+				local s = string.find(text, "\"nickname\":\"")
+				if not s then
+					return text
+				end
+				local e = string.find(text, "\",\"sex\"")
+				local n = string.sub(text, s + 12, e - 1)
+				local m = string.gsub(n, '"', '\\\"')
+				local i = string.sub(text, 0, s + 11)
+				local j = string.sub(text, e, string.len(text))
+				return i .. m .. j
+			end
+			response = godNick(response)
+			local respJson = json.decode(response)
+			if respJson.errcode then
+				gt.log("获取失败")
+			else
+				gt.log("重新获取一下玩家信息")
+				--dump(respJson)
+				-- 记录一下相关数据
+				local accessToken 	= accessToken
+				local refreshToken 	= refreshToken
+				local openid 		= openid
+				local sex 			= respJson.sex
+				local nickname 		= respJson.nickname
+				local headimgurl 	= respJson.headimgurl
+				local unionid 		= respJson.unionid
+				gt.unionid = unionid;
+				-- 储存到本地
+				-- cc.UserDefault:getInstance():setStringForKey("WX_Access_Token_Time", os.time())
+				-- cc.UserDefault:getInstance():setStringForKey("WX_Refresh_Token_Time", os.time())
+				-- cc.UserDefault:getInstance():setStringForKey("WX_Access_Token", accessToken)
+				-- cc.UserDefault:getInstance():setStringForKey("WX_Refresh_Token", refreshToken)
+				-- cc.UserDefault:getInstance():setStringForKey("WX_OpenId", openid)
+				-- cc.UserDefault:getInstance():setStringForKey("WX_Nickname", nickname)
+				-- cc.UserDefault:getInstance():setStringForKey("WX_Sex", tostring(sex))
+				-- cc.UserDefault:getInstance():setStringForKey("WX_Uuid", unionid)
+				-- cc.UserDefault:getInstance():setStringForKey("WX_ImageUrl", headimgurl)
+				gt.saveUserInfo("WX_Access_Token_Time", os.time())
+				gt.saveUserInfo("WX_Refresh_Token_Time", os.time())
+				gt.saveUserInfo("WX_Access_Token", accessToken)
+				gt.saveUserInfo("WX_Refresh_Token", refreshToken)
+				gt.saveUserInfo("WX_OpenId", openid)
+				gt.saveUserInfo("WX_Nickname", nickname)
+				gt.saveUserInfo("WX_Sex", tostring(sex))
+				gt.saveUserInfo("WX_Uuid", unionid)
+				gt.saveUserInfo("WX_ImageUrl", headimgurl)
+				cc.UserDefault:getInstance():flush()
+			end
+		end
+		xhr:unregisterScriptHandler()
+	end
+	xhr:registerScriptHandler(onResp)
+	xhr:send()
+end
+
+function MainScene:showFDInvitationByWeb()
+    local sign= "guangdong_db"..gt.playerData.uid
+	local md5_sign = cc.UtilityExtension:generateMD5(sign, string.len(sign))
+    --local url = "http://114.55.84.16:9898/shopping/xcyy/toXcyy?serverCode=guangdong_db&inviter="
+	local url = "https://vip.xianlaihy.com/xcyy/toXcyy?serverCode=guangdong_db&inviter="
+    url = url..gt.playerData.uid.."&sign="..md5_sign
+	print('url = '..url);
+    local InvitationfDWeb = require("app/views/Activities/CommonPopWebView"):create(url,0.8)
+    self:addChild(InvitationfDWeb, MainScene.ZOrder.CONFIRM)
+end
+
+function MainScene:checkIap(  )
+	local button = gt.seekNodeByName(self.rootNode, "Btn_iap")
+
+	if button then
+		if gt.isOpenIAP then
+			gt.addBtnPressedListener(button, function ( ... )
+				local layer = require("app/views/Purchase/RechargeLayer"):create( )
+				self:addChild(layer, 50)
+			end)
+		else
+			button:setVisible(false)
+		end
+	end
+end
+
+function MainScene:onSignInfoCheck()
+	local data = gt.m_SignInInfo; --才弹出
+	local btnWuyi = gt.seekNodeByName(self.rootNode,"Button_wuyi")
+	if(btnWuyi) then 
+		if(data == nil or #data == 0) then
+			btnWuyi:hide();
+		elseif (#data > 0) then 
+			btnWuyi:show();
+		end 
+	end 
+end 
+
+
+--	端午节代理投票活动
+function MainScene:getDragonBoatData()
+	--	测试IP端口http协议
+    -- http://114.215.173.164:2800/xlhy-activity/
+    -- 正式地址 https协议
+    -- https://active.xianlaigame.com/xlhy-activity/
+	local dragonBoatServer = "http://120.76.194.200:7480/xlhy-activity/"
+	if gt.isDebugPackage then
+		if gt.debugInfo.YunDun then -- 线上服务器
+			dragonBoatServer =  "https://active.xianlaigame.com/xlhy-activity/"
+		else  -- 测试服务器
+			dragonBoatServer =  "http://120.76.194.200:7480/xlhy-activity/"
+		end
+	else
+		dragonBoatServer = "https://active.xianlaigame.com/xlhy-activity/"
+	end
+	--	获取活动数据
+	local xhr = cc.XMLHttpRequest:new()
+	xhr.responseType = cc.XMLHTTPREQUEST_RESPONSE_JSON
+	local serverCode = gt.serverCode or "guangdong_db"
+	local dragonBoatInfoURL = string.format(dragonBoatServer.."newvote/getActivityInfo?serverCode=%s&gameId=%s", serverCode , gt.AppID)
+	xhr:open("GET", dragonBoatInfoURL)
+	local function onResp()
+		if xhr.readyState == 4 and xhr.status == 200 and xhr.response ~= ""  then
+			local response = xhr.response
+			require("json")
+			local respJson = json.decode(response)
+			if respJson and respJson.nowTime and self and self.activityDragonBoatHandler then
+				self:activityDragonBoatHandler(respJson)
+				if respJson.nowTime < respJson.startTime and not gt.activityViewIsShowed["ActivityAgentVotePreview"] then
+					local dragonBoatLayer = require("app/views/Activities/ActivityAgentVotePreview"):create()
+					self:addChild(dragonBoatLayer, 8)
+					gt.activityViewIsShowed["ActivityAgentVotePreview"] = true
+				end
+			end
+		end
+		xhr:unregisterScriptHandler()
+	end
+	xhr:registerScriptHandler(onResp)
+	xhr:send()
+end
+
+function MainScene:activityDragonBoatHandler( dragonBoatData )
+	--	活动按钮
+	local Button_dragon_boat = gt.seekNodeByName(self.rootNode, "Button_dragon_boat")
+	if Button_dragon_boat then
+		Button_dragon_boat:setVisible(dragonBoatData.nowTime <= dragonBoatData.endTime)
+		gt.addBtnPressedListener(Button_dragon_boat, function()
+			local dragonBoatLayer
+			if dragonBoatData and dragonBoatData.nowTime < dragonBoatData.startTime then 	-- 活动未开始显示预告
+				dragonBoatLayer = require("app/views/Activities/ActivityAgentVotePreview"):create()
+			else
+				dragonBoatLayer = require("app/views/Activities/ActivityAgentVote"):create()
+			end
+			self:addChild(dragonBoatLayer, 8)
+		end)
+	end
+end
+
+
+--	获取跑马灯消息
+MainScene.requestMarqueeCurTime = 0
+function MainScene:requestMarquee()
+	local curTime = os.time()
+	if MainScene.requestMarqueeCurTime ~= 0 and curTime - MainScene.requestMarqueeCurTime < 600 then
+		return
+	end
+	MainScene.requestMarqueeCurTime = curTime
+	local urlServer = "http://114.215.173.164:9999/xlhy-activity/"
+	if gt.isDebugPackage then
+		if gt.debugInfo.YunDun then -- 线上服务器
+			urlServer =  "https://active.xianlaigame.com/xlhy-activity/"
+		else  -- 测试服务器
+			urlServer =  "http://114.215.173.164:9999/xlhy-activity/"
+		end
+	else
+		urlServer = "https://active.xianlaigame.com/xlhy-activity/"
+	end
+	local xhr = cc.XMLHttpRequest:new()
+	xhr.responseType = cc.XMLHTTPREQUEST_RESPONSE_JSON
+	local serverCode = gt.serverCode or "guangdong_db"
+	local userInfoURL = string.format(urlServer.."hallMarquee/getContent?serverCode=%s&gameId=%s&userIp=%s", serverCode, gt.AppID,gt.playerData.ip)
+	xhr:open("GET", userInfoURL)
+	local function onResp()
+		if not self or not self.marqueeMsg then
+			return
+		end
+		if xhr.readyState == 4 and (xhr.status >= 200 and xhr.status < 207) then
+			local response = xhr.response
+			require("json")
+			respJson = json.decode(response)
+			local str_des = respJson.hallMarqueeContent
+			if gt.isIOSPlatform() and gt.isInReview then
+				str_des = gt.getLocationString("LTKey_0048")
+				if not gt.AndroidIsInReview then
+					self.marqueeMsg:showMsg(str_des)
+				end
+				gt.marqueeMsgTemp = str_des;
+			else
+				gt.marqueeMsgTemp = str_des
+				if not gt.AndroidIsInReview then
+					self.marqueeMsg:showMsg(gt.marqueeMsgTemp)
+				end
+			end
+			-- self.marqueeMsg:showMsg(str_des)
+		elseif xhr.readyState == 1 and xhr.status == 0 then
+			local str_des = gt.getLocationString("LTKey_0048")
+			self.marqueeMsg:showMsg(str_des)
+		end
+		xhr:unregisterScriptHandler()
+	end
+	xhr:registerScriptHandler(onResp)
+	xhr:send()
+end
+
+--	每日免费获取房卡
+function MainScene:btnFreeCardHandler(  )
+	local okFunc = function (  )
+		self.clickedFreecard = true
+		Tools.shareToWX()
+		-- 小于3.0.0版本的直接发送消息给房卡
+		if not Tools.checkVersion("3.0.0") then
+			self:sendServerFreeCard()
+		end
+	end
+	require("app/views/NoticeTips"):create("免费房卡", "每日首次分享，立即获得1张房卡", okFunc, nil, false)	
+	
+end
+-- 	向服务器发送免费获取房卡消息
+function MainScene:sendServerFreeCard(  )
+	if self.clickedFreecard then
+		local msgToSend = {}
+		msgToSend.m_msgId = gt.CG_SHARE_SUCCESS
+		msgToSend.m_userId = gt.playerData.uid
+		gt.socketClient:sendMessage(msgToSend)
+	end
+end
+
+function MainScene:onRcvShareSuccess( msgTbl )
+	if msgTbl.m_isCardAdded == 1 then
+		gt.shareAndFreeCard = 1
+		require("app/views/NoticeTips"):create("提示", "分享成功恭喜您获得1张房卡", nil, nil, true)
+	end
+	
+end
+
+
+return MainScene
+
+

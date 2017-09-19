@@ -1,0 +1,433 @@
+--region app.views.guangdong.hall.RoomSelect
+--desc: 房间选择
+--
+--endregion 
+require "json"
+local RoomSelect = class("RoomSelect", BaseRoomSelect)
+
+--感觉还是用字符串比较方便点
+-- local TabIndexToRoomType = {
+-- --	[1] = 
+-- 	gt.RoomType.ROOM_TUIDAOHU, --推倒胡  --?=1
+-- 	gt.RoomType.ROOM_HONGZHONG, --红中麻将
+-- 	gt.RoomType.ROOM_ZUOPAI,   --做牌    --?=2
+-- 	gt.RoomType.ROOM_CHAOSHAN, --潮汕    --？= 3
+-- 	gt.RoomType.ROOM_YIBAI,--100张
+-- 	gt.RoomType.ROOM_BAIDA,--百搭
+-- 	gt.RoomType.ROOM_ZHUANZHUAN,--转转
+-- 	gt.RoomType.ROOM_JIPINGHU,--鸡平胡
+-- 	gt.RoomType.ROOM_TUIDAOHU_THREE,--三人推倒胡 -- 15??
+-- 	gt.RoomType.ROOM_HUIZHOUZHUANG, --惠州庄
+-- 	gt.RoomType.ROOM_HONGZHONGWANG,   --红中王
+-- 	gt.RoomType.ROOM_XIANGGANG,   --香港麻将 18,
+-- 	--gt.RoomType.ROOM_HUIZHOUZHUANG_BUHUA,-- 惠州庄-补花
+-- 	gt.RoomType.ROOM_JIHU_BUHUA,
+-- }
+
+
+local infoCell_H = 100;
+
+local userDefault = cc.UserDefault:getInstance()
+local SELECT_ROOM_TYPE_KEY = "Guangdong_Selected_Room_Type"
+
+function RoomSelect:ctor()
+	RoomSelect.super.ctor(self, "guangdong")
+	self.oriColor = cc.c3b(254,205,255);
+	-- if(not self.m_use_new_ui) then 
+	-- 	self:initSelect()
+	-- else
+	local btnGroupString = userDefault:getStringForKey("room_btn_group")
+	print("btnGroupString ",btnGroupString,string.len(btnGroupString))
+	if btnGroupString and string.len(btnGroupString) > 0 then
+		self.btnGroup = json.decode(userDefault:getStringForKey("room_btn_group")) or {}
+		if #self.btnGroup < 1 then 	-- 如果都删光了  默认的给两个 推倒胡 和 100张
+			table.insert(self.btnGroup,gt.RoomGroup[1])   -- 推倒胡
+			table.insert(self.btnGroup,gt.RoomGroup[15])  -- 100张
+			userDefault:setStringForKey("room_btn_group",json.encode(self.btnGroup))
+		end
+	else
+		self.btnGroup = gt.RoomGroup
+		userDefault:setStringForKey("room_btn_group",json.encode(gt.RoomGroup))
+	end
+
+	self:initSelect2();
+	-- end 
+end
+
+-- 发送消息
+function RoomSelect:sendCreateRoom()
+	local msgToSend = {}
+	msgToSend.m_msgId = gt.CG_CREATE_ROOM
+	msgToSend.m_flag = self:getSendRound()
+	msgToSend.m_secret = "123456"
+	msgToSend.m_gold = 1
+	msgToSend.m_state = self:getStatu()
+	msgToSend.m_playtype = self:getPlayType()
+	msgToSend.m_robotNum = self:getRobotNum() or 0
+	msgToSend.m_cardValue = self:getCardValue()
+	msgToSend.m_location = Tools.getLocationStr()
+	msgToSend.m_canInteraction = gt.funnyEnable
+	msgToSend.m_antiCheat = gt.antiCheat
+	
+	-- local type_lens = #msgToSend.m_playtype
+	-- for i=1,type_lens do
+	-- 	print("创建的type ID :" ..msgToSend.m_playtype[i])
+	-- end
+	
+	gt.socketClient:sendMessage(msgToSend)
+end
+
+function RoomSelect:getRobotNum(  )
+	if gt.isInReview then
+		return 3
+	end
+
+	if gt.isDebugPackage then
+		if gt.debugInfo.count and gt.debugInfo.JQR then
+			local robotN = gt.debugInfo.count
+			if string.len(robotN) ~= 0 then
+				return tonumber(robotN)
+			end
+		end
+	end
+
+	return 0
+end
+
+function RoomSelect:getCardValue(  )
+	local senTab = {}
+	if gt.isDebugPackage then
+		if gt.debugInfo.paixing and gt.debugInfo.TiaoPai then
+			local cardNum = gt.debugInfo.paixing
+			-- 杠上开花
+			--cardNum = "21,22,23,25,26,27,31,31,31,33,34,35,36,21,22,23,25,26,27,41,37,37,33,34,35,37,21,22,23,25,26,27,41,38,38,33,34,35,37,21,22,23,25,26,27,41,39,39,33,34,35,36,31,36"
+			-- 豪华七小对 都打2万
+			--cardNum = "21,21,21,21,24,24,24,24,27,27,22,22,29,43,43,43,43,11,11,13,13,15,15,44,44,42,23,26,31,32,33,34,35,36,37,38,39,41,42,23,26,31,32,33,34,35,36,37,38,39,41,42,12,12,12,12,29"
+			-- 一炮多响 出38碰出51出24出24出24杠，北风位点胡，其他点过
+			-- cardNum = "21,22,23,25,26,27,41,41,31,32,33,37,38,41,41,42,52,43,44,28,28,29,29,38,38,51,21,22,23,25,26,27,42,42,31,32,33,37,36,21,22,23,25,26,27,43,43,31,32,33,37,36,36,24,24,24,38"
+			-- 一炮多响
+			-- cardNum = "51,51,29,25,26,27,23,22,25,27,28,29,21,31,32,33,34,35,36,37,38,39,21,22,23,24,31,32,33,34,35,36,37,38,39,21,22,23,24,31,32,33,34,35,36,37,38,39,21,22,23,24,41,41,41,41,24"
+			-- 抢杠胡 出38出28碰出31碰出51杠
+			-- cardNum = "31,28,28,34,25,26,26,27,41,41,21,22,23,32,32,33,34,35,36,26,28,41,41,51,22,23,31,32,33,34,35,36,26,27,42,42,21,22,23,31,31,33,34,35,36,26,27,43,43,51,22,23,38,27,28,43"
+			--cardNum = "11,11,11,12,12,13,13,15,16,17,18,18,19,11,12,13,14,15,16,17,18,19,21,22,23,24,21,22,23,24,25,26,27,28,29,31,32,33,34,12,13,21,22,23,24,25,26,27,28,29,31,31,44,35,41,33,38,32,39,18,36,31,26,36,25,34,25,53,37,33,29,13,53,15,39,52,35,11,44,35,39,28,39,37,16,27,51,28,52,33,38,15,31,43,41,41,24,14,44,11,17,23,18,24,31,22,16,51,27,28,42,18,51,12,52,16,19,21,12,52,14,27,29,42,14,36,13,22,32,11"
+			-- cardNum = "31,28,28,12,12,12,16,16,22,22,22,32,33,31,31,29,29,28,12,12,37,37,27,27,27,25,25,25,13,13,13,14,14,15,15,16,16,27,29,51,51,51,13,13,14,14,15,15,16,16,17,17,38,12,38,38,38,28"
+			-- cardNum = "11,22,22,23,23,24,24,25,25,25,26,26,27,11,11,12,12,13,13,14,14,15,15,16,16,17,12,13,31,32,33,33,34,35,36,37,38,39,39,31,31,32,32,34,34,34,35,35,35,36,36,36,12,13,14,15,11"
+			-- cardNum = "12,13,21,22,23,24,25,26,27,28,29,31,31,11,12,13,14,15,16,17,18,19,21,22,23,24,21,22,23,24,25,26,27,28,29,31,32,33,34,11,11,12,12,13,13,15,16,17,18,18,19,21,39,39,39,39,38,11"
+			-- cardNum = "21,21,21,21,22,22,22,22,23,23,23,23,29,\
+			-- 			43,43,43,43,11,11,13,13,15,15,44,44,42,\
+			-- 			23,26,31,32,33,34,35,36,37,38,39,41,42,\
+			-- 			23,26,31,32,33,34,35,36,37,38,39,41,42,12,11,12,12,29,29,12,29"
+			--18罗汉
+			-- cardNum = "21,21,21,22,22,22,23,23,23,24,24,24,21,\
+			-- 			43,43,43,43,11,11,13,13,15,15,44,44,42,\
+			-- 			44,26,31,32,33,34,35,36,37,38,39,41,42,\
+			-- 			44,26,31,32,33,34,35,36,37,38,39,41,42,12,22,23,24,25,25,25"
+
+			--红中王
+			--   cardNum = "51,51,21,22,22,22,23,23,23,24,24,24,53,\
+			--    			  41,51,32,32,32,33,33,33,34,34,34,35,35,\
+			-- 			  53,53,33,22,27,27,28,28,28,29,29,29,31,\
+			-- 			  41,36,36,37,37,37,38,38,38,39,39,39,41,\
+			-- 			  52,51,42,52,31,42,\
+			-- 			  41";
+			-- -- 香港麻将 花
+			-- 	cardNum = "22,22,22,25,26,24,23,24,25,27,28,41,41,\
+			-- 			   11,12,13,25,26,24,23,24,25,27,28,53,53,\
+			-- 			   31,32,33,34,35,36,37,38,39,42,42,27,28,\
+			-- 			   31,32,33,34,35,36,37,38,39,27,43,43,28,\
+			-- 			   11,12,13,11,12,13,14,14,14,14,15,15,15,\
+			-- 			   15,16,16,16,16,17,17,17,17,18,18,18,18,\
+			-- 			   19,19,19,19,22,23,21,39,23,41,21,26,26,\
+			-- 			   31,32,33,34,35,36,37,38,39,31,32,11,12,\
+			-- 			   13,33,34,35,36,37,38,21,42,43,41,42,43,\
+			-- 			   44,44,44,44,51,51,51,51,52,52,52,52,53,53,21,29,29,29,29";
+			-- cardNum = "61,62,63,64,65,31,41,26,27,28,29,29,33,\
+			-- 		   51,41,52,38,33,34,35,36,37,38,39,39,39,\
+			-- 		   51,41,52,32,32,32,35,36,37,38,39,42,42,\
+			-- 		   51,41,52,33,34,34,34,35,35,36,37,37,38,29,38,15,67,15,35,66,28"
+			-- cardNum = "61,62,63,64,65,31,41,26,27,28,29,29,33,\
+			-- 		   51,41,52,38,33,34,35,36,37,38,39,39,39,\
+			-- 		   51,41,52,32,32,32,35,36,37,38,39,42,42,\
+			-- 		   51,41,52,33,34,34,34,35,35,36,37,37,38,29,38,15,67,68,66,29"
+
+			-- cardNum = "11,11,11,12,12,13,13,15,16,17,18,18,19,\
+			-- 		   11,12,13,14,15,16,17,18,19,21,22,23,24,\
+			-- 		   21,22,23,24,25,26,27,28,29,31,32,33,34,\
+			-- 		   12,13,21,22,23,24,25,26,27,28,29,31,31,\
+			-- 		   19,19,41,33"
+
+			-- cardNum = "11,12,13,14,15,22,22,21,21,17,18,18,19,\
+			-- 			11,12,13,14,15,16,17,18,19,21,22,23,24,\
+			-- 			11,25,25,26,15,26,27,28,29,31,32,33,34,\
+			-- 			12,12,13,13,14,14,25,26,27,28,29,31,31,\
+			-- 			21,19,41,33,38,32,39,18,36,31,26,36"
+
+			-- cardNum =  "11,11,11,11,19,19,19,21,21,21,39,39,39,\
+			-- 			42,12,13,24,25,26,17,18,19,42,22,23,24,\
+			-- 			11,25,25,26,15,26,27,28,29,31,32,33,34,\
+			--  			12,12,13,13,14,14,25,26,27,28,29,31,31,\
+			--  			33,38,32,39,41,41,43,18,36,31,36"
+			--cardNum = "21,21,21,22,23,24,25,26,27,28,29,29,29,33,33,34,34,35,35,36,36,37,37,38,38,39,39,23,23,24,24,25,25,26,26,27,27,28,28,19,19,19,31,41,42,43,44,51,52,53,42,43,21";
+		   
+			if string.len(cardNum) ~= 0 then
+				local subStrs = string.split(cardNum, ",")
+				for i,v in ipairs(subStrs) do
+					local carTab = {}
+					if v ~= "" then
+						carTab[1] = math.floor(tonumber(v)/10)
+						carTab[2] = tonumber(v)%10
+						senTab[#senTab+1] = carTab
+					end
+				end
+			end
+		end
+	end
+
+	return senTab
+end
+
+
+
+-- function RoomSelect:initSelect()
+-- 	local freePlay = gt.freePlay or {} --or {0,11};
+-- 	local hashfp = {};
+-- 	for i,v in pairs(freePlay) do
+-- 		 hashfp[v] = 1
+-- 	end 
+-- 	local function show_hide_free(node,v)
+-- 		if(hashfp[v] )then
+-- 			return node:show()
+-- 		else
+-- 			return node:hide()
+-- 		end  
+-- 	end 
+-- 	local sv = gt.seekNodeByName(self.m_csbNode, "ScrollView_title")
+-- 	self.selected = userDefault:getIntegerForKey(SELECT_ROOM_TYPE_KEY, gt.RoomType.ROOM_TUIDAOHU)
+-- 	self.tabBtns = {}
+-- 	self.pages = {}
+-- 	for i, v in ipairs(TabIndexToRoomType) do
+-- 		print("Btn_"..i .." type: "..v);
+-- 		self.tabBtns[i] = sv:getChildByName("Btn_" .. i)
+-- 		if(self.tabBtns[i]) then 
+-- 			gt.addBtnPressedListener(self.tabBtns[i], function( )
+-- 				self:selectTab(i)
+-- 			end)
+-- 			self.tabBtns[i].spr = sv:getChildByName("Spr_" .. i)
+-- 			self.tabBtns[i].spr:setVisible(false)
+-- 			self.tabBtns[i].freeSpr = show_hide_free(sv:getChildByName('Sprite_free_'..i),v);
+-- 			if v == self.selected then
+-- 				self:tabTo(i)
+-- 			end
+-- 		end
+-- 	end
+
+-- 	if gt.isInReview then
+-- 		local fangkaLabel = gt.seekNodeByName(self.m_csbNode, "Label_round_card_1")
+-- 		fangkaLabel:setVisible(false)
+-- 		local msg = gt.seekNodeByName(self.m_csbNode, "Text_1")
+-- 		msg:setVisible(false)
+-- 	end
+-- end
+
+function RoomSelect:initSelect2()
+
+	local freePlay = gt.freePlay or {} --or {0,11};
+	local hashfp = {};
+	for i,v in pairs(freePlay) do
+		 hashfp[v] = 1
+	end
+	dump(hashfp ,'hashfp');
+
+	local freePlay2 = gt.freePlay2 or {};
+	dump(freePlay2,"freePlay2");
+
+	local scrollViewTitle = gt.seekNodeByName(self.m_csbNode, "ScrollView_title")
+	local innerSize = scrollViewTitle:getInnerContainerSize();
+	local tab_model = gt.seekNodeByName(scrollViewTitle,'Btn_model');
+	local sz = scrollViewTitle:getContentSize();
+	local pos_model_y = tab_model:getPositionY();
+	local top_offset = innerSize.height - pos_model_y;
+	local infoNum = (#self.btnGroup < 6 and 6) or #self.btnGroup
+	local innerH = infoCell_H * infoNum + 10;
+	pos_model_y = innerH - top_offset;
+	scrollViewTitle:setInnerContainerSize(cc.size(sz.width, innerH))
+	--tab_model:setSwallowTouches(false)
+
+	local function changeTab(index)
+		for i,v in ipairs(self.tabBtns) do 
+			local on = gt.seekNodeByName(v,'Image_on');
+			local off = gt.seekNodeByName(v,'Image_off');
+			if(i == index) then 
+				on:setVisible(true)
+				off:setVisible(false);
+			else
+				on:setVisible(false)
+				off:setVisible(true);
+			end
+		end
+		local info = self.btnGroup[index];
+		local wanfa = info[1]
+		self:pageTo2(wanfa)
+		--local t = freePlay2[-1] --= gt.freeplay2 or {};
+		--if(t == nil) then 
+		local t = freePlay2[wanfa];
+		dump(t,'wanfa_free');
+		--if(t ~= nil ) then 
+		gt.CommonEvent:pushEvent("UPDATE_FREE_TIME",t);
+		--end
+	end 
+
+	--暂时的想法是把这个选中的摆在中间
+	local function scrollToTab(index)
+		local ePos = 4;  
+		if(index <= 4) then 
+			scrollViewTitle:jumpToTop();
+		else
+			if(index >(infoNum - 4)) then 
+				scrollViewTitle:jumpToBottom();
+			else
+				local perc = (index - 4) / (infoNum -7);
+				local offset = 0
+				print("scrollTo "..perc);
+				scrollViewTitle:jumpToPercentVertical(perc*100 + offset);
+			end 
+		end 
+	end 
+	self.tabBtns = {};
+	self.pages = {};
+	local function initTabs ()
+		self.selected = userDefault:getIntegerForKey(SELECT_ROOM_TYPE_KEY, gt.RoomType.ROOM_TUIDAOHU)
+		local prefix = 'images/otherImages/createroom/'
+		local hasChanged = false
+		for i = 1,#self.btnGroup do 
+			local tabCell = tab_model:clone();
+			self.tabBtns[i] = tabCell;
+			local info = self.btnGroup[i];	
+			local freeImage = gt.seekNodeByName(tabCell,'Image_free');
+			if(hashfp[info[1]] == 1) then 
+				freeImage:setVisible(true);
+			else
+				freeImage:setVisible(false);
+			end
+
+			--local t = freePlay2[-1]
+			--if(t == nil) then 
+			local t = freePlay2[info[1]];
+			--end
+			--if(t ~= nil) then 
+			if(gt.isValidTimestamp(t))then  
+				freeImage:setVisible(true);
+			else
+				freeImage:setVisible(false);
+			end
+
+			local newImage = gt.seekNodeByName(tabCell,"Image_new")
+			if(info[4] == 1) then 
+				newImage:setVisible(true);
+			else
+				newImage:setVisible(false);
+			end
+
+			local off = gt.seekNodeByName(tabCell,'Image_off');
+			off:setContentSize(cc.size(0,0))
+			off:loadTexture(prefix ..info[2]);
+
+			local imgOn = gt.seekNodeByName(tabCell,'Image_on');
+			imgOn:setVisible(false);
+
+			local on = gt.seekNodeByName(tabCell,'info_on');
+			on:setContentSize(cc.size(0,0))
+			on:loadTexture(prefix..info[3]);
+			--on:setVisible(false);
+			gt.addBtnPressedListener(tabCell,function() 
+				changeTab(i);
+			end )
+			scrollViewTitle:addChild(tabCell);
+			tabCell:setPositionY(pos_model_y - (i - 1) *infoCell_H);
+
+			if(self.selected == info[1]) then 
+				hasChanged = true
+				changeTab(i);
+				scrollToTab(i);
+			end 
+		end 
+		--	如果没有找到默认为第一个
+		if not hasChanged and #self.tabBtns > 0 then
+			changeTab(1);
+			scrollToTab(1);
+		end
+		tab_model:setVisible(false);
+		tab_model:setEnabled(true);
+	end
+	initTabs ()
+	if gt.isInReview then
+		local fangkaLabel = gt.seekNodeByName(self.m_csbNode, "Label_round_card_1")
+		fangkaLabel:setVisible(false)
+		local msg = gt.seekNodeByName(self.m_csbNode, "Text_1")
+		msg:setVisible(false)
+	end
+end 
+
+-- function RoomSelect:selectTab(index)
+-- 	print("selectTab "..index);
+
+-- 	self:tabTo(index)
+-- 	userDefault:setIntegerForKey(SELECT_ROOM_TYPE_KEY, self.selected)
+-- end
+
+-- function RoomSelect:tabTo(index)
+-- 	print("tabTo "..tostring(index));
+-- 	if self.tabIndex then
+-- 		self.tabBtns[self.tabIndex]:setVisible(true)
+-- 		self.tabBtns[self.tabIndex].spr:setVisible(false)
+-- 	end
+-- 	self.tabBtns[index]:setVisible(false)
+-- 	self.tabBtns[index].spr:setVisible(true)
+-- 	self:pageTo(index)
+-- 	self.tabIndex = index
+-- 	self.selected = TabIndexToRoomType[index]
+-- end
+
+-- function RoomSelect:pageTo(index)
+-- 	print("pageTo "..tostring(index));
+-- 	if self.pages[self.tabIndex] then
+-- 		self.pages[self.tabIndex]:setVisible(false)
+-- 	end
+
+-- 	if self.pages[index] then
+-- 		self.pages[index]:setVisible(true)
+-- 	else
+-- 		local name = Tools.GAME_TYPE[TabIndexToRoomType[index]+1]
+-- 		self.pages[index] = require("app/views/" .. name .. "/RoomOptions"):create()
+-- 		self:addChild(self.pages[index])
+-- 	end
+-- end
+
+function RoomSelect:pageTo2(index)
+	print("pageTo2 "..tostring(index));
+	if self.pages[self.tabIndex] then
+		self.pages[self.tabIndex]:setVisible(false)
+	end
+
+	if self.pages[index] then
+		self.pages[index]:setVisible(true)
+	else
+		local name = Tools.GAME_TYPE[index + 1]
+		print("....wanfa "..tostring(name));
+		self.pages[index] = require("app/views/" .. name .. "/RoomOptions"):create()
+		self:addChild(self.pages[index])
+	end
+	self.selected = index;
+	self.tabIndex = index
+	userDefault:setIntegerForKey(SELECT_ROOM_TYPE_KEY, self.selected)
+end
+
+function RoomSelect:getStatu( ... )
+	return self.pages[self.tabIndex]:getStatu()
+end
+
+function RoomSelect:getPlayType( ... )
+	return self.pages[self.tabIndex]:getPlayType()
+end
+
+return RoomSelect

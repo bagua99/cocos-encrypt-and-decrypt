@@ -1,0 +1,569 @@
+
+local gt = cc.exports.gt
+
+local TD_Texts = {
+[[一．推倒胡
+    推倒胡不许吃牌只许自摸，打法简单节奏快速，无大胡。
+
+二．牌数
+    根据玩家喜好，分为带风与不带风，带风为136张，不带风为108张。
+
+三．玩法
+    不许吃牌，可以碰牌、杠牌。不许吃胡，只能自摸。
+
+四．鬼牌
+    鬼牌：万能牌，可以当做任意一张牌使用，本游戏鬼牌有2种，白板做鬼和翻鬼；
+    1.白板做鬼
+    在广东地区，白板被称作棺材板，既为鬼的含义，故广东麻将采用白板做鬼；
+    2.翻鬼
+    开局4家拿到牌后（庄家14张，闲家13张），从牌墙上拿起第1张牌，翻开，如果是1万，则2万为鬼牌、如果是9万，则1万是鬼牌、如果是北风，则红中是鬼牌，如果是白板，则东风是鬼牌；
+
+五．庄家
+    第一局开启房间的玩家坐庄，如果庄家胡牌则继续坐庄，如果闲家胡牌，则胡牌的玩家坐庄。
+
+六．胡牌牌型
+    标准牌型：
+    任意牌凑成一对，再加上4组顺子（三张相连的牌）或者刻子（三张一样的牌）或者顺子与刻子混搭的牌型，例如：
+]],
+[[    特殊牌型：
+    由7个对子组成的牌型，例如：
+]],
+[[七．计分规则
+    1.自摸赢6分（不分有鬼或无鬼），输牌玩家每人输2分，买马2分1个；
+    2.摸4鬼直接胡牌赢6分，输牌玩家每人输2分，买马2分1个；
+    3.放（点）杠：如果某玩家出牌，造成了其他玩家杠牌，结算时放杠者赔给杠牌者3分；
+    4.碰杠：某玩家摸牌后开明杠（碰过的牌开杠），结算时其余三家每人赔给杠牌者1分；
+    5.暗杠：某玩家暗杠后，在结算时其余三家每人赔给杠牌者2分；
+    6.抢杠胡：只有碰杠可以被抢杠胡，在结算时，抢杠胡按自摸算，赢6分，杠牌玩家输6分，买马2分1个，如果设定抢杠胡全包，则马牌的分数也由杠牌玩家承担，如果未设定抢杠胡全包，则马牌的分数由剩余3个输牌的玩家分担；
+    7.七对加番：当玩家勾选七对加番时，自摸七对赢12分，输牌玩家每人输4分，买马2分1个；如果没有选择七对加番，则自摸七对赢6分，输牌玩家每人输2分，买马2分1个；
+
+八．买马
+    1.玩家开房间时可以选择买马的数量，如选择买6马，则在牌局开始时，会从牌墙最后预留出6张牌作为马牌，在有人胡牌后，则将马牌翻开；
+    2.庄家的马牌对应为：1、5、9、东风、红中；庄家下家的马牌对应为：2、6、南风、发财；庄家对家的马牌对应为：3、7、西风、白板；庄家上家的马牌对应为：4、8、北风；
+    3.在结算计分时，只计算胡牌玩家的马，其他家的马不算；]]
+}
+
+local TD_Pngs = 
+{
+	{
+		{"p4s1_2", "p4s1_2", },
+		{"p4s3_1", "p4s3_2", "p4s3_3", },
+		{"p4s3_6", "p4s3_7", "p4s3_8", },
+		{"p4s2_3", "p4s2_4", "p4s2_5", },
+		{"p4s2_6", "p4s2_7", "p4s2_8", },
+	},
+	{
+		{"p4s1_2", "p4s1_2", },
+		{"p4s3_1", "p4s3_2", "p4s3_3", },
+		{"p4s3_6", "p4s3_7", "p4s3_8", },
+		{"p4s2_3", "p4s2_4", "p4s2_5", },
+		{"p4s2_8", "p4s2_8", "p4s2_8", },
+	},
+	{
+		{"p4s1_2", "p4s1_2", },
+		{"p4s3_1", "p4s3_2", "p4s3_3", },
+		{"p4s3_6", "p4s3_7", "p4s3_8", },
+		{"p4s2_5", "p4s2_5", "p4s2_5", },
+		{"p4s2_8", "p4s2_8", "p4s2_8", },
+	},
+	{
+		{"p4s1_2", "p4s1_2", },
+		{"p4s3_1", "p4s3_2", "p4s3_3", },
+		{"p4s3_7", "p4s3_7", "p4s3_7", },
+		{"p4s2_5", "p4s2_5", "p4s2_5", },
+		{"p4s2_8", "p4s2_8", "p4s2_8", },
+	},
+	{
+		{"p4s1_2", "p4s1_2", },
+		{"p4s3_1", "p4s3_1", "p4s3_1", },
+		{"p4s3_7", "p4s3_7", "p4s3_7", },
+		{"p4s2_5", "p4s2_5", "p4s2_5", },
+		{"p4s2_8", "p4s2_8", "p4s2_8", },
+	},
+	{
+		{"p4s1_2", "p4s1_2", },
+		{"p4s3_1", "p4s3_1", },
+		{"p4s3_3", "p4s3_3", },
+		{"p4s3_7", "p4s3_7", },
+		{"p4s2_3", "p4s2_3", },
+		{"p4s2_5", "p4s2_5", },
+		{"p4s2_8", "p4s2_8", },
+	},
+}
+
+local ZZ_Texts = {
+[[一、转转麻将
+    转转麻将打法简单、节奏快速、极易胡牌。
+
+二、牌数
+    转转麻将，共108张：筒、索、万，不带东、南、西、北风、中、发、白。
+
+三、摸牌
+    游戏开始，庄家得14张牌，闲家得13张，庄家从牌中选1张丢出。其它3家有权要那张丢出的牌，只能胡、碰、杠，不能吃。
+
+四、胡牌规则
+]],
+[[五、关于杠
+    1、明杠
+        A、手上有3张相同的牌，其他玩家打了第4张相同的牌即可开杠。举例：手上有3个一万，其他玩家打了个一万，则可开杠，如果没有流局，则放杠者出分。
+        B、碰牌之后，自己又摸了1张相同的牌即可开杠，举例：碰了一万，自摸个一万，则可开杠。
+    2、暗杠
+    手上抓了四张相同的牌，就是暗杠。
+
+六、庄家分配：
+    1、第一局由创建房间者为庄家。
+    2、以后谁胡牌，下局谁做庄
+    3、如果出现通炮情况，则下轮由放炮玩家当庄家。
+
+七、积分规则
+    1、自摸：
+    每人输2分，胡牌玩家赢6分，如庄家自摸，闲家每人输3分。
+    2、小胡接炮：
+    点炮方输1分，胡牌玩家赢1分，如点炮方为庄家，则庄家多输1分，如接炮方为庄家，点炮的闲家多输1分。
+    3、开杠
+        A、暗杠相当于自摸，每人出2分；
+        B、碰牌之后，再抓上1个所碰的牌开杠，每人出1分；
+        C、手抓了3个相同的牌，然后有人打了1个相同的牌，开杠的话，放杠者出3分。
+
+八、特殊规则
+    1、通炮：即几个玩家可胡同一张牌，此牌即为通炮。
+    2、漏胡：如果玩家漏掉炮胡，则该玩家摸牌前禁止炮胡，摸牌后正常；只对该玩家漏胡，其他玩家正常。
+
+九、红中赖子
+    与现在的转转麻将基本规则一致
+    红中特殊规则：
+    1、除了万，条，筒, 多了红中(共计112张牌)
+    2、红中在手中可以做万能牌使用
+    3、红中本身不可以碰或杠。
+    4、红中不能和其他牌组合碰杠。比如：1万1万红中，别人打1万，是不能杠一万的。
+    5、起手4个红中可以直接胡。
+
+十、抓鸟
+    抓鸟在胡牌后进行，由胡牌方进行（一炮多响时由点炮玩家进行），此时从牌堆上取创建房间时选得鸟牌张数，其中包含159（勾选红中赖子玩法时，抓鸟抓出红中算1）牌的个数既为中鸟个数，例如自摸中鸟1个，则最终赢得分数为6+3=9分。]],
+}
+local ZP_Text = [[一．做牌推倒胡
+    做牌推倒胡不许吃牌只许自摸，打法简单节奏快速，有大胡。
+
+二．牌数
+    根据玩家喜好，分为带风与不带风，带风为136张，不带风为108张。
+
+三．玩法
+    不许吃牌，可以碰牌、杠牌。不许吃胡，只能自摸。
+
+四．鬼牌
+    鬼牌：万能牌，可以当做任意一张牌使用，本游戏鬼牌有2种，白板做鬼和翻鬼；
+    1.白板做鬼
+    在广东地区，白板被称作棺材板，既为鬼的含义，故广东麻将采用白板做鬼；
+    2.翻鬼
+    开局4家拿到牌后（庄家14张，闲家13张），从牌墙上拿起第1张牌，翻开，如果是1万，则2万为鬼牌、如果是9万，则1万是鬼牌、如果是北风，则红中是鬼牌，如果是白板，则东风是鬼牌；
+
+五．庄家
+    第一局开启房间的玩家坐庄，如果庄家胡牌则继续坐庄，如果闲家胡牌，则胡牌的玩家坐庄。
+
+六．胡牌牌型
+    标准牌型：
+    任意牌凑成一对，再加上4组顺子（三张相连的牌）或者刻子（三张一样的牌）或者顺子与刻子混搭的牌型
+    特殊牌型：
+    由7个对子组成的牌型
+    由东南西北中发白一万九万一条九条一筒九筒加上以上任意一张组成的牌型
+
+七．计分规则
+    1.自摸赢6分（不分有鬼或无鬼），输牌玩家每人输2分，买马2分1个；
+    2.摸4鬼直接胡牌赢6分，输牌玩家每人输2分，买马2分1个；
+    3.放（点）杠：如果某玩家出牌，造成了其他玩家杠牌，结算时放杠者赔给杠牌者3分；
+    4.碰杠：某玩家摸牌后开明杠（碰过的牌开杠），结算时其余三家每人赔给杠牌者1分；
+    5.暗杠：某玩家暗杠后，在结算时其余三家每人赔给杠牌者2分；
+    6.抢杠胡：只有碰杠可以被抢杠胡，在结算时，抢杠胡按自摸算，赢6分，杠牌玩家输6分，买马2分1个，如果设定抢杠胡全包，则马牌的分数也由杠牌玩家承担，如果未设定抢杠胡全包，则马牌的分数由剩余3个输牌的玩家分担；
+    7.大胡牌型：根据牌型倍数进行算分。
+
+八．买马
+    1.玩家开房间时可以选择买马的数量，如选择买6马，则在牌局开始时，会从牌墙最后预留出6张牌作为马牌，在有人胡牌后，则将马牌翻开；
+    2.庄家的马牌对应为：1、5、9、东风、红中；庄家下家的马牌对应为：2、6、南风、发财；庄家对家的马牌对应为：3、7、西风、白板；庄家上家的马牌对应为：4、8、北风；
+    3.在结算计分时，只计算胡牌玩家的马，其他家的马不算；]]
+
+local JP_Text = [[广东麻将鸡平胡
+
+一、简介
+    广东鸡平胡麻将的规则体系发展历史源远流长，如今已经很难考证。据了解，目前广东地区流行的主要规则便是鸡平胡、推倒胡、新章、老章这四大派系。而鸡平胡规则是广东珠三角地区普及最广、最为流行的打法，讲究鸡胡、平胡、爆胡，打法简单节奏快速。
+
+二、牌数
+    共一百三十六张：筒、索、万、东、南、西、北风、中、发、白， 没有 梅、兰、竹、菊、春、夏、秋、冬。
+
+三、摸牌
+    游戏在一开始，只有庄家可得到十四张牌，其余的人十三张。庄家从牌中选出一张最无用的牌丢出。此时，其它三家都有权力要那张丢出的牌。庄家的下家（右手边的玩者），有权力吃或碰那张牌，其它两家则只可碰或杠那张牌。 “ 碰 ” 比 “ 吃 ” 优先。
+
+四、庄家
+    1、如果庄家胡牌或和牌（流局）则下盘依然由该庄家做庄。
+    2、如果非庄家胡牌则下一盘由庄家的下家玩家做庄。
+    3、第一盘庄家由系统随机分配风位，东风位玩家为庄家。
+
+五、基本规则
+    和牌：
+    即流局、荒牌。
+    执位：
+    当四位玩家准备游戏后，由系统随机分配风位。按照东、南、西、北的次序逆时针排列。
+    风圈：
+    1、第一圈风圈为东。
+    2、每打完一圈，则按照东、南、西、北的次序转换风圈。
+    3、当最后一位玩家做庄之牌局完结而没有连庄情况出现，则牌局的一个循环完结，称为“一圈”。
+    漏胡：
+    若玩家A为叫胡的状态下，如下家B打出一张玩家A可以胡的牌而玩家A却放弃不胡，那若对家C或上家D打出相同的一张牌时，玩家A是不能胡那一张的。除非玩家A有进行动牌的情况，动牌的意思在于碰、上、杠、模牌的。当有动牌后，那不能胡那一张的规则便解除。
+    一炮多响：
+    允许一炮多响，如果一炮多响包括庄家在内胡牌，下一轮庄家继续当庄。
+    番：
+    1 、番的定义
+    广东鸡平胡麻将的特色就在“番”，番是2倍的意思
+    2 、爆胡（封顶）的定义
+    广东鸡平胡麻将的另一特色，爆胡（封顶），意思即为多少番为顶，不再叠加番数进行计算，特殊牌除外，比如十三幺，可突破爆胡限制，这些特殊牌型不再叠加其他番种。
+    3 、番的牌型规则设定
+    爆胡为5番。
+
+六、附加情况
+    1 、自摸
+    在爆胡以内自摸+1番，爆胡以外不加番。
+    2 、风位
+    拿到本盘门风的刻子，+1番，爆胡以外不加番。
+    3 、风圈
+    拿到该风圈局的刻子，+1番，爆胡以外不加番。
+    4、三元牌
+    红中、白板、发财，任意一个刻子为1番，两个刻子为2番，爆胡以外不加番。
+    附加情况只对爆胡内牌型有效，而且必须在爆胡内牌型胡了后才能以加番牌型累计番数，爆胡内牌型加附加牌型不能冲破爆胡的上限。
+
+七、特殊规则
+    1、一炮三响 ： 同一张牌点三个炮，点炮者包三家。胡牌者不满3番牌型，按照3番满计算，大于3番的牌型，按照实际牌型计算。
+    2、杠上开花：不满3番牌型，按照3番满计算，大于3番的牌型，按照实际牌型计算。
+    3、杠上开花包杠：开暗刻明杠补牌后胡牌，计自摸，点杠者包三家牌。  不满3番牌型，按照3番满计算，大于3番的牌型，按照实际牌型计算。
+    4、海底捞月：摸最后一张牌胡牌。不满3番牌型，按照3番满计算，大于3番的牌型，按照实际牌型计算。
+    5、包自摸规则： 十二张落地包自模，包先不包后。例一：若玩家A打出一张牌让其中一名玩家做成十二张落地（即已碰/吃/明杠出的牌共有12张牌）而做成该玩家为单吊一张叫胡的情况时，该名打出者A必须承担包自模的责任，即若该名玩家在12张落地的情况时自模胡牌．该打出让玩家成立12张落地的玩家A便需要为其余两家代付该笔自模的金币．例二：玩家A放一张让玩家B12张落地达成，及后玩家A再放一张让玩家C或 D12张落地达成，此时玩家A只需要承担包玩家B自模的责任，不需要承包玩家C和D。
+    6、特殊牌型包自摸： 大四喜：玩家已碰出东、南、西、北，任意3款．若有人打出余下一款者，那人则需承担包自模的责任。  大三元：玩家已碰出红中、白板、发财，任意2款．若有人打出余下一款者，那人则需承担包自模的责任。
+    7、抢杠：明刻开明杠，可以被抢杠胡，抢杠胡等同杠开，当自摸，被抢杠者（欲开杠者）包三家牌，暗杠不可抢杠胡。抢杠者牌型不满3番牌型，按照3番满计算，大于3番的牌型，按照实际牌型计算。  暗刻开明杠，不算抢杠胡，胡牌者只能胡点杠那张牌，只算普通胡牌。
+    8、天和：只有庄家独有的权利，庄家起牌后即成和牌牌型。按6番计算。
+    9、人和：起牌后，庄家打出的第一张牌，闲家吃和。按6番计算。
+    10、地和：起牌后，第一圈里闲家自摸的第一张牌和牌。按6番计算。注：第一圈里如有人吃、碰牌，有人摸第一张牌，已不生效，不成地和。]]
+
+local YB_Text = [[一．100张
+    100张不许吃牌只许自摸，打法简单节奏快速，有大胡。
+
+二．牌数
+    去掉万字牌剩余100张，由筒、索、东、南、西、北、中、发、白组成
+
+三．玩法
+    不许吃牌，可以碰牌、杠牌。不许吃胡，只能自摸。
+
+四．鬼牌
+    鬼牌：万能牌，可以当做任意一张牌使用，本游戏鬼牌有2种，白板做鬼和翻鬼；
+    1.白板做鬼
+    在广东地区，白板被称作棺材板，既为鬼的含义，故广东麻将采用白板做鬼；
+    2.翻鬼
+    开局4家拿到牌后（庄家14张，闲家13张），从牌墙上拿起第1张牌，翻开，如果是1万，则2万为鬼牌、如果是9万，则1万是鬼牌、如果是北风，则红中是鬼牌，如果是白板，则东风是鬼牌；
+
+五．庄家
+    第一局开启房间的玩家坐庄，如果庄家胡牌则继续坐庄，如果闲家胡牌，则胡牌的玩家坐庄。
+
+六．胡牌牌型
+    标准牌型：
+    任意牌凑成一对，再加上4组顺子（三张相连的牌）或者刻子（三张一样的牌）或者顺子与刻子混搭的牌型
+    特殊牌型：
+        碰碰胡：全都是刻子胡牌
+        清一色：全都是饼子或者筒子
+        清碰：清一色+碰碰胡
+        幺九：有1和9的刻字，其他可以为1，9和字牌
+        全风：全都是东南西北中发白的刻子
+        十三幺：有两张鬼牌（代替1万和9万）+东南西北中发白1条9条1筒9筒再加上这些牌中的任意一张牌。
+
+七．计分规则
+    1.自摸赢6分，输牌玩家每人输2分，买马2分1个；
+    2.摸4鬼直接胡牌赢6分，输牌玩家每人输2分，买马2分1个；
+    3.放（点）杠：如果某玩家出牌，造成了其他玩家杠牌，结算时放杠者赔给杠牌者3分；
+    4.碰杠：某玩家摸牌后开明杠（碰过的牌开杠），结算时其余三家每人赔给杠牌者1分；
+    5.暗杠：某玩家暗杠后，在结算时其余三家每人赔给杠牌者2分；
+    6.抢杠胡：只有碰杠可以被抢杠胡，在结算时，抢杠胡按自摸算，赢6分，杠牌玩家输6分，买马2分1个，如果设定抢杠胡全包，则马牌的分数也由杠牌玩家承担，如果未设定抢杠胡全包，则马牌的分数由剩余3个输牌的玩家分担；
+    7.杠上开花：杠牌后摸一张牌胡牌，结算时，按自摸算，基础分翻倍。如果是别人点杠，则由点杠者全包
+    8. 鸡胡2分，平胡 2分，碰碰胡4分，清一色8分，清碰12分，幺九12 分，全风16 分， 十三幺16分，
+
+八．买马
+    1.玩家开房间时可以选择买马的数量，如选择买6马，则在牌局开始时，会从牌墙最后预留出6张牌作为马牌，在有人胡牌后，则将马牌翻开；
+    2.庄家的马牌对应为：1、5、9、东风、红中；庄家下家的马牌对应为：2、6、南风、发财；庄家对家的马牌对应为：3、7、西风、白板；庄家上家的马牌对应为：4、8、北风；
+    3.在结算计分时，只计算胡牌玩家的马，其他家的马不算；]]
+
+local BD_Text = [[一．百搭鸡胡
+    百搭鸡胡不许吃牌只许自摸，打法简单节奏快速。
+
+二．牌数
+    144张牌，万饼条，东南西北中发白，梅兰竹菊春夏秋冬。
+
+三．玩法
+    不许吃牌，可以碰牌、杠牌。不许吃胡，只能自摸。
+
+四．百搭牌
+    梅兰竹菊春夏秋冬当作花牌。
+
+五．庄家
+    第一局开启房间的玩家坐庄，如果庄家胡牌则继续坐庄，如果闲家胡牌，则胡牌的玩家坐庄。
+
+六．胡牌牌型
+    标准牌型：
+        任意牌凑成一对，再加上4组顺子（三张相连的牌）或者刻子（三张一样的牌）或者顺子与刻子混搭的牌型
+    特殊牌型：
+        十三幺可胡（8倍），七对可以胡（1倍），有花单吊（2倍）和花吊花（4倍）
+
+七．计分规则
+    1.基础分1分；
+    2.有翻倍；
+    3.放（点）杠：如果某玩家出牌，造成了其他玩家杠牌，结算时放杠者赔给杠牌者3分；
+    4.碰杠：某玩家摸牌后开明杠（碰过的牌开杠），结算时其余三家每人赔给杠牌者1分；
+    5.暗杠：某玩家暗杠后，在结算时其余三家每人赔给杠牌者1分；
+    6.抢杠胡：只有碰杠可以被抢杠胡，在结算时，抢杠胡按自摸算，买马2分1个，如果设定抢杠胡全包，则马牌的分数也由杠牌玩家承担，如果未设定抢杠胡全包，则马牌的分数由剩余3个输牌的玩家分担。
+
+八．买马
+    1.玩家开房间时可以选择买马的数量，如选择买6马，则在牌局开始时，会从牌墙最后预留出6张牌作为马牌，在有人胡牌后，则将马牌翻开；
+    2.庄家的马牌对应为：1、5、9、东风、红中；庄家下家的马牌对应为：2、6、南风、发财；庄家对家的马牌对应为：3、7、西风、白板；庄家上家的马牌对应为：4、8、北风；
+    3.在结算计分时，只计算胡牌玩家的马，其他家的马不算。]]
+
+local CS_Text = [[
+一. 潮汕麻将
+	潮州麻将是广东潮州的一个地方特色麻将。
+二. 牌数：
+	136张
+	打牌
+	可以碰、杠，不能吃
+	可以自摸，可以点炮
+
+三．玩法：
+	抢杠胡2倍
+		 玩家碰过之后，摸牌补杠，这张牌可以被抢杠胡，被抢杠玩家包其它玩家分数
+	杠上开花2倍
+		A给B点杠，B杠上开花胡牌，此时A玩家包其它三家的所有分数
+	豪华4倍
+		七对的牌型中，有4张牌是一样的，为豪华
+	天地胡10倍
+		庄家起手胡牌为天胡，庄家打出一张牌，其它玩家吃炮胡牌为地胡
+	白板做鬼
+		白板当作鬼牌
+	翻鬼
+		翻出一张牌，此张牌的下一张牌当作鬼牌。（翻二万，则三万是鬼）
+	马跟底分
+		胡牌的基础分数为几分，每个马就为几分
+
+四．算分：
+	明杠  3分
+	暗杠  6分
+	基础分1分
+
+	胡牌加成
+		自摸 *2
+		点炮 *3
+
+	牌型加成
+		碰碰胡  *2
+		七小对  *2
+		混一色  *2
+		清一色  *2
+		豪华    *4
+		十三幺  *10
+		天地胡  *10
+		
+	额外倍数
+		抢杠胡 *2
+		杠上开花 *2
+
+]]
+
+local Scroll_Width = 950
+
+local HelpScene = class("HelpScene", function()
+	return gt.createMaskLayer()
+end)
+
+function HelpScene:ctor()
+	cc.SpriteFrameCache:getInstance():addSpriteFrames("res/sd/images/mahjong_tiles.plist", "res/sd/images/mahjong_tiles.pvr.ccz")
+	local csbNode = cc.CSLoader:createNode("HelpScene.csb")
+	csbNode:setAnchorPoint(0.5, 0.5)
+	csbNode:setPosition(gt.winCenter)
+	self:addChild(csbNode)
+
+	self.m_curTab = nil
+	self.m_scrolls = {} 
+	self.initScrollFuncs = {"initTDScroll", "initZPScroll", "initCSScroll", "initYBScroll", "initBDScroll", "initZZScroll", "initJPScroll"}
+	self.m_initedScrolls = {false, false, false, false, false, false, false}
+
+	local sv = gt.seekNodeByName(csbNode, "ScrollView_title")
+	self.tabBtns = {}
+	self.pages = {}
+	for i = 1, #self.m_initedScrolls do
+		self.tabBtns[i] = sv:getChildByName("Btn_" .. i)
+		gt.addBtnPressedListener(self.tabBtns[i], function( )
+			self:changeTabTo(i)
+		end)
+		self.tabBtns[i].spr = sv:getChildByName("Spr_" .. i)
+		self.tabBtns[i].spr:setVisible(false)
+
+		self.m_scrolls[i] = gt.seekNodeByName(csbNode, "ScrollView_help_" .. i)
+		self.m_scrolls[i]:setVisible(false)
+	end
+
+    self.majiang_type = cc.UserDefault:getInstance():getStringForKey("majiang_type")
+    self:changeTabTo(tonumber(self.majiang_type) or 1)
+
+	-- 返回按键
+	local backBtn = gt.seekNodeByName(self, "Btn_back")
+	gt.addBtnPressedListener(backBtn, function()
+		self:removeFromParent()
+	end)
+end
+
+function HelpScene:initScroll(index)
+	self[self.initScrollFuncs[index]](self, index)
+	self.m_initedScrolls[index] = true
+end
+
+function HelpScene:changeTabTo(index)
+	if self.m_curTab then
+		self.tabBtns[self.m_curTab]:setVisible(true)
+		self.tabBtns[self.m_curTab].spr:setVisible(false)
+		self.m_scrolls[self.m_curTab]:setVisible(false)
+	end
+	self.m_curTab = index
+	self.tabBtns[self.m_curTab]:setVisible(false)
+	self.tabBtns[self.m_curTab].spr:setVisible(true)
+	self.m_scrolls[self.m_curTab]:setVisible(true)
+	if not self.m_initedScrolls[index] then
+		self:initScroll(index)
+	end
+end
+
+function HelpScene:createLabel(text)
+	local label = cc.Label:createWithSystemFont(text, "", 24)
+	label:setTextColor(cc.c3b(102, 38, 0))
+	label:setWidth(Scroll_Width-50)
+	local height = label:getContentSize().height
+	return label, height
+end
+
+function HelpScene:createLine(pngs, num)
+	local panel = cc.Node:create()
+	local height = 90
+	if num then
+		local label = cc.Label:createWithSystemFont(num, "", 24)
+		label:setTextColor(cc.c3b(102, 38, 0))
+		label:setPosition(40, 70)
+		panel:addChild(label)
+	end
+	local px = 60
+	for i,v in ipairs(pngs) do
+		for i1,v1 in ipairs(v) do
+			local sprite = cc.Sprite:createWithSpriteFrameName(v1 .. ".png")
+			sprite:setAnchorPoint(cc.p(0, 0))
+			sprite:setPositionX(px)
+			panel:addChild(sprite)
+			px = px + 55
+		end
+		px = px + 10
+	end
+	return panel, height
+end
+
+function HelpScene:initTDScroll(index)
+	local height = 0
+	local lb, height = self:createLabel(TD_Texts[3])
+	lb:setPosition(Scroll_Width/2, height/2+20)
+	self.m_scrolls[index]:addChild(lb)
+
+	local line, lineHeight = self:createLine(TD_Pngs[6])
+	line:setPositionY(height+lineHeight/2+20)
+	self.m_scrolls[index]:addChild(line)
+	height = height + lineHeight + 20
+
+	lb, labelHeight = self:createLabel(TD_Texts[2])
+	lb:setPosition(Scroll_Width/2, height+labelHeight/2+20)
+	self.m_scrolls[index]:addChild(lb)
+	height = height + labelHeight
+
+	for i = 5, 1, -1 do
+		line, lineHeight = self:createLine(TD_Pngs[i], i)
+		line:setPositionY(height+lineHeight/2+20)
+		self.m_scrolls[index]:addChild(line)
+		height = height + lineHeight + 20
+	end
+	
+	lb, labelHeight = self:createLabel(TD_Texts[1])
+	lb:setPosition(Scroll_Width/2, height+labelHeight/2+20)
+	self.m_scrolls[index]:addChild(lb)
+	height = height + labelHeight
+
+	self.m_scrolls[index]:setInnerContainerSize(cc.size(Scroll_Width, height+40))
+end
+
+function HelpScene:initZPScroll(index)
+	local lb = cc.Label:createWithSystemFont(ZP_Text, "", 24)
+	lb:setTextColor(cc.c3b(102, 38, 0))
+	lb:setWidth(Scroll_Width-50)
+	local height = lb:getContentSize().height
+	lb:setPosition(Scroll_Width/2, height/2+20)
+	self.m_scrolls[index]:addChild(lb)
+	self.m_scrolls[index]:setInnerContainerSize(cc.size(Scroll_Width, height + 40))
+end
+
+--潮汕
+function HelpScene:initCSScroll(index)
+	local lb = cc.Label:createWithSystemFont(CS_Text, "", 24)
+	lb:setTextColor(cc.c3b(102, 38, 0))
+	lb:setWidth(Scroll_Width-50)
+	local height = lb:getContentSize().height
+	lb:setPosition(Scroll_Width/2, height/2+20)
+	self.m_scrolls[index]:addChild(lb)
+	self.m_scrolls[index]:setInnerContainerSize(cc.size(Scroll_Width, height + 40))
+end
+
+function HelpScene:initYBScroll(index)
+	local lb = cc.Label:createWithSystemFont(YB_Text, "", 24)
+	lb:setTextColor(cc.c3b(102, 38, 0))
+	lb:setWidth(Scroll_Width-50)
+	local height = lb:getContentSize().height
+	lb:setPosition(Scroll_Width/2, height/2+20)
+	self.m_scrolls[index]:addChild(lb)
+	self.m_scrolls[index]:setInnerContainerSize(cc.size(Scroll_Width, height + 40))
+end
+
+function HelpScene:initBDScroll(index)
+	local lb = cc.Label:createWithSystemFont(BD_Text, "", 24)
+	lb:setTextColor(cc.c3b(102, 38, 0))
+	lb:setWidth(Scroll_Width-50)
+	local height = lb:getContentSize().height
+	lb:setPosition(Scroll_Width/2, height/2+20)
+	self.m_scrolls[index]:addChild(lb)
+	self.m_scrolls[index]:setInnerContainerSize(cc.size(Scroll_Width, height + 40))
+end
+
+function HelpScene:initZZScroll(index)
+	local height = 0
+	local lb, height = self:createLabel(ZZ_Texts[2])
+	lb:setPosition(Scroll_Width/2, height/2+20)
+	self.m_scrolls[index]:addChild(lb)
+
+	for i = 6, 1, -1 do
+		line, lineHeight = self:createLine(TD_Pngs[i], i)
+		line:setPositionY(height+lineHeight/2+20)
+		self.m_scrolls[index]:addChild(line)
+		height = height + lineHeight + 20
+	end
+	
+	lb, labelHeight = self:createLabel(ZZ_Texts[1])
+	lb:setPosition(Scroll_Width/2, height+labelHeight/2+20)
+	self.m_scrolls[index]:addChild(lb)
+	height = height + labelHeight
+
+	self.m_scrolls[index]:setInnerContainerSize(cc.size(Scroll_Width, height+40))
+end
+
+function HelpScene:initJPScroll(index)
+	local lb = cc.Label:createWithSystemFont(JP_Text, "", 24)
+	lb:setTextColor(cc.c3b(102, 38, 0))
+	lb:setWidth(Scroll_Width-50)
+	local height = lb:getContentSize().height
+	lb:setPosition(Scroll_Width/2, height/2+20)
+	self.m_scrolls[index]:addChild(lb)
+	self.m_scrolls[index]:setInnerContainerSize(cc.size(Scroll_Width, height + 40))
+end
+
+return HelpScene

@@ -1,0 +1,70 @@
+--	端午节代理投票活动 - 规则&奖励说明
+--	by:house
+--	date:2017.05.23
+
+local ActivityAgentVoteRule = class("ActivityAgentVoteRule", function()
+	return cc.LayerColor:create(cc.c4b(85, 85, 85, 85), gt.winSize.width, gt.winSize.height)
+end)
+
+local gt = cc.exports.gt
+
+function ActivityAgentVoteRule:ctor()
+	-- 注册节点事件
+	self:registerScriptHandler(handler(self, self.onNodeEvent))
+
+	local csbNode = cc.CSLoader:createNode("ActivityAgentVoteRule.csb")
+	csbNode:setPosition(gt.winCenter)
+	self:addChild(csbNode)
+	self.closeBtn = gt.seekNodeByName(csbNode, "closeBtn")
+	gt.addBtnPressedListener(self.closeBtn, function()
+		self:removeFromParent()
+	end)
+	local listViewRuleReward = gt.seekNodeByName(csbNode, "ListView_rule_reward")
+	listViewRuleReward:setScrollBarEnabled(false)
+	local rewardTextList = {"第1名：苹果电脑","第2名：iphone 7","第3名：爱玛电动车","第4名：苹果watch series 2","第5名：小米5S",
+							"第6名：小米扫地机器人","第7名：希洛普电动滑板车","第8名：华为B3智能手环",
+							"9-10名：房卡888张","11-20名：房卡666张","21-50名：房卡500张","51-100名：房卡300张",
+							"101-200名：房卡150张","201-500名：房卡100张","501-1000：房卡50张"}
+
+	local FONTSCOLOR = cc.c3b(254,205,255)
+	table.foreach(rewardTextList, function(i, v)
+			local item1 = ccui.Text:create()
+			item1:setString(v)
+			item1:setPositionX(60)
+			item1:setTextColor(FONTSCOLOR)
+			item1:setFontSize(30)
+			listViewRuleReward:pushBackCustomItem(item1)
+		end)
+	
+end
+
+function ActivityAgentVoteRule:onNodeEvent(eventName)
+	if "enter" == eventName then
+		local listener = cc.EventListenerTouchOneByOne:create()
+		listener:setSwallowTouches(true)
+		listener:registerScriptHandler(handler(self, self.onTouchBegan), cc.Handler.EVENT_TOUCH_BEGAN)
+		listener:registerScriptHandler(handler(self, self.onTouchEnded), cc.Handler.EVENT_TOUCH_ENDED)
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:addEventListenerWithSceneGraphPriority(listener, self)
+	elseif "exit" == eventName then
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:removeEventListenersForTarget(self)
+	end
+end
+
+function ActivityAgentVoteRule:onTouchBegan(touch, event)
+	return true
+end
+
+function ActivityAgentVoteRule:onTouchEnded(touch, event)
+	local bg = gt.seekNodeByName(self.rootNode, "Img_bg")
+	if bg then
+		local point = bg:convertToNodeSpace(touch:getLocation())
+		local rect = cc.rect(0, 0, bg:getContentSize().width, bg:getContentSize().height)
+		if not cc.rectContainsPoint(rect, cc.p(point.x, point.y)) then
+			-- self:removeFromParent()
+		end
+	end
+end
+
+return ActivityAgentVoteRule

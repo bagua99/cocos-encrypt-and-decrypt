@@ -1,0 +1,97 @@
+local RcvZhaNiao = class("RcvZhaNiao", BaseRoomAgreement)
+
+function RcvZhaNiao:ctor(  )
+	self:registerMsgListener(gt.GC_ZHANIAO, self, self.onRcvZhaNiao)
+end
+
+function RcvZhaNiao:onRcvZhaNiao(msgTbl)
+	gt.log("onRcvZhaNiao")
+	self.m_scene.m_isZhaNiao = true
+	self.m_scene.m_zhaNiaoTime = 3.5
+
+	local room = self.m_scene:getRoom()
+	local players = room:getPlayers()
+	local curRoomPlayers = clone(players)
+
+	local layer = cc.Layer:create()
+	local delayTime = cc.DelayTime:create(1.5)
+	local callFunc = cc.CallFunc:create(function(sender)
+		table.foreach(msgTbl.m_bird_infos, function(i, bird)
+			local seatIdx = bird[1] + 1
+			local card = bird[2]
+			if seatIdx > 0 and curRoomPlayers[seatIdx] then
+				-- local roomPlayer = room:getPlayer(seatIdx) 
+				local displaySeatIdx = curRoomPlayers[seatIdx]:getDisplayIdx()
+				gt.log("displaySeatIdx = " .. displaySeatIdx)
+				local playerInfoNode = gt.seekNodeByName(self.m_scene:getCsbLayer(), "Node_playerInfo_" .. displaySeatIdx)
+				local infoNode = self.m_scene:getMJWorldPoint(playerInfoNode)
+				self:birdFly(layer, display.cx, display.cy, infoNode.x, infoNode.y)
+
+				local sprite = self.m_scene:addAlreadyOutMjTilesByCopy(
+					msgTbl.m_end_pos + 1, card[1], card[2], curRoomPlayers[msgTbl.m_end_pos + 1])
+
+				if seatIdx < 1 then
+					sprite:setColor(cc.c3b(100,100,100))
+				else
+					sprite:setColor(cc.c3b(243,243,10))
+				end 				
+			end
+		end)
+	end)
+	local seqAction = cc.Sequence:create(delayTime, callFunc)
+	layer:runAction(seqAction)
+
+	
+	local csbNode, action = gt.createCSAnimation("zhuaniao.csb")
+	action:play("zhuaniao", false)
+	self.m_scene:addChild(csbNode, Room.ZOrder.ZHANIAO)
+	self.m_scene:addChild(layer, Room.ZOrder.ZHANIAO)
+end
+
+function RcvZhaNiao:birdFly(layer, x, y, ex, ey)
+	local x = x
+	local y = y
+	local ex = ex
+	local ey = ey + 50
+	local time = 0.6
+	local scale = 0.5
+	
+    local bird = cc.Sprite:create("res/sd/images/otherImages/niao.png")
+    bird:setScale(scale)
+    bird:setPosition(cc.p(x, y))
+    local function birdCallback()
+    	bird:removeFromParent()
+
+    	local birdFly, action = gt.createCSAnimation("effect/BirdFly.csb")
+    	action:play("run", false)
+    	birdFly:setPosition(cc.p(ex, ey))
+    	birdFly:setScale(2.5)
+    	layer:addChild(birdFly)
+
+    	local delayTime = cc.DelayTime:create(action:getEndFrame() / 60)
+		local callFunc = cc.CallFunc:create(function(sender)
+			sender:removeFromParent()
+		end)
+		local seqAction = cc.Sequence:create(delayTime, callFunc)
+		birdFly:runAction(seqAction)
+    end
+    local action = cc.MoveTo:create(time, cc.p(ex, ey))
+    local callFunc = cc.CallFunc:create(birdCallback)
+	local seqAction = cc.Sequence:create(action, callFunc)
+    bird:runAction(seqAction)
+    layer:addChild(bird, 1000)
+
+    local emitter = cc.ParticleSystemQuad:create("res/sd/particles/Flower.plist")
+    emitter:setPosition(cc.p(x, y))
+	local function flowerCallback()
+    	emitter:removeFromParent()
+    end
+    local action = cc.MoveTo:create(time, cc.p(ex, ey))
+    local callFunc = cc.CallFunc:create(flowerCallback)
+	local seqAction = cc.Sequence:create(action, callFunc)
+    emitter:runAction(seqAction)
+    layer:addChild(emitter, 999)
+    return true
+end
+
+return RcvZhaNiao

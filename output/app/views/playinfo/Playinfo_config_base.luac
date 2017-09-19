@@ -1,0 +1,124 @@
+--region app.views.playinfo.Playinfo_config_base
+--desc: 在游戏场景点击 规则按钮出现的时候回调用当前代码,其他的类对应不同的麻将类型
+--endregion
+
+local PlayinfoConfigBase = class("PlayinfoConfigBase")
+function PlayinfoConfigBase:ctor(  )
+	self.ruleType = {
+		[0] = {desc = "无番起胡", type = gt.PlayInfoType.WANFA},
+		[1] = {desc = "一番起胡", type = gt.PlayInfoType.WANFA},
+		[3] = {desc = "三番起胡", type = gt.PlayInfoType.WANFA},
+		[5] = {desc = "七对胡", type = gt.PlayInfoType.PAIXING},
+		[2] = {desc = "2马", type = gt.PlayInfoType.WANFA},
+		[4] = {desc = "4马", type = gt.PlayInfoType.WANFA},
+		[6] = {desc = "6马", type = gt.PlayInfoType.WANFA},
+		[7] = {desc = "无鬼牌", type = gt.PlayInfoType.WANFA},
+		[8] = {desc = "白板做鬼", type = gt.PlayInfoType.WANFA},
+		[9] = {desc = "翻鬼", type = gt.PlayInfoType.WANFA},
+		[10] = {desc = "不带风", type = gt.PlayInfoType.WANFA},
+		[11] = {desc = "自摸胡", type = gt.PlayInfoType.WANFA},
+		[12] = {desc = "可接炮胡", type = gt.PlayInfoType.WANFA},
+		[13] = {desc = "接炮胡(可抢杠)", type = gt.PlayInfoType.WANFA},
+		[14] = {desc = "红中赖子", type = gt.PlayInfoType.WANFA},
+		[15] = {desc = "庄闲", type = gt.PlayInfoType.WANFA},
+		[16] = {desc = "七对加番", type = gt.PlayInfoType.PAIXING},
+		[17] = {desc = "抢杠全包", type = gt.PlayInfoType.WANFA},
+		[18] = {desc = "可抢杠胡", type = gt.PlayInfoType.WANFA},
+		[19] = {desc = "无鬼加倍", type = gt.PlayInfoType.WANFA},
+		[20] = {desc = "杠爆全包", type = gt.PlayInfoType.WANFA},
+		[21] = {desc = "4鬼胡牌", type = gt.PlayInfoType.PAIXING},
+		[22] = {desc = "4鬼胡牌2倍", type = gt.PlayInfoType.PAIXING},
+		[24] = {desc = "清一色4倍", type = gt.PlayInfoType.PAIXING},
+		[23] = {desc = "碰碰胡2倍", type = gt.PlayInfoType.PAIXING},
+		[25] = {desc = "幺九6倍", type = gt.PlayInfoType.PAIXING},
+		[26] = {desc = "全风8倍", type = gt.PlayInfoType.PAIXING},
+		[27] = {desc = "十三幺8倍", type = gt.PlayInfoType.PAIXING},
+		[28] = {desc = "双鬼", type = gt.PlayInfoType.WANFA},
+		[29] = {desc = "花牌做鬼", type = gt.PlayInfoType.WANFA},
+		[30] = {desc = "明杠可抢", type = gt.PlayInfoType.WANFA},
+		[31] = {desc = "含19即可", type = gt.PlayInfoType.PAIXING},
+		[32] = {desc = "七对4倍", type = gt.PlayInfoType.PAIXING},
+		[33] = {desc = "跟庄", type = gt.PlayInfoType.WANFA},
+		[34] = {desc = "奖马", type = gt.PlayInfoType.WANFA},
+		[35] = {desc = "马跟底分", type = gt.PlayInfoType.WANFA},
+		[37] = {desc = "打出红中加分", type = gt.PlayInfoType.WANFA},
+		[38] = {desc = "抢杠胡2倍", type = gt.PlayInfoType.PAIXING},
+		[39] = {desc = "杠上开花2倍", type = gt.PlayInfoType.PAIXING},
+		[40] = {desc = "混一色", type = gt.PlayInfoType.PAIXING},
+		[41] = {desc = "天地胡", type = gt.PlayInfoType.PAIXING},
+		[42] = {desc = "抓码", type = gt.PlayInfoType.WANFA},
+		[43] = {desc = "节节高", type = gt.PlayInfoType.WANFA},
+		[44] = {desc = "双豪华6倍", type = gt.PlayInfoType.PAIXING},
+		[45] = {desc = "三豪华8倍", type = gt.PlayInfoType.PAIXING},
+		[46] = {desc = "十八罗汉10倍", type = gt.PlayInfoType.PAIXING},
+		[47] = {desc = "鸡胡可胡", type = gt.PlayInfoType.WANFA},
+		[48] = {desc = "不带万字牌", type = gt.PlayInfoType.WANFA},
+		[49] = {desc = "红中当马", type = gt.PlayInfoType.WANFA},
+		[50] = {desc = "无红中多2马", type = gt.PlayInfoType.WANFA},
+		[51] = {desc = "红中做鬼", type = gt.PlayInfoType.WANFA},
+		[52] = {desc = "海底捞月2倍", type = gt.PlayInfoType.WANFA},
+		[53] = {desc = "马跟杠", type = gt.PlayInfoType.WANFA},
+		[54] = {desc = "十二张落地", type = gt.PlayInfoType.WANFA},
+		[55] = {desc = "无花", type = gt.PlayInfoType.WANFA},
+		[56] = {desc = "2花", type = gt.PlayInfoType.WANFA},
+		[57] = {desc = "4花", type = gt.PlayInfoType.WANFA},
+		[58] = {desc = "6花", type = gt.PlayInfoType.WANFA},
+		[59] = {desc = "8花", type = gt.PlayInfoType.WANFA},
+		[60] = {desc = "小三元", type = gt.PlayInfoType.PAIXING},
+		[61] = {desc = "小四喜", type = gt.PlayInfoType.PAIXING},
+		[62] = {desc = "大三元", type = gt.PlayInfoType.PAIXING},
+		[63] = {desc = "大四喜", type = gt.PlayInfoType.PAIXING},
+		[64] = {desc = "爆炸马", type = gt.PlayInfoType.WANFA},
+		[65] = {desc = "爆炸马加分", type = gt.PlayInfoType.WANFA},
+		[66] = {desc = "爆炸马翻倍", type = gt.PlayInfoType.WANFA},
+		[67] = {desc = "8马", type = gt.PlayInfoType.WANFA},
+		[68] = {desc = '全冲', type = gt.PlayInfoType.WANFA},
+		[69] = {desc = '无番起胡',type = gt.PlayInfoType.WANFA},
+		[70] = {desc = '一番起胡',type = gt.PlayInfoType.WANFA},
+		[71] = {desc = '二番起胡',type = gt.PlayInfoType.WANFA},
+		[72] = {desc = '三番起胡',type = gt.PlayInfoType.WANFA},
+		[73] = {desc = '五番起胡',type = gt.PlayInfoType.WANFA},
+		[74] = {desc = '五番封顶',type = gt.PlayInfoType.WANFA},
+		[75] = {desc = '七番封顶',type = gt.PlayInfoType.WANFA},
+		[76] = {desc = '十番封顶',type = gt.PlayInfoType.WANFA},
+		[77] = {desc = '十三番封顶',type = gt.PlayInfoType.WANFA},
+		[78] = {desc = "跟庄 (2分)", type = gt.PlayInfoType.WANFA},
+		[79] = {desc = "跟庄 (3分)", type = gt.PlayInfoType.WANFA},
+		[80] = {desc = "10马", type = gt.PlayInfoType.WANFA},
+		[91] = {desc = "不买胡", type = gt.PlayInfoType.WANFA},
+		[93] = {desc = "买3", type = gt.PlayInfoType.WANFA},
+		[95] = {desc = "买5", type = gt.PlayInfoType.WANFA},
+		[100] = {desc = "门清加分", type = gt.PlayInfoType.PAIXING},
+		[101] = {desc = "无红中加分", type = gt.PlayInfoType.WANFA},
+		[102] = {desc = "杠上开花加马", type = gt.PlayInfoType.WANFA},
+		[103] = {desc = "杠暴全包", type = gt.PlayInfoType.WANFA},
+		[105] = {desc = "20马", type = gt.PlayInfoType.WANFA},
+		[106] = {desc = "四番起胡", type = gt.PlayInfoType.WANFA},
+		[113] = {desc = "十倍听牌可接炮", type = gt.PlayInfoType.WANFA},
+		[114] = {desc = "十倍听牌免分", type = gt.PlayInfoType.WANFA},
+		[115] = {desc = "流局杠算分", type = gt.PlayInfoType.WANFA},
+		[116] = {desc = "无封顶", type = gt.PlayInfoType.WANFA},
+		[117] = {desc = "一炮多响", type = gt.PlayInfoType.WANFA},
+		[118] = {desc = "鸡胡可抢杠", type = gt.PlayInfoType.WANFA},
+	}
+
+end
+
+function PlayinfoConfigBase:getShowList( )
+	return {}
+end
+
+--一些特殊的处理
+function PlayinfoConfigBase:fixData( _msgTable )
+	if not _msgTable then
+		return _msgTable
+	end
+
+	-- 有双鬼的时候显示翻鬼
+	if table.indexof(_msgTable, 28) and not table.indexof(_msgTable, 9) then
+		table.insert(_msgTable, 9)
+	end
+	return _msgTable
+end
+
+return PlayinfoConfigBase

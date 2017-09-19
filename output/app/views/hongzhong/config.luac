@@ -1,0 +1,108 @@
+--region app.views.hongzhong.config
+--author:zhaibin
+--desc:  尝试吧一些数据拿到这里来
+--endregion
+
+local Room = Room;
+local Tools = Tools;
+local gt = gt;
+
+--一种想法，可能实现的话，写起来更舒服
+-- local RuleType = extends(Room.RuleType)
+-- {
+    
+-- }
+
+--仅仅扩展数据，不牵涉道元表的ext 
+local function simple_extends(basic)
+    local rt = clone(basic);
+    return function(ext)
+        ext = ext or {};
+        if(type(ext) ~= 'table') then
+            ext = {}; 
+        end 
+
+        for k,v in pairs(ext) do
+            rt[k] = v; 
+        end
+        return rt;
+    end 
+end 
+
+
+local config = {
+
+    ['RoomType'] = gt.RoomType.ROOM_HONGZHONG,
+    ['RuleType'] = simple_extends(Room.RuleType){
+        [100] = "门清加分",
+        [101] = "无红中加分",
+        [37] = "打出红中加分",
+        [15] = "庄闲加分",
+        [5] = "可胡七对",
+        [102] = "杠上开花加马",
+        [17] = "抢杠全包",
+        [103] = "杠爆全包",
+        [91] = "不买胡",
+        [93] = "买3",
+        [95] = "买5",
+        [0] =  "不扎马", 
+        [2] =  '扎2马',
+        [4] = "扎4马",
+        [6] = "扎6马",
+        [67] = "扎8马",
+        [80] = "扎10马",
+        [68] = "一马全中",
+    },
+    -- 玩法类型
+    Wanfa_Type = {
+        100,    -- 门清加分, 牌型
+        101,    -- 无红中加分
+        37,     -- 打出红中加分
+        15,     -- 庄闲加分 玩法
+        5,      -- 可胡七对 牌型
+        102,    -- 杠上开花加马 玩法
+        17,     -- 抢杠全包。  玩法
+        103,    -- 杠爆全包 103
+    },
+
+    -- 买胡 
+    Maihu_Type = {
+        91,     --不买胡
+        93,     --买3
+        95,      --买5
+    },
+
+    -- 扎马
+    Zhama_Type  = {
+        0,  -- 不扎马 
+        2,  -- 扎2马
+        4,  -- 扎4马
+        6,  -- 扎6马
+        67,  -- 扎8马
+        80,  -- 扎10马
+        68,  -- 一马全中
+    },
+
+    --默认选中 
+    defaltConfig = {
+        --保存值
+        WANFA_KEY = "guangdong_hongzhong_wanfa",
+        MAIHU_KEY = "guangdong_hongzhong_maihu",
+        ZHAMA_KEY = "guangdong_hongzhong_zhama",
+        --玩法
+        wanfa = {1,2,3,4,5,6,7,8},
+        --买胡 
+        maihu = 1,
+        --扎码
+        zhama = 2
+    },
+};
+
+
+
+function config:getGameType()
+    return Tools.GAME_TYPE[self.RoomType + 1];
+end 
+
+
+return config;

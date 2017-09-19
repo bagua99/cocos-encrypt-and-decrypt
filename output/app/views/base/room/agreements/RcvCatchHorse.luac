@@ -1,0 +1,23 @@
+local RcvCatchHorse = class("RcvCatchHorse", BaseRoomAgreement)
+
+-- 通知抓马
+function RcvCatchHorse:ctor()
+	self:registerMsgListener(gt.GC_JIEYANG_CATCH_HORSE, self, self.onRcvCatchHorse)
+end
+
+--
+-- msg = {
+-- 	m_cardNum, --number => 桌子剩余牌数量
+-- 	m_horseCar = { --马牌
+-- 		m_color,
+-- 		m_number,
+-- 	},
+-- }
+function RcvCatchHorse:onRcvCatchHorse(msgTbl)
+	print("RcvAddPlayer:onRcvCatchHorse");
+	--self.m_scene:catchHorse(msgTbl);
+	
+end
+
+
+return RcvCatchHorse

@@ -1,0 +1,136 @@
+
+local gt = cc.exports.gt
+
+local JoinRoom = class("JoinRoom", function()
+	return gt.createMaskLayer()
+end)
+
+function JoinRoom:ctor()
+	local csbNode = cc.CSLoader:createNode("JoinRoom.csb")
+	csbNode:setPosition(gt.winCenter)
+	self:addChild(csbNode)
+
+	-- 最大输入6个数字
+	self.inputMaxCount = 6
+	-- 数字文本
+	self.inputNumLabels = {}
+	self.curInputIdx = 1
+	for i = 1, self.inputMaxCount do
+		local numLabel = gt.seekNodeByName(csbNode, "Label_num_" .. i)
+		numLabel:setString("")
+		self.inputNumLabels[i] = numLabel
+	end
+
+	-- 数字按键
+	for i = 0, 9 do
+		local numBtn = gt.seekNodeByName(csbNode, "Btn_num_" .. i)  --遍历数字按键
+		numBtn:setTag(i)  --设置标记为0-9
+		-- numBtn:addClickEventListener(handler(self, self.numBtnPressed))  --添加点击事件
+		gt.addBtnPressedListener( numBtn, handler(self,self.numBtnPressed))
+	end
+
+	-- 重置按键
+	local resetBtn = gt.seekNodeByName(csbNode, "Btn_reset")
+	gt.addBtnPressedListener(resetBtn, function()
+		for i = self.inputMaxCount, 1 , -1 do
+			local numLabel = gt.seekNodeByName(csbNode, "Label_num_" .. i)
+			numLabel:setString("")
+		end
+		self.curInputIdx = 1  --光标设置在第一位
+	end)
+
+   -- 删除按键
+	local delBtn = gt.seekNodeByName(csbNode, "Btn_del")
+	gt.addBtnPressedListener(delBtn, function()
+		for i = self.curInputIdx - 1, 1 , -1 do
+			if self.curInputIdx - 1  >= 1 then
+				local numLabel = gt.seekNodeByName(csbNode, "Label_num_" .. i)
+				numLabel:setString("")
+				self.curInputIdx = self.curInputIdx - 1
+			end
+			break
+		end
+	end)
+
+	-- 关闭按键
+	local closeBtn = gt.seekNodeByName(csbNode, "Btn_close")
+	gt.addBtnPressedListener(closeBtn, function()
+		self:removeFromParent()
+	end)
+
+	--gt.socketClient:registerMsgListener(gt.GC_JOIN_ROOM, self, self.onRcvJoinRoom)
+end
+
+function JoinRoom:numBtnPressed(senderBtn)
+	local btnTag = senderBtn:getTag()
+	local numLabel = self.inputNumLabels[self.curInputIdx]
+	numLabel:setString(tostring(btnTag))
+	if self.curInputIdx >= #self.inputNumLabels then
+		local roomID = 0
+		local tmpAry = {100000, 10000, 1000, 100, 10, 1}
+		for i = 1, self.inputMaxCount do
+			local inputNum = tonumber(self.inputNumLabels[i]:getString())
+			roomID = roomID + inputNum * tmpAry[i]
+		end
+
+		-- 清除已输入信息
+		self.curInputIdx = 1
+		for i = 1, self.inputMaxCount do
+			local numLabel = self.inputNumLabels[i]
+			numLabel:setString("")
+		end
+
+		-- 发送进入房间消息
+		local msgToSend = {}
+		msgToSend.m_msgId = gt.CG_JOIN_ROOM
+		msgToSend.m_deskId = roomID
+		msgToSend.m_location = Tools.getLocationStr()
+		gt.socketClient:sendMessage(msgToSend)
+
+		gt.showLoadingTips(gt.getLocationString("LTKey_0006"))
+	else
+		self.curInputIdx = self.curInputIdx + 1
+	end
+end
+
+-- function JoinRoom:onRcvJoinRoom(msgTbl)
+-- 	if msgTbl.m_errorCode ~= 0 then
+-- 		-- 进入房间失败
+-- 		-- gt.removeLoadingTips()
+-- 		-- if msgTbl.m_errorCode == 1 then
+-- 		-- 	-- 房间人已满
+-- 		-- 	require("app/views/NoticeTips"):create(gt.getLocationString("LTKey_0007"), gt.getLocationString("LTKey_0018"), nil, nil, true)
+-- 		-- else
+-- 		-- 	-- 房间不存在
+-- 		-- 	require("app/views/NoticeTips"):create(gt.getLocationString("LTKey_0007"), gt.getLocationString("LTKey_0015"), nil, nil, true)
+-- 		-- end
+
+-- 		-- self.curInputIdx = 1
+-- 		-- for i = 1, self.inputMaxCount do
+-- 		-- 	local numLabel = self.inputNumLabels[i]
+-- 		-- 	numLabel:setString("")
+-- 		-- end
+-- 		gt.removeLoadingTips()
+-- 		if msgTbl.m_errorCode ~= 0 then
+-- 			-- 进入房间失败		
+-- 			if msgTbl.m_errorCode == 1 then
+-- 				-- 房间人已满
+-- 				require("app/views/NoticeTips"):create(gt.getLocationString("LTKey_0007"), gt.getLocationString("LTKey_0018"), nil, nil, true)
+-- 			elseif msgTbl.m_errorCode == 2 then
+-- 				-- 房间不存在
+-- 				require("app/views/NoticeTips"):create(gt.getLocationString("LTKey_0007"), gt.getLocationString("LTKey_0015"), nil, nil, true)
+-- 			elseif msgTbl.m_errorCode == 3 then 
+-- 				-- 3 bug 5176 同样提示 房间不存在
+-- 				require("app/views/NoticeTips"):create(gt.getLocationString("LTKey_0007"), gt.getLocationString("LTKey_0015"), nil, nil, true)
+-- 			elseif msgTbl.m_errorCode == 4 then 
+-- 				--作弊嫌疑
+-- 				require("app/views/NoticeTips"):create(gt.getLocationString("LTKey_0007"), gt.getLocationString("LTKey_0072"), nil, nil, true)
+-- 			else
+-- 				require("app/views/NoticeTips"):create(gt.getLocationString("LTKey_0007"), gt.getLocationString("LTKey_0059"), nil, nil, true)			
+-- 			end
+-- 		end
+-- 	end
+-- end
+
+return JoinRoom
+

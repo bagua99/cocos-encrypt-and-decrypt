@@ -1,0 +1,99 @@
+--region app.views.meizhou_hongzhongbao.room.RoomScene
+--desc: meizhou_hongzhongbao的房间内Scene
+--endregion 
+
+local _mod = ...;
+_mod= string.gsub(_mod,"%/","%.");
+
+print('mod = '.._mod);
+
+local config = import('..config',_mod);
+local RuleType = config.RuleType;
+
+local RoomScene = class("RoomScene", BaseRoomScene)
+
+function RoomScene:ctor(msgTbl)
+	dump(msgTbl,"meizhou_hongzhongbao===")
+	self.super.ctor(self,msgTbl,config:getGameType());
+	-- self.m_ghost_type = msgTbl.m_playtype[2]
+	self.m_room:setGui({m_color = 5, m_number = 1})
+	gt.anglePngPath = "res/sd/images/otherImages/gui_icon.png"
+	self:initGhost()
+end
+
+-- function RoomScene:initCsb()
+-- 	print("Tuidao_two RoomScene:initCsb");
+
+-- 	self.super.initCsb(self);
+-- 	local turnPosBgSpr = gt.seekNodeByName(self.m_csbLayer, "Spr_turnPosBg")
+-- 	--turnPosBgSpr:setVisible(false)
+-- 	turnPosBgSpr:setTexture('images/otherImages/roompos/three_turn_pos_bg.png')
+	
+-- 	for i = 1 ,4 do 
+-- 		local uiNode = gt.seekNodeByName(turnPosBgSpr,'Spr_turnPos_'..i);
+-- 		uiNode:setTexture("images/otherImages/roompos/three_turn_pos_" ..tostring(i-1)..".png");
+-- 	end 
+-- end 
+
+function RoomScene:initListener( _subArgeements )	
+	local argeements = {
+		"RcvRoundReport"
+	}
+	
+	RoomScene.super.initListener(self, argeements)
+end
+
+
+-- 玩法设置
+function RoomScene:getRuleDesc( _msgTbl, _splitChar , _type)
+	print("规则==")
+	local ruleDesc = ""
+	if _type == RoomScene.RULEDESC_TYPE.ROOM then
+		ruleDesc = Room.TypeName[_msgTbl.m_state + 1]
+	end
+	local qiduiType, qianggangType = 0, nil
+	local minggang = nil
+	for i, v in ipairs(_msgTbl.m_playtype) do
+		if v == 0 then
+			ruleDesc = ruleDesc .. " 无马"
+		-- elseif v == 5 or v == 16 then
+		-- 	if qiduiType < v then
+		-- 		qiduiType = v
+		-- 	end
+		-- elseif v == 17 or v == 18 then
+		-- 	if qianggangType then
+		-- 		if qianggangType > v then
+		-- 			qianggangType = v
+		-- 		end
+		-- 	else
+		-- 		qianggangType = v
+		-- 	end
+		-- elseif v == 30 then
+		-- 	minggang = true
+		elseif Room.RuleType[v] then
+			ruleDesc = ruleDesc .. _splitChar .. Room.RuleType[v]
+		end
+	end
+
+	-- if qiduiType > 0 then
+	-- 	if qiduiType == 5 then
+	-- 		ruleDesc = ruleDesc .. _splitChar .."七对不加番"
+	-- 	else
+	-- 		ruleDesc = ruleDesc .. _splitChar .. Room.RuleType[qiduiType]
+	-- 	end
+	-- end
+	
+	-- if minggang then
+	-- 	ruleDesc = ruleDesc .. _splitChar .. Room.RuleType[30]
+	-- end
+
+	-- if qianggangType then
+	-- 	if qianggangType == 18 and minggang then
+	-- 	else
+	-- 		ruleDesc = ruleDesc .. _splitChar .. Room.RuleType[qianggangType]
+	-- 	end
+	-- end
+	return ruleDesc
+end
+
+return RoomScene

@@ -1,0 +1,36 @@
+local RcvModifyHeadFrame = class("RcvModifyHeadFrame", BaseRoomAgreement)
+
+-- 同步玩家准备状态 118
+
+function RcvModifyHeadFrame:ctor()
+	self:registerMsgListener(gt.GC_MODIFY_HEAD_RRAME, self, self.onRcvMsg)
+end
+
+function RcvModifyHeadFrame:onRcvMsg(msgTbl)
+	print("RcvModifyHeadFrame:onRcvMsg");
+	--暂时不处理
+
+	--dump(msgTbl,'msgTbl');
+	-- local seatIdx = msgTbl.m_pos + 1
+	-- local room = self.m_scene:getRoom()
+	-- local mainSeat = room:getMainSeatIdx()
+	-- if seatIdx == mainSeat then
+	-- 	room:setRoomStatus(Room.Status.WAIT)
+	-- end	
+	
+	-- room:setReady(seatIdx, 1)
+    if(msgTbl.m_errorCode == 0) then  --正常
+        --local headFrameIndex = msgTbl.m_result;
+		
+    elseif(msgTbl.m_errorCode == 1) then --INVALID VALUE 无效值
+		require("app/views/NoticeTips"):create("提示", "无效的值，请重新选择头像框", nil, nil, true) 
+    elseif(mstTbl.m_errorCode == 2) then --already used 已经在使用了
+		require("app/views/NoticeTips"):create("提示", "当前头像框已经在使用", nil, nil, true) 
+    elseif(msgTbl.m_errorCode == 3) then --NOTGAIN 没有获得
+		require("app/views/NoticeTips"):create("提示", "当前头像框尚未解锁", nil, nil, true) 
+    end 
+
+	-- self.m_scene:headFrameModify()
+end
+
+return RcvModifyHeadFrame

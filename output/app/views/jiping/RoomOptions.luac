@@ -1,0 +1,69 @@
+local RoomOptions = class("RoomOptions", BaseRoomOptions)
+
+local SELECT_JIPING_WANFA_KEY = "guangdong_jiping_wanfa"
+
+local userDefault = cc.UserDefault:getInstance()
+
+--local Wanfa_Type = {3, 1, 0}
+local Wanfa_Type = {72, 70, 69}
+
+function RoomOptions:ctor()
+	self.csbNode = cc.CSLoader:createNode("res/views/guangdong/CreateJiping.csb")
+	self:addChild(self.csbNode)
+	RoomOptions.super.ctor(self)
+end
+
+function RoomOptions:initWanfa()
+	self.playWanfa = userDefault:getIntegerForKey(SELECT_JIPING_WANFA_KEY, 1)
+
+	local function setSelectWanfa(index, check)
+		self.wanfaNodes[index].check:setSelected(check or false)
+		self:refreshCheckOutline(self.wanfaNodes[index].label, check or false)
+		if check then
+			self.playWanfa = index
+			userDefault:setIntegerForKey(SELECT_JIPING_WANFA_KEY, index)
+		end
+	end
+	local function checkBoxWanfa( sender, eventType )
+		if eventType == ccui.CheckBoxEventType.selected then
+			if self.playWanfa ~= sender.index then
+				setSelectWanfa(self.playWanfa, false)
+				setSelectWanfa(sender.index, true)
+			end
+		elseif eventType == ccui.CheckBoxEventType.unselected then
+			sender:setSelected(true)
+		end
+	end
+
+	self.wanfaNodes = self:getNodes(self.csbNode, "wanfa", #Wanfa_Type)
+	for i, v in ipairs(self.wanfaNodes) do
+		if self.playWanfa == i then
+			setSelectWanfa(i, true)
+		else
+			setSelectWanfa(i)
+		end
+		
+		v.check.index = i
+		v.check:addEventListener(checkBoxWanfa)
+
+		v.panel:addClickEventListener(function(  )
+			if not v.check:isSelected() then
+				checkBoxWanfa(v.check, ccui.CheckBoxEventType.selected)
+			end
+		end)
+	end
+end
+
+function RoomOptions:getStatu()
+	return gt.RoomType.ROOM_JIPINGHU
+end
+
+function RoomOptions:getPlayType()
+	local typeList = {}
+
+	table.insert(typeList, Wanfa_Type[self.playWanfa])
+
+	return typeList
+end
+
+return RoomOptions

@@ -1,0 +1,48 @@
+local gt = cc.exports.gt
+local FONTSCOLOR = cc.c3b(254,205,255);
+
+local UpdateSuccess = class("UpdateSuccess", function()
+	return gt.createMaskLayer()
+end)
+
+function UpdateSuccess:ctor(str, isError)
+	local csbNode = cc.CSLoader:createNode("UpdateSuccess.csb")
+	csbNode:setPosition(gt.winCenter)
+	self:addChild(csbNode)
+
+	self.m_scrollView = gt.seekNodeByName(csbNode, "ScrollView_content")
+
+	-- 关闭按键
+	local closeBtn = gt.seekNodeByName(csbNode, "Btn_close")
+	gt.addBtnPressedListener(closeBtn, function()
+		self:removeFromParent()
+	end)
+
+	if isError then
+		gt.seekNodeByName(csbNode, "Sprite_title"):setVisible(false)
+	end
+
+	self:initContent(str)
+end
+
+function UpdateSuccess:initContent(str)
+	str = str or ""
+	local scrollVwSize = self.m_scrollView:getContentSize()
+	local contentLabel = gt.createTTFLabel(str, 36)
+	contentLabel:setAnchorPoint(0.5, 1)
+	contentLabel:setColor(FONTSCOLOR)
+	contentLabel:setVerticalAlignment(cc.VERTICAL_TEXT_ALIGNMENT_TOP)
+	contentLabel:setWidth(scrollVwSize.width-20)
+	local labelSize = contentLabel:getContentSize()
+	if labelSize.height <= scrollVwSize.height then
+		contentLabel:setPosition(scrollVwSize.width/2-10, scrollVwSize.height)
+		self.m_scrollView:setEnabled(false)
+	else
+		contentLabel:setPosition(scrollVwSize.width/2-10, labelSize.height)
+		self.m_scrollView:setEnabled(true)
+	end
+	self.m_scrollView:addChild(contentLabel)
+	self.m_scrollView:setInnerContainerSize(labelSize)
+end
+
+return UpdateSuccess

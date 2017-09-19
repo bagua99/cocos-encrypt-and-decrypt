@@ -1,0 +1,16 @@
+local RcvSyncRoomState = class("RcvSyncRoomState", BaseRcvSyncRoomState)
+
+-- 同步房间状态 35
+function RcvSyncRoomState:ctor()
+	self:registerMsgListener(gt.GC_SYNC_ROOM_STATE, self, self.onRcvSyncRoomState)
+end
+
+function RcvSyncRoomState:onRcvSyncRoomState(msgTbl)
+	RcvSyncRoomState.super.onRcvSyncRoomState(self, msgTbl)
+	--设置风圈
+	if msgTbl.m_fengQuan then
+		self.m_scene:setRingType(msgTbl.m_fengQuan + 1)
+	end
+end
+
+return RcvSyncRoomState

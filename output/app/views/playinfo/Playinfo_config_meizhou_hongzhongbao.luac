@@ -1,0 +1,15 @@
+local PlayinfoConfigMeiZhouHongZhongBao = class("PlayinfoConfigBase", require("app/views/playinfo/Playinfo_config_base"))
+
+function PlayinfoConfigMeiZhouHongZhongBao:ctor(  )
+	PlayinfoConfigMeiZhouHongZhongBao.super.ctor(self)
+	self.ruleType[0].desc = "无马"
+end
+
+function PlayinfoConfigMeiZhouHongZhongBao:getShowList( )
+	return {
+		69,72,106,73,35,
+		
+		0, 2, 4, 6,67,
+	}
+end
+return PlayinfoConfigMeiZhouHongZhongBao

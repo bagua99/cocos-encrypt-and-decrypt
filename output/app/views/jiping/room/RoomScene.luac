@@ -1,0 +1,85 @@
+local RoomScene = class("RoomScene", BaseRoomScene)
+
+function RoomScene:ctor(msgTbl)
+	RoomScene.super.ctor(self, msgTbl, Tools.GAME_TYPE[gt.RoomType.ROOM_JIPINGHU + 1])
+
+	--初始化风圈
+	self:initRing()	
+
+	-- 初始化海底捞月
+	self:initHaiDiLaoYue()
+	cc.SpriteFrameCache:getInstance():addSpriteFrames("res/sd/images/cshupaitype.plist")
+end
+
+function RoomScene:setHaveHaiDiPai(_isHave)
+	self.haveHaidiPai = _isHave
+end
+
+function RoomScene:getHaveHaiDiPai()
+	return self.haveHaidiPai
+end
+
+function RoomScene:initHaiDiLaoYue()
+	self.m_haidilao = gt.createCSAnimation("res/views/guangdong/HaiDiLao.csb")
+	self.m_haidilao:setVisible(false)
+	self.m_haidilao:setName("haidilao")
+	self.m_haidilao:setPosition(cc.p(display.width / 2, display.height / 2))
+	self:addChild(self.m_haidilao, Room.ZOrder.HAIDILAOYUE)
+
+	self.m_haidipai = gt.createCSAnimation("res/views/guangdong/HaiDiPai.csb")
+	self.m_haidipai:setVisible(false)
+	self.m_haidipai:setName("haidipai")
+	self.m_haidipai:setPosition(cc.p(display.width / 2, display.height / 2))
+	self:addChild(self.m_haidipai, Room.ZOrder.HAIDILAOYUE)
+end
+
+function RoomScene:getHaiDiLao()
+	return self.m_haidilao
+end
+
+function RoomScene:getHaiDiPai()
+	return self.m_haidipai
+end
+
+--设置风圈
+function RoomScene:setRing(  )
+	self.m_ringNode:removeAllChildren()
+
+	if self.ring_type then
+		self.fengquan = cc.Sprite:create( string.format("res/sd/images/otherImages/ring_%d.png", self.ring_type))
+		self.fengquan:setAnchorPoint(cc.p(0.5,1))
+		self.m_ringNode:addChild(self.fengquan)		
+	end
+end
+
+function RoomScene:initRing(  )
+	self.m_ringNode = gt.seekNodeByName(self:getCsbLayer(), "FileNode_Fengquan")
+	self:setRingType(1)
+end
+
+function RoomScene:getRingType(  )
+	return self.ring_type
+end
+
+function RoomScene:setRingType( _type )
+	if _type then
+		if _type ~= self.ring_type then
+			self.ring_type = _type
+			self:setRing()
+		end
+	end
+end
+
+function RoomScene:initListener( _subArgeements )	
+	local argeements = {
+		"HaidiRcvMakeDescision",
+		"RcvShowHaidi"
+	}
+	RoomScene.super.initListener(self, argeements)
+end
+
+function RoomScene:getDecisionType( flag )
+	return flag
+end
+
+return RoomScene

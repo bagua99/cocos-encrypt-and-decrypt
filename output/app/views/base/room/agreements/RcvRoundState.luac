@@ -1,0 +1,17 @@
+local RcvRoundState = class("RcvRoundState", BaseRoomAgreement)
+
+-- 同步牌局数 41
+function RcvRoundState:ctor()
+	self:registerMsgListener(gt.GC_ROUND_STATE, self, self.onRcvRoundState)
+end
+
+function RcvRoundState:onRcvRoundState(msgTbl)
+	local csbLayer = self.m_scene:getCsbLayer()
+	-- 牌局状态,剩余牌
+	local roundStateNode = gt.seekNodeByName(csbLayer, "Node_roundState")
+	roundStateNode:setVisible(true)
+	local remainTilesLabel = gt.seekNodeByName(roundStateNode, "Label_remainRounds")
+	remainTilesLabel:setString(string.format("%d/%d局", (msgTbl.m_curCircle + 1), msgTbl.m_curMaxCircle))
+end
+
+return RcvRoundState

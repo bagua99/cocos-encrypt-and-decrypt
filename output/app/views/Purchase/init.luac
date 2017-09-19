@@ -1,0 +1,102 @@
+﻿-- Creator Xin Zhang
+-- Create Time 2015/09/16
+
+local gt = cc.exports.gt
+
+local mt =
+{
+	implement = require("app/views/Purchase/AppStore") or { },
+
+	sdkBridge =
+	{
+		init = nil,
+		login = nil,
+		logout = nil,
+		pay = nil,
+		messageHandler = nil,
+		channelID = 0,
+		payWay="",
+		platformID = "",
+		infoList = {}
+	}
+}
+
+
+mt.sdkBridge.channelID = mt.implement.channelID
+mt.sdkBridge.platformID = mt.implement.platformID
+mt.sdkBridge.payWay = mt.implement.payWay
+--mt.sdkBridge.infoList = infoList
+-- start --
+--------------------------------
+-- @class function init
+-- @description 初始化
+-- end --
+local function init()
+	if mt.implement.init and gt.isOpenIAP then
+		mt.implement.init()
+		dump(mt.implement)
+	end
+end
+mt.sdkBridge.init = init
+
+-- start --
+--------------------------------
+-- @class function login
+-- @description 登录
+-- end --
+local function login()
+	if mt.implement.login then
+		mt.implement.login()
+	end
+end
+mt.sdkBridge.login = login
+
+-- start --
+--------------------------------
+-- @class function logout
+-- @description 注销
+-- end --
+local function logout()
+	if mt.implement.logout then
+		mt.implement.logout()
+	end
+end
+mt.sdkBridge.logout = logout
+
+-- start --
+--------------------------------
+-- @class function pay
+-- @description 注销
+-- end --
+local function pay(...)
+	if mt.implement.pay then
+		mt.implement.pay(...)
+	end
+end
+mt.sdkBridge.pay = pay
+
+
+
+-- start --
+--------------------------------
+-- @class function handleMessageFromSdk
+-- @description 消息处理，此函数必须为全局函数
+-- end --
+-- function handleMessageFromSdk(messageJson)
+-- 	if not messageJson then
+-- 		return
+-- 	end
+
+-- 	local msgTbl = json.decode(messageJson) or { }
+-- 	dump(msgTbl)
+
+-- 	if mt.implement.messageHandler then
+-- 		mt.implement.messageHandler(msgTbl)
+-- 	end
+-- end
+-- mt.sdkBridge.messageHandler = handleMessageFromSdk
+
+gt.sdkBridge = mt.sdkBridge
+
+-- 以下是发送消息给SDK的示例
+--ApiBridge:postMessageToSdk(json.encode({ abc = "123" }))

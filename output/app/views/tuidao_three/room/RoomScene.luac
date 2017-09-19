@@ -1,0 +1,94 @@
+--region app.views.tuidao_three.room.RoomScene
+--date: 2016-11-14
+--desc: 三人推倒胡 的 房间场景
+--
+
+local RoomScene = class("RoomScene", BaseRoomScene)
+
+function RoomScene:ctor(msgTbl)
+	RoomScene.super.ctor(self, msgTbl, Tools.GAME_TYPE[gt.RoomType.ROOM_TUIDAOHU_THREE + 1])
+	--设置鬼牌
+	for k,v in pairs(msgTbl.m_playtype) do
+		print("m_playtype = ", v)
+		if v == 8 then --白板鬼
+			self.m_room:setGui({m_color = 5, m_number = 3})
+			self.m_ghost_type = 8
+			-- gt.socketClient:dispatchMessage({m_msgId = 161, m_ghostCard = {m_color = 1, m_numbe = 9}})
+			break
+		elseif v == 9 then -- 翻牌鬼
+			self.m_ghost_type = 9
+			-- self:setGhostAnimation(true)
+			break
+		elseif v == 28 then --双鬼
+			self.m_ghost_type = 28
+			break
+		elseif v == 10 then
+			self.m_isFeng = false
+		end
+	end	
+	gt.anglePngPath = "res/sd/images/otherImages/gui_icon.png"
+	self:initGhost()
+end
+
+function RoomScene:initListener( _subArgeements )	
+	local argeements = {
+		"RcvRoundReport"
+	}
+	
+	RoomScene.super.initListener(self, argeements)
+end
+
+
+-- 玩法设置
+function RoomScene:getRuleDesc( _msgTbl, _splitChar , _type)
+	local ruleDesc = ""
+	if _type == RoomScene.RULEDESC_TYPE.ROOM then
+		ruleDesc = Room.TypeName[_msgTbl.m_state + 1]
+	end
+	local qiduiType, qianggangType = 0, nil
+	local minggang = nil
+	for i, v in ipairs(_msgTbl.m_playtype) do
+		if v == 0 then
+			ruleDesc = ruleDesc .. " 无马"
+		elseif v == 5 or v == 16 then
+			if qiduiType < v then
+				qiduiType = v
+			end
+		elseif v == 17 or v == 18 then
+			if qianggangType then
+				if qianggangType > v then
+					qianggangType = v
+				end
+			else
+				qianggangType = v
+			end
+		elseif v == 30 then
+			minggang = true
+		elseif Room.RuleType[v] then
+			ruleDesc = ruleDesc .. _splitChar .. Room.RuleType[v]
+		end
+	end
+
+	if qiduiType > 0 then
+		if qiduiType == 5 then
+			ruleDesc = ruleDesc .. _splitChar .."七对不加番"
+		else
+			ruleDesc = ruleDesc .. _splitChar .. Room.RuleType[qiduiType]
+		end
+	end
+	
+	if minggang then
+		ruleDesc = ruleDesc .. _splitChar .. Room.RuleType[30]
+	end
+
+	if qianggangType then
+		if qianggangType == 18 and minggang then
+		else
+			ruleDesc = ruleDesc .. _splitChar .. Room.RuleType[qianggangType]
+		end
+	end
+	
+	return ruleDesc
+end
+
+return RoomScene

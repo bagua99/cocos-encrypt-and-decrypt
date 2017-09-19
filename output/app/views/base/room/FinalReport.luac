@@ -1,0 +1,260 @@
+local gt = cc.exports.gt
+
+local FinalReport = class("FinalReport", function()
+	return cc.Layer:create()
+end)
+
+function FinalReport:ctor()
+	-- 注册节点事件
+	self:registerScriptHandler(handler(self, self.onNodeEvent))	
+end
+
+function FinalReport:getCSBNodeFile()
+	return "FinalReport.csb"
+end 
+
+function FinalReport:init(roomPlayers, rptMsgTbl)
+	local function loadCSBNode()
+		local path = self:getCSBNodeFile();
+		gt.log("FinalReport:getCSBNodeFile() = "..path)
+		local csbNode= cc.CSLoader:createNode(path)
+		--csbNode:setAnchorPoint(0.5, 0.5)
+		:align(cc.p(0.5,0.5),gt.winCenter)
+		--csbNode:setPosition(gt.winCenter)
+		--self:addChild(csbNode)
+		:addTo(self)
+		self.rootNode = csbNode
+		return self.rootNode;
+	end 
+
+	local csbNode = loadCSBNode()
+	local cannonMaxCount = 0
+	for i, v in ipairs(rptMsgTbl.m_bomb) do
+		for j, v_d in ipairs(rptMsgTbl.m_dbomb) do
+			if i == j then
+				local curCannon = v+v_d
+				if curCannon > cannonMaxCount then
+					cannonMaxCount = curCannon
+				end
+			end
+		end
+	end
+
+	-- 大赢家
+	local scoreMaxCount = 0
+	for i, v in ipairs(rptMsgTbl.m_gold) do
+		if v > scoreMaxCount then
+			scoreMaxCount = v
+		end
+	end
+
+	for seatIdx, roomPlayer in ipairs(roomPlayers) do
+		local playerReportNode = gt.seekNodeByName(csbNode, "Node_playerReport_" .. seatIdx)
+		-- 玩家信息
+		if(playerReportNode ~= nil) then 
+			local playerInfoNode = gt.seekNodeByName(playerReportNode, "Node_info")
+			-- 头像
+			local headSpr = gt.seekNodeByName(playerInfoNode, "Spr_head")
+			local headPath = string.format("%shead_img_%d.png", cc.FileUtils:getInstance():getWritablePath(), roomPlayer:getuid())
+			if cc.FileUtils:getInstance():isFileExist(headPath) then
+				headSpr:setTexture(headPath)
+			else
+				--headSpr:setSpriteFrame("head_img_male.png")
+				headSpr:setTexture("images/otherImages/headframes/head_img_male.png");
+			end
+
+			local headFrameSpr = gt.seekNodeByName(playerInfoNode, "Spr_headFrame");
+			local headFramePos= cc.p(headFrameSpr:getPosition())
+			local headIndex = roomPlayer:getCurHeadIconId() + 1;
+			print("headIndex " ..headIndex);
+			--if(headIndex ~= 1) then 
+				-- headFrameSpr:setContentSize(cc.size(0,0));
+				-- local str = string.format("res/sd/images/otherImages/headframes/%03d.png",headIndex)
+				-- headFrameSpr:setTexture(str)
+				-- headFrameSpr:setPosition(cc.p(headFramePos.x,headFramePos.y));
+				-- headFrameSpr:setScale(0.95);
+				gt.addHeadFrames_Sprite(headFrameSpr,headIndex,0.95);
+				headFrameSpr:setPosition(cc.p(headFramePos.x,headFramePos.y));
+			--end 
+			-- 昵称
+			local nicknameLabel = gt.seekNodeByName(playerInfoNode, "Label_nickname")
+			nicknameLabel:setString(Tools.getUTF8StrByLenth(roomPlayer:getName(), 6) or "")
+			
+			-- uid
+			local uidLabel = gt.seekNodeByName(playerInfoNode, "Label_uid")
+			uidLabel:setString("ID: " .. roomPlayer:getuid())
+
+			-- 最佳炮手
+			local bestCannoneerSpr = gt.seekNodeByName(playerReportNode, "Spr_bestCannoneer")
+			bestCannoneerSpr:setVisible(false)
+			if cannonMaxCount ~= 0 and cannonMaxCount == rptMsgTbl.m_bomb[seatIdx] + rptMsgTbl.m_dbomb[seatIdx] then
+				bestCannoneerSpr:setVisible(true)
+			end
+
+			-- 大赢家
+			local bigWinnerSpr = gt.seekNodeByName(playerReportNode, "Spr_bigWinner")
+			bigWinnerSpr:setVisible(false)
+			local shengliwaikuangSpr = gt.seekNodeByName(playerReportNode, "Sprite_shengliwaikuang")
+			if(shengliwaikuangSpr)then 
+				shengliwaikuangSpr:setVisible(false);
+			end 
+			if scoreMaxCount ~= 0 and scoreMaxCount == rptMsgTbl.m_gold[seatIdx] then
+				bigWinnerSpr:setVisible(true)
+				if(shengliwaikuangSpr)then 
+					shengliwaikuangSpr:setVisible(true);
+				end 
+			end
+
+			-- 房主
+			local spr_homeOwner = gt.seekNodeByName(playerReportNode, "Sprite_houseOwner")
+			spr_homeOwner:setVisible(roomPlayer:getSeatIdx() == 1)
+
+			-- 判断房间类型
+			gt.log("房间类型")
+			self:setHuCount(self:getHuCountNode(playerReportNode), rptMsgTbl, seatIdx)
+
+			-- 总成绩
+			local totalScoreLabel = gt.seekNodeByName(playerReportNode, "Label_totalScore")
+			totalScoreLabel:setString(tostring(rptMsgTbl.m_gold[seatIdx]))
+		end
+	end
+
+	-- 返回游戏大厅
+	local backBtn = gt.seekNodeByName(csbNode, "Btn_back")
+	gt.addBtnPressedListener(backBtn, function()
+		gt.log("onEvent_Btn_back")
+		local runningScene = display.getRunningScene()
+		if runningScene and runningScene.backMainSceneEvt then
+			runningScene:backMainSceneEvt()
+		end
+	end)
+
+	-- 分享
+	local shareBtn = gt.seekNodeByName(csbNode, "Btn_share")
+	gt.addBtnPressedListener(shareBtn, function()
+	gt.log("onEvent_Btn_share")
+		shareBtn:setEnabled(false)
+		self:screenshotShareToWX()
+	end)
+
+	if gt.isIOSPlatform() and gt.isInReview then
+		shareBtn:setVisible(false)
+	else
+		shareBtn:setVisible(true)
+	end
+end
+
+function FinalReport:getHuCountNode( _playerReportNode )
+	local nodeList = _playerReportNode:getChildren()
+	local showNode = nil
+	for k,node in pairs(nodeList) do
+		if string.find(node:getName(), "Node_resultDes_") == 1 then
+			if node:getName() == self:getHuCountNodeName() then
+				node:setVisible(true)
+				showNode = node
+			else
+				node:setVisible(false)
+			end
+		end
+	end
+	return showNode
+end
+
+--胡牌类型的名字
+function FinalReport:getHuCountNodeName(  )
+	return " "
+end
+
+function FinalReport:setHuCount(Node_resultDes_zz, rptMsgTbl, seatIdx)
+	-- -- 长沙麻将
+	-- Node_resultDes_zz:setVisible(false)
+	-- Node_resultDes_cs:setVisible(true)
+
+	-- -- 大胡自摸
+	-- local selfDrawnCountBigLabel = gt.seekNodeByName(Node_resultDes_cs, "Label_selfDrawn_big_count")
+	-- selfDrawnCountBigLabel:setString(tostring(rptMsgTbl.m_dzimo[seatIdx]))
+
+	-- -- 小胡自摸
+	-- local selfDrawnCountSmallLabel = gt.seekNodeByName(Node_resultDes_cs, "Label_selfDrawn_small_count")
+	-- selfDrawnCountSmallLabel:setString(tostring(rptMsgTbl.m_zimo[seatIdx]))
+
+	-- -- 大胡点炮
+	-- local takeCannonCountBigLabel = gt.seekNodeByName(Node_resultDes_cs, "Label_takeCannonCount_big")
+	-- takeCannonCountBigLabel:setString(tostring(rptMsgTbl.m_dbomb[seatIdx]))
+
+	-- -- 小胡点炮
+	-- local takeCannonCountSmallLabel = gt.seekNodeByName(Node_resultDes_cs, "Label_takeCannonCount_small")
+	-- takeCannonCountSmallLabel:setString(tostring(rptMsgTbl.m_bomb[seatIdx]))
+
+	-- -- 大胡接炮
+	-- local cannonCount_big = gt.seekNodeByName(Node_resultDes_cs, "Label_cannonCount_big")
+	-- cannonCount_big:setString(tostring(rptMsgTbl.m_dwin[seatIdx]))
+
+	-- -- 小胡接炮
+	-- local cannonCount_small = gt.seekNodeByName(Node_resultDes_cs, "Label_cannonCount_small")
+	-- cannonCount_small:setString(tostring(rptMsgTbl.m_win[seatIdx]))
+end
+
+function FinalReport:screenshotShareToWX()
+	local winSize = cc.Director:getInstance():getWinSize()
+	local layerSize = self.rootNode:getContentSize()
+	local dy = (winSize.height-layerSize.height)/2
+	local screenshot = cc.RenderTexture:create(layerSize.width, winSize.height)
+	screenshot:begin()
+	self.rootNode:visit()
+	screenshot:endToLua()
+
+	local spShot = cc.RenderTexture:create(layerSize.width, layerSize.height)
+	local tempSp = cc.Sprite:createWithTexture(screenshot:getSprite():getTexture(), cc.rect(0, dy, layerSize.width, layerSize.height))
+	tempSp:setAnchorPoint(0, 0)
+    tempSp:setPosition(0, 0)
+    tempSp:setFlippedY(true)
+
+	spShot:begin()
+    tempSp:visit()
+    spShot:endToLua()
+
+	local screenshotFileName = string.format("wx-%s.jpg", os.date("%Y-%m-%d_%H:%M:%S", os.time()))
+	spShot:saveToFile(screenshotFileName, cc.IMAGE_FORMAT_JPEG, false)
+
+	self.shareImgFilePath = cc.FileUtils:getInstance():getWritablePath() .. screenshotFileName
+	self.scheduleHandler = gt.scheduler:scheduleScriptFunc(handler(self, self.update), 0, false)
+end
+
+function FinalReport:update()
+	if self.shareImgFilePath and cc.FileUtils:getInstance():isFileExist(self.shareImgFilePath) then
+		gt.scheduler:unscheduleScriptEntry(self.scheduleHandler)
+		local shareBtn = gt.seekNodeByName(self.rootNode, "Btn_share")
+		shareBtn:setEnabled(true)
+
+		if gt.isIOSPlatform() then
+			local luaoc = require("cocos/cocos2d/luaoc")
+			luaoc.callStaticMethod("AppController", "shareImageToWX", {imgFilePath = self.shareImgFilePath})
+		elseif gt.isAndroidPlatform() then
+			local luaj = require("cocos/cocos2d/luaj")
+			luaj.callStaticMethod("org/cocos2dx/lua/AppActivity", "shareImageToWX", {self.shareImgFilePath}, "(Ljava/lang/String;)V")
+		end
+		self.shareImgFilePath = nil
+	end
+end
+
+function FinalReport:onNodeEvent(eventName)
+	if "enter" == eventName then
+		local listener = cc.EventListenerTouchOneByOne:create()
+		listener:setSwallowTouches(true)
+		listener:registerScriptHandler(handler(self, self.onTouchBegan), cc.Handler.EVENT_TOUCH_BEGAN)
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:addEventListenerWithSceneGraphPriority(listener, self)
+	elseif "exit" == eventName then
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:removeEventListenersForTarget(self)
+	end
+end
+
+function FinalReport:onTouchBegan(touch, event)
+	return true
+end
+
+return FinalReport
+
+

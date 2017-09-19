@@ -1,0 +1,77 @@
+local RcvTurnShowMjTile = class("RcvTurnShowMjTile", BaseRcvTurnShowMjTile)
+
+function RcvTurnShowMjTile:ctor()
+	RcvTurnShowMjTile.super.ctor(self)
+end
+
+function RcvTurnShowMjTile:gangFinish(_player)
+	-- 转转杠后不需要实现
+end
+
+function RcvTurnShowMjTile:sendDecision(_flag, _mjColor, _mjNumber)
+	local msgToSend = {}
+	msgToSend.m_msgId = gt.CG_SHOW_MJTILE
+	msgToSend.m_type = _flag
+	msgToSend.m_think = {}
+	if _mjColor ~= 0 or _mjNumber ~= 0 then
+		table.insert(msgToSend.m_think, {_mjColor, _mjNumber})
+	end
+	gt.socketClient:sendMessage(msgToSend)
+	self.m_scene:setPlayerDecision(false)
+end
+
+function RcvTurnShowMjTile:getDecisionButton(_decisionTypes)
+
+    if not _decisionTypes then
+    	return false
+    end
+
+    self.m_scene:setPlayerDecision(true)
+    
+    local csbLayer = self.m_scene:getCsbLayer()
+    local decisionNode = self.m_scene:getDecisionNode()
+    local cardList_bar, cardList_bu = self:getBarBuList(_decisionTypes)
+    -- 过
+    self:createGuoButton(decisionNode, self:haveHu(_decisionTypes))
+    
+    -- 其他玩家出牌决策
+    for idx, decisionData in ipairs(_decisionTypes) do
+    	local isExist = false
+    	table.foreach(decisionNode:getChildren(), function(i, decisionChild)
+    		local name = tonumber(decisionChild:getName())
+    		if decisionData.flag == name then
+    			isExist = true
+    			return false
+    		end
+    		if (decisionData.flag == 3 and (name == 3 or name == 4))
+    			or (decisionData.flag == 4 and (name == 3 or name == 4)) then
+    			isExist = true
+    			return false
+    		end
+		end)
+		if not isExist then
+			local button = nil
+			if decisionData.flag == 3 or decisionData.flag == 4 then
+				self:createGangButton(decisionNode, decisionData, cardList_bar)
+			elseif decisionData.flag == 7 or decisionData.flag == 8 then
+				self:createGangButton(decisionNode, decisionData, cardList_bu)
+			elseif decisionData.flag == 2 then
+				self:createHuButton(decisionNode, decisionData)
+
+			end
+		end
+    end
+    -- 对按钮进行排序
+    local sortlist = {}
+    table.foreach(decisionNode:getChildren(), function(i, decisionChild)
+    	table.insert(sortlist, decisionChild)
+	end)
+	table.sort(sortlist, function(a, b)
+		return tonumber(a:getName()) < tonumber(b:getName())
+	end)
+	for i, v in ipairs(sortlist) do
+		v:setPosition(cc.p(-(i - 1) * 280, 0))
+	end
+end
+
+return RcvTurnShowMjTile

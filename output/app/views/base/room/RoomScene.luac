@@ -1,0 +1,3498 @@
+--region app.views.base.RoomScene
+--RoomScene 游戏的大部分逻辑都在这里
+--endregion 
+local YvYin_Node = require("app/views/YvYinNode")
+local logGame = Tools.logGame;
+
+--DEBUG_NODE_ACTION = true;
+--local  MOVE_CARD_ENABLE = true; --> 是否允许挪牌
+
+
+print("RoomScene: gt.enableMoveCard".. tostring(gt.enableMoveCard));
+
+local RoomScene = class("RoomScene", function()
+	return cc.Scene:create()
+end)
+
+
+RoomScene.STATUS = {
+	WAIT = 1,
+	PLAY = 2,
+	END = 3
+}
+
+RoomScene.RULEDESC_TYPE = {
+	ROOM = 1,
+	SHARE = 2,
+}
+
+RoomScene.CARD_LINE_MAX = 11
+
+function RoomScene:ctor(msgTbl, _gameType)
+	-- 保存游戏类型
+	self.m_gameType = _gameType
+	-- 设置完成和结束事件
+	self:registerScriptHandler(handler(self, self.onNodeEvent))
+	-- 初始化房间
+	self:initRoom(msgTbl)
+	-- 初始化socket监听
+	self:initListener()
+	-- 玩家自己加入房间
+	self:enterRoom(msgTbl)
+
+	-- 初始化解散房间
+	self:initDismissRoom()
+
+	--初始化一些数据
+	self:initData(msgTbl)	
+
+	if(gt.debugMoveCard) then 
+		gt.enableMoveCard =  gt.enableMoveCard or cc.UserDefault:getInstance():getBoolForKey("moveCardEnable");
+	else
+		gt.enableMoveCard = false;
+	end
+
+end
+
+-- 初始化房间
+function RoomScene:initRoom(msgTbl)
+	print('RoomScene:initRoom');
+
+	-- 创建房间对象
+	self.m_room = Room.create()
+	--设置房间最大人数  
+	self.m_room:setMaxPlayerNum(msgTbl.m_state)
+	-- 初始化csb
+	self:initCsb()
+	-- 创建麻将层
+	self:initMahjongNode()
+	-- 房间号设置
+	self:setRoomId(msgTbl)
+	-- 玩法设置
+	self:setRuleType(msgTbl)
+	-- wifi和电量设置
+	self:setWifi()
+	-- 设置需要隐藏的控件
+	self:setNeedHide()
+	-- 初始化头像管理器
+	self:initHeadManager()	
+	-- 初始化准备
+	self:initReady(msgTbl)
+	-- 初始化出牌标识
+	self:initMJTileSign()
+	-- 初始化设置按钮
+	self:initSetting(msgTbl)
+	-- 初始化语音
+	self:initVoice()
+	-- 初始化消息
+	self:initMessage()
+	-- 初始化播放动画menu
+	self:initAnimationMenu()
+
+	cc.SpriteFrameCache:getInstance():addSpriteFrames("res/sd/images/changshamjbtn.plist")
+	cc.SpriteFrameCache:getInstance():addSpriteFrames("res/sd/images/mahjong_tiles_hua.plist")
+end
+
+--初始化数据
+function RoomScene:initData( msgTbl )
+	dump(msgTbl.m_playtype,'msgTbl.m_playtype');
+	gt.roomPlayData = {m_state = msgTbl.m_state, m_playtype = msgTbl.m_playtype}
+	self.m_chatData = {}
+
+	if gt.debugInfo.slow then
+		cc.Director:getInstance():getScheduler():setTimeScale(0.3)
+	end
+	--self.hzNum =  {0,0,0,0}; --> 
+end
+
+-- 初始化设置按钮
+function RoomScene:initSetting(msgTbl)
+	local playBtnsNode = gt.seekNodeByName(self:getCsbLayer(), "Node_playBtns")
+	local settingBtn = gt.seekNodeByName(playBtnsNode, "Btn_setting")
+	gt.addBtnPressedListener(settingBtn, function()
+		
+		local settingPanel = require("app/views/Setting"):create(msgTbl.m_pos)
+		-- local settingPanel = require("app/views/playinfo/PlayinfoLayer"):create(msgTbl.m_state, msgTbl.m_playtype)
+		self:addChild(settingPanel, Room.ZOrder.SETTING)
+	end)
+end
+
+function RoomScene:startAudio()
+	--测试录音
+	gt.log("==========cesiluyin")
+	self:getLuaBridge()
+	if gt.isIOSPlatform() then
+		if Tools.checkVersion("1.8.0") then
+			local ok = self.luaBridge.callStaticMethod("AppController", "startVoice",
+				{recodePath = gt.audioPath})
+		else
+			local ok, ret = self.luaBridge.callStaticMethod("AppController", "startVoice")
+		end
+	elseif gt.isAndroidPlatform() then
+		local ok, ret = self.luaBridge.callStaticMethod("org/cocos2dx/lua/AppActivity", "startVoice",nil,"()Z")
+	end
+end
+
+function RoomScene:getLuaBridge()
+	if self.luaBridge then
+		return
+	end
+
+	self.luaBridge = Tools.getLuaBridge()
+end
+
+function RoomScene:stopAudio()
+	--停止录音
+	self:getLuaBridge()
+	if gt.isIOSPlatform() then
+		local ok, ret = self.luaBridge.callStaticMethod("AppController", "stopVoice")
+	elseif gt.isAndroidPlatform() then
+		local ok, ret = self.luaBridge.callStaticMethod("org/cocos2dx/lua/AppActivity", "stopVoice",nil,"()Z")
+	end
+
+	local getUrl = function ()
+		-- body
+		local ok, ret
+		if gt.isIOSPlatform() then
+			ok, ret = self.luaBridge.callStaticMethod("AppController", "getVoiceUrl")
+		elseif gt.isAndroidPlatform() then
+			ok, ret = self.luaBridge.callStaticMethod("org/cocos2dx/lua/AppActivity", "getVoiceUrl", nil, "()Ljava/lang/String;")
+			gt.log("the ret is .." .. ret)
+		end
+
+		if string.len(ret) > 0 and self.checkVoiceUrlType then
+			gt.log("_______the ret is .." .. ret)
+
+			self.checkVoiceUrlType = false
+
+			--获得到地址上传给服务器
+			local msgToSend = {}
+			msgToSend.m_msgId = gt.CG_CHAT_MSG
+			msgToSend.m_type = 4 -- 语音聊天
+			if Tools.checkVersion("1.8.0") then
+				local num1,num2 = string.find(ret, "\\")
+				
+				local data = {}
+				data.url = string.sub(ret,1,num2-1)
+				data.duration = string.sub(ret,num2+1)
+
+				require("json")
+				msgToSend.m_musicUrl = json.encode(data)				
+			else
+				msgToSend.m_musicUrl = ret
+			end
+
+			
+			gt.socketClient:sendMessage(msgToSend)
+
+			gt.scheduler:unscheduleScriptEntry(self.voiceUrlScheduleHandler)
+			self.voiceUrlScheduleHandler = nil
+		end
+	end
+	gt.log("------------------- start check voice url")
+	self.checkVoiceUrlType = true
+	if self.voiceUrlScheduleHandler then
+		gt.scheduler:unscheduleScriptEntry(self.voiceUrlScheduleHandler)
+		self.voiceUrlScheduleHandler = nil
+	end
+	self.voiceUrlScheduleHandler = gt.scheduler:scheduleScriptFunc(getUrl, 0, false)
+end
+
+function RoomScene:cancelAudio()
+	self:getLuaBridge()
+	if gt.isIOSPlatform() then
+		local ok, ret = self.luaBridge.callStaticMethod("AppController", "cancelVoice")
+	elseif gt.isAndroidPlatform() then
+		local ok, ret = self.luaBridge.callStaticMethod("org/cocos2dx/lua/AppActivity", "cancelVoice",nil,"()Z")
+	end
+end
+
+-- 初始化语音
+function RoomScene:initVoice()
+	-- 正式包点击语音按钮回调函数
+	local function touchEvent(sender,eventType)
+        if eventType == ccui.TouchEventType.began then
+            self.sendVocie = false
+	        gt.soundEngine:pauseAllSound()
+	        self.sendVocie = true
+	        self:startAudio()
+	        self.m_yvyinNode:setState(YvYin_Node.YVYIN)
+        elseif eventType == ccui.TouchEventType.moved then
+        	local beganP = sender:getTouchBeganPosition()
+        	local moveP = sender:getTouchMovePosition()
+        	if (beganP.y - moveP.y)^2 + (beganP.x - moveP.x)^2 >= 6400 then
+		        self.m_yvyinNode:setState(YvYin_Node.QVXIAO)
+		    end
+        elseif eventType == ccui.TouchEventType.ended then
+	    	gt.soundEngine:resumeAllSound()
+	    	if self.m_yvyinNode:getState() == YvYin_Node.QVXIAO then
+	    		self:cancelAudio()
+	    	elseif self.m_yvyinNode:getState() == YvYin_Node.YVYIN then
+	    		self:stopAudio()
+	    	end
+	    	self.m_yvyinNode:setState(YvYin_Node.YINCANG)
+        elseif eventType == ccui.TouchEventType.canceled then
+            gt.soundEngine:resumeAllSound()
+	    	if self.m_yvyinNode:getState() == YvYin_Node.QVXIAO then
+	    		self:cancelAudio()
+	    	elseif self.m_yvyinNode:getState() == YvYin_Node.YVYIN then
+	    		self:stopAudio()
+	    	end
+		    self.m_yvyinNode:setState(YvYin_Node.YINCANG)
+        end
+    end
+    -- 语音按钮
+    self.m_yuyinButton:addTouchEventListener(touchEvent)
+
+    -- 语音提示角标
+	self.m_yuyinChatNode = gt.seekNodeByName(self:getCsbLayer(), "Node_Yuyin_Dlg")
+	if self.m_yuyinChatNode then
+		self.m_yuyinChatNode:setVisible(false)
+	end
+
+	-- 语音提示界面
+	self.m_voiceTips = gt.createCSAnimation("res/views/base/VoiceTips.csb")
+	self.m_voiceTips:setVisible(true)
+	self.m_voiceTips:getChildByName("Image_1"):setVisible(false)
+	self.m_voiceTips:getChildByName("Image_2"):setVisible(false)
+	self.m_voiceTips:getChildByName("Text_1"):setVisible(false)
+	self.m_voiceTips:setPosition(gt.winCenter)
+	self:addChild(self.m_voiceTips, Room.ZOrder.VOICE_TIPS)
+	self.m_yvyinNode = YvYin_Node:create()
+	self.m_voiceTips:addChild(self.m_yvyinNode)
+	self.m_yvyinNode:setCallback(function( state )
+		self:stopAudio()
+	end)
+end
+
+--初始化消息按钮
+function RoomScene:initMessage(  )
+	local messageButton = gt.seekNodeByName(self:getCsbLayer(), "Btn_message")
+	self.m_messageBtn = messageButton
+	gt.addBtnPressedListener(messageButton, function()
+		local chatPanel = require("app/views/ChatPanel"):create(self.m_chatData)
+		self:addChild(chatPanel, Room.ZOrder.CHAT)
+	end)
+end
+
+-- 获取语音角标节点
+function RoomScene:getYuYinChatNode()
+	return self.m_yuyinChatNode
+end
+
+-- 房间对象
+function RoomScene:getRoom()
+	return self.m_room
+end
+
+-- 获得玩家对象
+function RoomScene:getPlayer(_seatIdx)
+	return self.m_room:getPlayer(_seatIdx)
+end
+
+function RoomScene:addPlayer(_player)
+	self.m_room:addPlayer(_player)
+end
+
+-- 初始化麻将指引标识
+function RoomScene:initMJTileSign()
+	local outMjtileSignNode, outMjtileSignAnime = gt.createCSAnimation("animation/OutMjtileSign.csb")
+	outMjtileSignAnime:play("run", true)
+	outMjtileSignNode:setVisible(false)
+	self:addChild(outMjtileSignNode, Room.ZOrder.OUTMJTILE_SIGN)
+	self.m_outMjtileSignNode = outMjtileSignNode
+end
+
+-- 初始化消息监听
+function RoomScene:initListener(_subArgeements)
+	self.m_base_argeements = {
+		"RcvPlayerMsg",			-- 玩家自己信息 12
+		"RcvRoomCard",			-- 更新玩家房卡 13
+		"RcvEnterRoom",			-- 玩家自己进入房间 30
+		"RcvAddPlayer",			-- 其他玩家进入房间 31
+		"RcvQuitRoom",			-- 返回大厅 25
+		"RcvDismissRoom",		-- 解散房间 27
+		"RcvRemovePlayer",		-- 移除一个玩家 32
+		"RcvSyncRoomState",		-- 同步房间状态 35
+		"RcvReady",				-- 同步玩家准备状态 37
+		"RcvOffLineState",		-- 同步玩家离线状态 40
+		"RcvRoundState",		-- 同步牌局数 41
+		"RcvStartGame",			-- 开始游戏 50
+		"RcvTurnShowMjTile",	-- 通知玩家出牌 51
+		"RcvSyncShowMjTile",	-- 广播玩家出牌 53
+		"RcvMakeDecision",		-- 通知玩家决策 54
+		"RcvSyncMakeDecision",	-- 广播决策结果 56
+		"RcvChatMsg",			-- 玩家聊天 58
+		"RcvRoundReport",		-- 单局结算 60
+		"RcvFinalReport",		-- 总结算 80
+		"RcvGhostMsg",			-- 接收鬼牌信息 161
+		"RcvFollowZhuang",		-- 跟庄 112
+		"RcvFunnyPlay",			-- 鲜花鸡蛋齐飞 115
+		"RcvModifyHeadFrame",	-- 头像修改 118
+		"RcvCatchHorse",		-- 120
+		"RcvFeedCard",			-- 127,补牌
+	}
+
+	if _subArgeements and type(_subArgeements) == "table" then
+		table.foreach(_subArgeements, function(i, subArge)
+			table.insert(self.m_base_argeements, subArge)
+		end)
+	end
+
+	table.foreach(self.m_base_argeements, function(i, argeementFile)
+		local argeement = Tools.requireAgreement(
+			argeementFile, self.m_gameType, Tools.BASE_TYPE.ROOM, self.m_room)
+		argeement:setScene(self)
+		self:addAgreements(argeement, argeementFile)
+	end)
+
+	-- 断线重连
+	gt.socketClient:registerMsgListener(gt.GC_LOGIN, self, self.onRcvLogin)
+end
+
+function RoomScene:getArgeement(_agreementName)
+	return self.m_agreements[_agreementName]
+end
+
+function RoomScene:addAgreements(_agreement, _name)
+	if not self.m_agreements then
+		self.m_agreements = {}
+	end
+	gt.log("argeement name = " .. _name)
+	self.m_agreements[_name] = _agreement
+end
+
+-- 取消所有消息监听
+function RoomScene:unregisterAllMsgListener()
+	table.foreach(self.m_agreements, function(i, argeement)
+		argeement:unregisterMsgListener()
+	end)
+end
+
+-- 设置房间号
+function RoomScene:setRoomId(msgTbl)
+	local roomIDLabel = gt.seekNodeByName(self:getCsbLayer(), "Label_roomID")
+	roomIDLabel:setString(gt.getLocationString("LTKey_0013", msgTbl.m_deskId) .. "\n" .. (Room.TypeName[msgTbl.m_state + 1]) or " " )
+end
+
+-- 玩法设置
+function RoomScene:setRuleType(msgTbl)
+	local wfbtn = gt.seekNodeByName(self:getCsbLayer(), "Button_wanfa")
+	gt.addBtnPressedListener(wfbtn, function(  )
+		local playInfo = require("app/views/playinfo/PlayinfoLayer"):create(msgTbl.m_state, msgTbl.m_playtype)
+		self:addChild(playInfo, Room.ZOrder.ROOM_WANFA)
+	end)
+end
+
+-- wifi和电量设置
+function RoomScene:setWifi()
+	local Node_Wifi = gt.seekNodeByName(self:getCsbLayer(), "Node_WIFI")
+	self.LoadingBar_Battery = gt.seekNodeByName(Node_Wifi, "LoadingBar_dianliang")
+	local FileNode_wifi = gt.seekNodeByName(Node_Wifi, "FileNode_wifi")
+	local wifiNode, wifiAction = gt.createCSAnimation("Wifi.csb")
+	self.m_wifiAction = wifiAction
+	self.m_wifiNode = wifiNode
+	self.m_wifiNode:setScale(0.7)
+	self.m_wifiNode:setVisible(false)
+	FileNode_wifi:addChild(self.m_wifiNode)
+	self.updateWifiTime = 0
+end
+
+-- 初始化csb
+function RoomScene:initCsb()
+	print("Basic RoomScene::initCsb");
+	self.m_csbLayer = self:getCsbFile()
+	self.m_csbLayer:setAnchorPoint(cc.p(0.5, 0.5))
+	self.m_csbLayer:setPosition(gt.winCenter)
+	self:addChild(self.m_csbLayer, Room.ZOrder.CSB_LAYER)
+
+	self.m_ghostNode = gt.seekNodeByName(self.m_csbLayer, "Node_ghost")
+	if self.m_ghostNode then
+		self.m_ghostNode:setVisible(false)
+	end
+
+	self.headFramePosArray = {};
+	for i = 1, 4 do 
+		local playerInfoNode = gt.seekNodeByName(self.m_csbLayer, "Node_playerInfo_" ..i)
+		local headFrameBtn = gt.seekNodeByName(playerInfoNode, "Btn_headFrame")
+		self.headFramePosArray[i] = cc.p(headFrameBtn:getPosition());
+		local sprLight = cc.Sprite:create("images/otherImages/zhongma/mapai_light.png");
+		local mapai = gt.seekNodeByName(playerInfoNode,'Spr_mapai');
+		if(mapai ~= nil) then
+			mapai:setVisible(false);
+			-- mapai:addChild(sprLight);
+			-- sprLight:setPosition(ccp(mapai:getContentSize().width/2,mapai:getContentSize().height/2));
+			-- sprLight:setScale(0.9);
+		end
+	end 
+end
+
+-- 获取csb文件
+function RoomScene:getCsbFile(  )
+	if self:getRoom():getMaxPlayerNum() == 3 then
+		return Tools.getLoad("RoomSceneThree.csb", self.m_gameType)
+	end
+	return Tools.getLoad("RoomScene.csb", self.m_gameType)
+end
+
+-- 游戏类型
+function RoomScene:getGameType()
+	return self.m_gameType
+end
+
+function RoomScene:getCsbLayer()
+	return self.m_csbLayer
+end
+
+-- 决策层
+function RoomScene:getDecisionNode()
+	return self.m_decisionNode
+end
+
+-- 是否玩家出牌
+function RoomScene:setPlayerShow(_isPlayerShow)
+	print("RoomScene:setPlayerShow ".. tostring(_isPlayerShow));
+	
+	self.m_isPlayerShow = _isPlayerShow
+end
+
+function RoomScene:getPlayerShow()
+	return self.m_isPlayerShow
+end
+
+-- 是否玩家决策
+function RoomScene:setPlayerDecision(_isPlayerDecision)
+	self.m_isPlayerDecision = _isPlayerDecision
+end
+
+function RoomScene:getPlayerDecision()
+	return self.m_isPlayerDecision
+end
+
+-- 玩家头像管理器
+function RoomScene:getPlayerHeadMgr()
+	return self.m_playerHeadMgr
+end
+
+-- 创建麻将层
+function RoomScene:initMahjongNode()
+	self.m_mahjongNode = gt.seekNodeByName(self:getCsbLayer(), "Node_mahjong")
+	self.m_decisionNode = gt.seekNodeByName(self:getCsbLayer(), "Node_decision")
+	self.m_mahjongTable= gt.seekNodeByName(self:getCsbLayer(), "mahjong_table")
+end
+
+function RoomScene:getMahjongNode()
+	return self.m_mahjongNode
+end
+
+--取得当前最底层的
+function RoomScene:getMahjongTable()
+	return self.m_mahjongTable
+end 
+
+--清理掉所有的麻将层
+function RoomScene:cleanAllMahjong(  )	
+	for k,player in pairs(self.m_room:getPlayers()) do
+		player:cleanHoldMJTiles()
+		player:clearHoldFlower()
+	end
+	self.m_mahjongNode:removeAllChildren()
+	self:setSelfOutMjTile()
+end
+
+--刷新牌数量标记
+function RoomScene:setFlushCardNumFlag(_flag)
+	self.flushCardNumFlag = _flag
+end
+
+-- 设置需要隐藏的控件
+function RoomScene:setNeedHide()
+	-- 玩家信息节点
+	for i = 1, Room.PlayerTotal do
+		local playerNode = gt.seekNodeByName(self:getCsbLayer(), "Node_playerInfo_" .. i)
+		playerNode:setVisible(false)
+	end
+	-- 隐藏玩家麻将参考位置（麻将参考位置父节点，pos(0，0）)
+	local playNode = gt.seekNodeByName(self:getCsbLayer(), "Node_play")
+	playNode:setVisible(false)
+	-- 隐藏轮换位置标识（东南西北信息）
+	local turnPosBgSpr = gt.seekNodeByName(self:getCsbLayer(), "Spr_turnPosBg")
+	turnPosBgSpr:setVisible(false)
+	table.foreach(turnPosBgSpr:getChildren(), function(i, turnPosSpr)
+		turnPosSpr:runAction(self:getTurnPosAction())
+	end)
+	-- 隐藏牌局状态（倒计时，剩余牌局，剩余牌数）
+	local roundStateNode = gt.seekNodeByName(self:getCsbLayer(), "Node_roundState")
+	roundStateNode:setVisible(false)
+	-- 倒计时
+	self.playTimeCDLabel = gt.seekNodeByName(roundStateNode, "Label_playTimeCD")
+	self.playTimeCDLabel:setString("0")
+	-- 隐藏游戏中设置按钮
+	local playBtnsNode = gt.seekNodeByName(self:getCsbLayer(), "Node_playBtns")
+	playBtnsNode:setVisible(false)
+	-- 隐藏准备按钮
+	local readyBtn = gt.seekNodeByName(self:getCsbLayer(), "Btn_ready")
+	readyBtn:setVisible(false)
+	gt.addBtnPressedListener(readyBtn, handler(self, self.readyBtnClickEvt))
+	-- 隐藏所有玩家对话框
+	local chatBgNode = gt.seekNodeByName(self:getCsbLayer(), "Node_chatBg")
+	-- self:getCsbLayer():reorderChild(chatBgNode, Room.ZOrder.CHAT)
+	chatBgNode:setVisible(false)
+	-- 隐藏语音
+	self.m_yuyinButton = gt.seekNodeByName(self:getCsbLayer(), "Button_YuYin")
+	-- self.m_yuyinButton:setVisible(false)
+
+end
+
+-- start --
+--------------------------------
+-- @class function
+-- @description 发送玩家准备请求消息
+-- end --
+function RoomScene:readyBtnClickEvt()
+	-- 隐藏准备按钮
+	local readyBtn = gt.seekNodeByName(self:getCsbLayer(), "Btn_ready")
+	readyBtn:setVisible(false)
+	gt.addBtnPressedListener(readyBtn, handler(self, self.readyBtnClickEvt))
+
+	local msgToSend = {}
+	msgToSend.m_msgId = gt.CG_READY
+	msgToSend.m_pos = self:getRoom():getMainSeatIdx()
+	gt.socketClient:sendMessage(msgToSend)
+end
+
+-- 设置剩余牌数
+function RoomScene:setRemainTiles(_count)
+	local roundStateNode = gt.seekNodeByName(self:getCsbLayer(), "Node_roundState")
+	local remainTilesLabel = gt.seekNodeByName(roundStateNode, "Label_remainTiles")
+	remainTilesLabel:setString(tostring(_count))
+end
+
+-- 获取转换座位标识动画
+function RoomScene:getTurnPosAction()
+	local fadeOut = cc.FadeOut:create(0.4)
+	local fadeIn = cc.FadeIn:create(0.4)
+	local seqAction = cc.Sequence:create(fadeOut, fadeIn)
+	return cc.RepeatForever:create(seqAction)
+end
+
+-- 开始牌局倒计时
+function RoomScene:playTimeCDStart(timeDuration)
+	self.playTimeCD = timeDuration
+	self.startTime = os.time()
+
+	self.isVibrateAlarm = false
+	self.playTimeCDLabel:setVisible(true)
+	self.playTimeCDLabel:setString(tostring(timeDuration))
+end
+
+-- @class function
+-- @description 玩家进入准备状态
+-- @param seatIdx 座次
+-- end --
+function RoomScene:playerGetReady(seatIdx)
+	local room = self:getRoom()
+	local csbLayer = self:getCsbLayer()
+	local player = room:getPlayer(seatIdx)
+
+	if room:getRoomStatus() == Room.Status.WAIT and room:getReady(seatIdx) == 1 then
+
+		-- 显示玩家准备手势
+		local readySignNode = gt.seekNodeByName(csbLayer, "Node_readySign")
+		local readySignSpr = gt.seekNodeByName(readySignNode, "Spr_readySign_" .. player:getDisplayIdx())
+		readySignSpr:setVisible(true)
+		-- 玩家本身
+		if seatIdx == room:getMainSeatIdx() then
+			-- 隐藏准备按钮
+			local readyBtn = gt.seekNodeByName(csbLayer, "Btn_ready")
+			readyBtn:setVisible(false)
+			-- 隐藏牌局状态
+			local roundStateNode = gt.seekNodeByName(csbLayer, "Node_roundState")
+			roundStateNode:setVisible(false)
+		end	
+	end
+end
+
+-- 隐藏准备手势
+function RoomScene:hideReadySign()
+	local readySignNode = gt.seekNodeByName(self:getCsbLayer(), "Node_readySign")
+	table.foreach(readySignNode:getChildren(), function(i, readySignSpr)
+		readySignSpr:setVisible(false)
+	end)
+end
+
+-- 设置房间玩家头像等信息显示
+function RoomScene:roomAddPlayer(player)
+	local csbLayer = self:getCsbLayer()
+	-- 将玩家对象添加到房间对象内
+	self:addPlayer(player)
+
+	local playerInfoNode = gt.seekNodeByName(csbLayer, "Node_playerInfo_" .. player:getDisplayIdx())
+	playerInfoNode:setVisible(true)
+	
+	--连续坐庄次数初始化
+	gt.seekNodeByName(playerInfoNode, "Node_successMor"):setVisible(false)
+
+	if(self:getGameType() == Tools.GAME_TYPE[gt.RoomType.ROOM_HONGZHONGWANG + 1]) then 
+		gt.seekNodeByName(playerInfoNode, "Node_hongzhong"):setVisible(false)
+	else
+		local nodeHongzhong = gt.seekNodeByName(playerInfoNode, "Node_hongzhong")
+		if(nodeHongzhong)then
+			nodeHongzhong:setVisible(false);
+		end 
+	end 
+
+	-- if player:getSeatIdx() == 1  and  Tools.isSelectPlayWF(43) then
+	--    nodeSuccessMorSpr:setVisible(true)
+	--    gt.seekNodeByName(nodeSuccessMorSpr, "Atlas_num"):setString(""..player:getSuccessCnt())
+	-- else
+	-- 	nodeSuccessMorSpr:setVisible(false)
+	-- end
+
+	-- 头像
+	local headSpr = gt.seekNodeByName(playerInfoNode, "Spr_head")
+	self:getPlayerHeadMgr():attach(headSpr, player:getuid(), player:getHeadURL())
+	-- 昵称
+	local nicknameLabel = gt.seekNodeByName(playerInfoNode, "Label_nickname")
+	-- 名字只取四个字,并且清理掉其中的空格
+	local nickname = string.gsub(player:getName(), " ", "")
+	nicknameLabel:setString(Tools.checkName(nickname))
+	-- 积分
+	local scoreLabel = gt.seekNodeByName(playerInfoNode, "Label_score")
+	scoreLabel:setString(tostring(player:getScore()))
+	player:setScoreLabel(scoreLabel)
+	-- 离线标示
+	local offLineSignSpr = gt.seekNodeByName(playerInfoNode, "Spr_offLineSign")
+	offLineSignSpr:setVisible(false)
+	-- 庄家
+	local bankerSignSpr = gt.seekNodeByName(playerInfoNode, "Spr_bankerSign")
+	bankerSignSpr:setVisible(false)
+
+	-- 点击头像显示信息
+	local headFrameBtn = gt.seekNodeByName(playerInfoNode, "Btn_headFrame")
+	--local sz = headFrameBtn:getContentSize();
+	headFrameBtn:setTag(player:getSeatIdx())
+	headFrameBtn:addClickEventListener(handler(self, self.showPlayerInfo))
+	
+	local headIndex = player:getCurHeadIconId() + 1;
+	print("headIndex " ..headIndex);
+	local frameBtnScale = headFrameBtn:getScale();
+	local idx = player:getDisplayIdx();
+	local headFramePos = self.headFramePosArray[idx];--cc.p(headFrameBtn:getPosition()); 
+	local qrDay = true; 
+	if(headIndex ~= 1 or qrDay ) then 
+		-- headFrameBtn:setContentSize(cc.size(0,0));
+		-- local str = string.format("res/sd/images/otherImages/headframes/%03d.png",headIndex)
+		-- headFrameBtn:loadTextures(str,str,str)
+		gt.addHeadFrames_Button(headFrameBtn,headIndex);
+		if(headFramePos ~= nil) then 
+			headFrameBtn:setPosition(cc.p(headFramePos.x -2,headFramePos.y +12));
+			headFrameBtn:setScale(0.95);
+		end
+	else
+		headFrameBtn:setPosition(headFramePos);
+		headFrameBtn:setScale(1);
+	end 
+	
+
+	-- 准备标示
+	if player:getReady() == 1 then
+		self:playerGetReady(player:getSeatIdx())
+	end
+
+	-- 如果已经四个人了,隐藏微信分享按钮,显示聊天,设置按钮
+	local room = self:getRoom()
+	if room:isFull() then
+		-- 隐藏等待界面元素
+		local readyPlayNode = gt.seekNodeByName(csbLayer, "Node_readyPlay")
+		readyPlayNode:setVisible(false)
+		-- 显示游戏中按钮（消息，设置）
+		local playBtnsNode = gt.seekNodeByName(csbLayer, "Node_playBtns")
+		playBtnsNode:setVisible(true)
+	end
+end
+
+-- 初始化准备状态 
+function RoomScene:initReady(msgTbl)
+	-- 隐藏准备手势
+	self:hideReadySign()
+	-- 邀请好友
+	self:initInviteFriendsButton(msgTbl)
+	-- 返回大厅
+	self:initBackHallButton(msgTbl)
+	-- 解散房间
+	self:initDismissRoomButton(msgTbl)
+end
+
+--返回大厅 onEvent_
+function RoomScene:backMainSceneEvt(eventType, isRoomCreater, roomID)
+	-- 事件回调
+	gt.removeTargetAllEventListener(self)
+	-- 消息回调
+	self:unregisterAllMsgListener()
+
+	local mainScene = require("app/views/MainScene"):create(false, isRoomCreater, roomID)
+	cc.Director:getInstance():replaceScene(mainScene)
+	Tools.cleanAction()
+	if gt.debugInfo.slow then
+		cc.Director:getInstance():getScheduler():setTimeScale(1.0)
+	end
+end
+
+--显示玩家信息
+function RoomScene:showPlayerInfo(sender)
+	local senderTag = sender:getTag()
+	local player = self:getRoom():getPlayer(senderTag)
+	if not player then
+		return
+	end
+	
+	local distances = self.m_room:getDistanceDescs()
+	local canInteraction   = self:getRoom():getCanInteraction();
+	--print('canInteraction'..canInteraction)
+	local playerInfoTips = require("app/views/OtherInfoTips"):create(player, distances,self:getRoom():getMainSeatIdx(),canInteraction)
+	self:addChild(playerInfoTips, Room.ZOrder.PLAYER_INFO_TIPS)
+end
+
+-- 初始化邀请好友按钮
+function RoomScene:initInviteFriendsButton(msgTbl)
+	local readyPlayNode = gt.seekNodeByName(self:getCsbLayer(), "Node_readyPlay")
+	local inviteFriendsBtn = gt.seekNodeByName(readyPlayNode, "Btn_inviteFriend")
+	gt.addBtnPressedListener(inviteFriendsBtn, function()
+		-- local description = gt.getLocationString("LTKey_0049",
+		-- 	Room.TypeName[msgTbl.m_state + 1], msgTbl.m_deskId, msgTbl.m_maxCircle, self:getRuleDesc(msgTbl, " ", RoomScene.RULEDESC_TYPE.SHARE))
+		-- local url = gt.getLocationString("LTKey_0051") .. "?action=enterroom&roomid=" .. msgTbl.m_deskId
+		local description = gt.getLocationString("LTKey_0058", msgTbl.m_maxCircle, self:getRuleDesc(msgTbl, " ", RoomScene.RULEDESC_TYPE.SHARE))
+		local url = string.format(gt.getLocationString("LTKey_0056"), gt.OpenAppAction.ENTERROOM, tostring(msgTbl.m_deskId))
+		local desc = string.format(gt.getLocationString("LTKey_0057"), Room.TypeName[msgTbl.m_state + 1], msgTbl.m_deskId)
+		if(self.m_room:getAntiCheat() == 1) then 
+			desc = string.format(gt.getLocationString("LTKey_0073"), Room.TypeName[msgTbl.m_state + 1], msgTbl.m_deskId)
+		end 
+		Tools.getWXShareMethod(description, url, desc)
+	end)
+	if gt.isInReview then
+		inviteFriendsBtn:setVisible(false)
+	end
+
+	-- 设置按钮
+	local settingBtn = gt.seekNodeByName(readyPlayNode, "Btn_setting_Ready")
+	if settingBtn then
+		settingBtn:setVisible(false)
+	end
+end
+
+-- 初始化返回大厅按钮
+function RoomScene:initBackHallButton(msgTbl)
+	local readyPlayNode = gt.seekNodeByName(self:getCsbLayer(), "Node_readyPlay")
+	local backHallBtn = gt.seekNodeByName(readyPlayNode, "Btn_outRoom")
+	gt.addBtnPressedListener(backHallBtn, function()
+		local tipsContentKey = "LTKey_0019"
+		if msgTbl.m_pos == 0 then
+			tipsContentKey = "LTKey_0010"
+		end
+		require("app/views/NoticeTips"):create(
+			gt.getLocationString("LTKey_0009"),
+			gt.getLocationString(tipsContentKey),
+			function()
+				gt.showLoadingTips(gt.getLocationString("LTKey_0016"))
+				local msgToSend = {}
+				msgToSend.m_msgId = gt.CG_QUIT_ROOM
+				msgToSend.m_pos = msgTbl.m_pos - 1
+				gt.socketClient:sendMessage(msgToSend)
+			end)
+	end)
+end
+
+-- 初始化解散房间按钮
+function RoomScene:initDismissRoomButton(msgTbl)
+	local readyPlayNode = gt.seekNodeByName(self:getCsbLayer(), "Node_readyPlay")
+	local dimissRoomBtn = gt.seekNodeByName(readyPlayNode, "Btn_dimissRoom")
+	local ls_12 = gt.getLocationString("LTKey_0012")
+	if gt.isIOSPlatform() and gt.isInReview then
+		ls_12 = gt.getLocationString("LTKey_0012_1")
+	end
+	gt.addBtnPressedListener(dimissRoomBtn, function()
+		require("app/views/NoticeTips"):create(
+			gt.getLocationString("LTKey_0011"), ls_12,
+			function()
+				local msgToSend = {}
+				msgToSend.m_msgId = gt.CG_DISMISS_ROOM
+				msgToSend.m_pos = msgTbl.m_pos
+				gt.socketClient:sendMessage(msgToSend)
+			end)
+	end)
+	-- 隐藏非房主无法操作的按钮
+	if msgTbl.m_pos ~= 0 then
+		dimissRoomBtn:setVisible(false)
+	end
+end
+
+-- 初始化解散房间
+function RoomScene:initDismissRoom()
+	self.applyDimissRoom = require("app/views/ApplyDismissRoom"):create(self.m_room:getMainPlayer(), self.m_room:getMainSeatIdx())
+	self:addChild(self.applyDimissRoom, Room.ZOrder.DISMISS_ROOM)
+end
+
+-- 头像下载管理器
+function RoomScene:initHeadManager()
+	local playerHeadMgr = HeadManager:create()
+	self:addChild(playerHeadMgr)
+	self.m_playerHeadMgr = playerHeadMgr
+end
+
+
+function RoomScene:update(delta)
+	-- 更新系统时间
+	self.updateTimeCD = self.updateTimeCD - delta
+	if self.updateTimeCD <= 0 then
+		self.updateTimeCD = 60
+		self:updateSystemTime()
+	end
+
+	-- 更新倒计时
+	self:updateCDTime(delta)
+
+	if cc.PLATFORM_OS_WINDOWS == gt.targetPlatform then
+		return
+	end
+
+	self.updateWifiTime = self.updateWifiTime + 1
+	if self.updateWifiTime > 60 then
+		self:updateWifi()
+		self.updateWifiTime = 0
+	end
+end
+
+--更新CD时间
+function RoomScene:updateCDTime(delta)
+	if not self.playTimeCD then
+		return
+	end
+
+	local curTime = os.time()
+	local durationTime = self.playTimeCD - (os.time() - self.startTime)
+	if durationTime < 0 then
+		durationTime = 0
+	end
+
+	if (self:getPlayerShow() or self:getPlayerDecision()) and durationTime <= 3 and not self.isVibrateAlarm then
+		-- 剩余3s开始播放警报声音+震动一下手机
+		self.isVibrateAlarm = true
+		-- 播放声音
+		self.playCDAudioID = gt.soundEngine:playEffect("common/timeup_alarm")
+		-- 震动提醒
+		cc.Device:vibrate(1)
+	end
+	local timeCD = math.ceil(durationTime)
+	self.playTimeCDLabel:setString(tostring(timeCD))
+end
+
+-- 更新wifi和电量
+function RoomScene:updateWifi()
+
+	local signalStatus = Tools.getStaticMethod("getDeviceSignalStatus")
+
+	if signalStatus == "WIFI" then
+		local signalLevel = tonumber(Tools.getStaticMethod("getDeviceSignalLevel"))
+		if signalLevel >= 0 and signalLevel <= 3 then
+			self.m_wifiAction:play("wifi" .. signalLevel, true)
+			self.m_wifiNode:setScale(0.7)
+			self.m_wifiNode:setVisible(true)
+		end
+	else
+		local signalLevel = 4
+		if gt.isAndroidPlatform() then
+			signalLevel = tonumber(Tools.getStaticMethod("getDeviceNoWifiLevel"))
+		elseif gt.isIOSPlatform() then
+			signalLevel = tonumber(Tools.getStaticMethod("getDeviceSignalLevel"))
+		end
+		if signalLevel >= 0 and signalLevel <= 4 then
+			self.m_wifiAction:play("mobile" .. (tonumber(signalLevel) + 1), true)
+			self.m_wifiNode:setScale(1.0)
+			self.m_wifiNode:setVisible(true)
+		end
+	end
+
+	local battery = Tools.getStaticMethod("getDeviceBattery")
+	self.LoadingBar_Battery:setPercent(tonumber(battery))
+end
+
+-- 初始化当前时间
+function RoomScene:initSystemTime()
+	local curTimeStr = os.date("%X", os.time())
+	local timeSections = string.split(curTimeStr, ":")
+	local secondTime = tonumber(timeSections[3])
+	self.updateTimeCD = 60 - secondTime
+	self:updateSystemTime()
+end
+
+-- 更新当前系统时间
+function RoomScene:updateSystemTime()
+	local timeLabel = gt.seekNodeByName(self, "Label_time")
+	local curTimeStr = os.date("%X", os.time())
+	local timeSections = string.split(curTimeStr, ":")
+	-- 时:分
+	timeLabel:setString(string.format("%s:%s", timeSections[1], timeSections[2]))
+end
+
+-- 初始化麻将点击事件
+function RoomScene:initMahjongTouch()
+	local listener = cc.EventListenerTouchOneByOne:create()
+	listener:setSwallowTouches(true)
+	listener:registerScriptHandler(handler(self, self.onTouchBegan), cc.Handler.EVENT_TOUCH_BEGAN)
+	listener:registerScriptHandler(handler(self, self.onTouchMoved), cc.Handler.EVENT_TOUCH_MOVED)
+	listener:registerScriptHandler(handler(self, self.onTouchEnded), cc.Handler.EVENT_TOUCH_ENDED)
+	local eventDispatcher = self:getMahjongNode():getEventDispatcher()
+	eventDispatcher:addEventListenerWithSceneGraphPriority(listener, self:getMahjongNode())
+	
+
+	local listener2 = cc.EventListenerTouchOneByOne:create();
+	listener2:registerScriptHandler(handler(self, self.onTouchBegan2), cc.Handler.EVENT_TOUCH_BEGAN)
+	listener2:registerScriptHandler(handler(self, self.onTouchEnded2), cc.Handler.EVENT_TOUCH_ENDED)
+	local eventDispatcher2 = self:getMahjongTable():getEventDispatcher()
+	eventDispatcher2:addEventListenerWithSceneGraphPriority(listener2, self:getMahjongTable())
+
+
+end
+
+-- 初始化app前后台切换事件
+function RoomScene:initAppEvent( )
+	local eventDispatcher = cc.Director:getInstance():getEventDispatcher()
+	local customListenerBg = cc.EventListenerCustom:create("APP_ENTER_BACKGROUND_EVENT",
+								handler(self, self.onEnterBackground))
+	eventDispatcher:addEventListenerWithSceneGraphPriority(customListenerBg, self)
+
+	local customListenerBg = cc.EventListenerCustom:create("APP_ENTER_MEMORY_WARN_EVENT",
+								handler(self, self.onMemoryWarn))
+	eventDispatcher:addEventListenerWithSceneGraphPriority(customListenerBg, self)
+
+	gt.CommonEvent:addEventListener("ROOM_EVENT_CHANGE_TABLECLOTH",handler(self,self.changeTableCloth))
+	gt.CommonEvent:addEventListener("ROOM_EVENT_CHANGE_MOVE_CARD",handler(self,self.changeMoveCard))
+end
+
+function RoomScene:initMJAniDB()
+	print('RoomScene:initMJAniDB');
+	self.m_mjAniData = {};
+
+end 
+
+function RoomScene:destroyMJAniDB()
+	print('RoomScene:destroyMJAniDB');
+	self.m_mjAniData = {};
+
+end 
+
+function RoomScene:onMemoryWarn( )
+	cc.SpriteFrameCache:getInstance():reloadTexture("res/sd/images/mahjong_tiles.plist")	
+	cc.SpriteFrameCache:getInstance():reloadTexture("res/sd/images/mahjong_tiles_hua.plist")
+end
+
+function RoomScene:onEnterBackground( )
+	-- 放回原来的位置,不出牌
+	if self.m_chooseMjTile then	
+		self.m_chooseMjTile.mjTileSpr:setPosition(self.mjTileOriginPos)
+		self.m_mahjongNode:reorderChild(self.m_chooseMjTile.mjTileSpr, self.mjTileOriginPos.y)
+	end
+
+	--清理数据
+	self.m_chooseMjTile = nil
+	self.m_chooseMjTileIdx = nil
+	self.mjTileOriginPos = nil 
+	self.preTouchPoint = nil
+	self.isTouchMoved = false
+	self.m_inTouch = false
+end
+
+
+function RoomScene:onNodeEvent(eventName)
+	if "enter" == eventName then
+		-- 逻辑更新定时器
+		self.scheduleHandler = gt.scheduler:scheduleScriptFunc(handler(self, self.update), 0, false)
+		-- 计算更新当前时间倒计时
+		self:initSystemTime()
+		-- 初始化麻将点击事件
+		self:initMahjongTouch()
+		-- 创建app事件
+		self:initAppEvent()
+		-- 初始化 容器 
+		self:initMJAniDB();
+
+		gt.soundEngine:playMusic("bgm2", true)
+	elseif "exit" == eventName then
+		local eventDispatcher = self:getMahjongNode():getEventDispatcher()
+		eventDispatcher:removeEventListenersForTarget(self:getMahjongNode())
+
+		gt.scheduler:unscheduleScriptEntry(self.scheduleHandler)
+		-- 屏蔽掉音效的update
+		if self.voiceUrlScheduleHandler then
+			gt.scheduler:unscheduleScriptEntry(self.voiceUrlScheduleHandler)
+		end
+
+		gt.soundEngine:playMusic("bgm1", true)
+		gt.CommonEvent:removeEventListenersByEvent("ROOM_EVENT_CHANGE_TABLECLOTH")
+		gt.CommonEvent:removeEventListenersByEvent("ROOM_EVENT_CHANGE_MOVE_CARD")
+
+		self:destroyMJAniDB();
+
+	end
+end
+
+-- 玩家自己进入房间
+function RoomScene:enterRoom(msgTbl)
+	dump(msgTbl, 'RoomScene:enterRoom msgTbl');
+	
+	player = Player.new()
+	player:setuid(gt.playerData.uid)
+	player:setName(gt.playerData.nickname)
+	player:setHeadURL(gt.playerData.headURL)
+	player:setSex(gt.playerData.sex)
+	player:setIP(gt.playerData.ip)
+	player:setSeatIdx(msgTbl.m_pos + 1)
+	player:setDisplayIdx(self.m_room:getMaxPlayerNum())
+	player:setReady(msgTbl.m_ready)
+	player:setScore(msgTbl.m_score)
+	player:setCurHeadIconId(gt.playerData.curHeadIcon);
+
+	-- 逻辑座位和显示座位偏移量(从0编号开始)
+	self.m_room:setSeatOffset((player:getDisplayIdx() - 1) - msgTbl.m_pos)
+	self:roomAddPlayer(player)
+	-- 房间编号
+	self.m_room:setId(msgTbl.m_deskId)
+	self.m_room:setCanInteraction(msgTbl.m_canInteraction);
+	-- 玩家座位编号
+	self.m_room:setMainSeatIdx(player:getSeatIdx())
+	self.m_room:setAntiCheat(msgTbl.m_antiCheat);
+	
+
+	-- 旋转座次标识
+	local turnPosBgSpr = gt.seekNodeByName(self:getCsbLayer(), "Spr_turnPosBg")
+	turnPosBgSpr:setRotation(self.m_room:getSeatRocation())
+	for _, turnPosSpr in ipairs(turnPosBgSpr:getChildren()) do
+		turnPosSpr:setVisible(false)
+	end
+
+	self:changeTableCloth();
+	-- 玩家出牌类型
+	self:setPlayerShow(false)
+	self:setPlayerDecision(false)
+
+	-- 未准备显示准备按钮
+	if player:getReady() == 0 then
+		local readyBtn = gt.seekNodeByName(self:getCsbLayer(), "Btn_ready")
+		readyBtn:setVisible(true)
+	end
+
+	print("玩家加入进来。。。。。。。＋＋。。。。。。")
+end
+
+
+
+-- 返回大厅
+function RoomScene:backHall()
+	-- 事件回调
+	gt.removeTargetAllEventListener(self)
+	-- 消息回调
+	self:unregisterAllMsgListener()
+
+	local isRoomCreater = false
+	if self.m_room:getMainSeatIdx() == 1 then
+		isRoomCreater = true
+	end
+	local mainScene = require("app/views/MainScene"):create(false, isRoomCreater, self.m_room:getId())
+	cc.Director:getInstance():replaceScene(mainScene)
+	Tools.cleanAction()
+	if gt.debugInfo.slow then
+		cc.Director:getInstance():getScheduler():setTimeScale(1.0)
+	end
+end
+
+function RoomScene:getTurnSeatSignIdx( _seatIdx )
+	local maxNum = self:getRoom():getMaxPlayerNum()
+	if maxNum < 4 then
+		local player = self:getPlayer(_seatIdx)
+		if player then
+			return player:getDisplayIdx()
+		end
+	else
+		return _seatIdx
+	end
+end
+
+-- 设置东南西北底座
+function RoomScene:setTurnSeatSign(seatIdx)
+	-- 显示轮到的玩家座位标识
+	local turnPosBgSpr = gt.seekNodeByName(self:getCsbLayer(), "Spr_turnPosBg")
+	-- 显示当先座位标识
+	local turnPosSpr = gt.seekNodeByName(turnPosBgSpr, "Spr_turnPos_" .. self:getTurnSeatSignIdx(seatIdx))
+	turnPosSpr:setVisible(true)
+	if self.preTurnSeatIdx and self.preTurnSeatIdx ~= seatIdx then
+		-- 隐藏上次座位标识
+		local turnPosSpr = gt.seekNodeByName(turnPosBgSpr, "Spr_turnPos_" .. self:getTurnSeatSignIdx(self.preTurnSeatIdx))
+		turnPosSpr:setVisible(false)
+	end
+	self.preTurnSeatIdx = seatIdx
+end
+
+function RoomScene:createFlimLayer(flimLayerType, cardList)
+	-- 一个麻将
+	local mjTileName = string.format("p4s%d_%d.png", 2, 2)
+	local mjTileSpr = cc.Sprite:createWithSpriteFrameName(mjTileName)
+	local width_oneMJ = mjTileSpr:getContentSize().width
+	local space_gang = 20
+	local width = 30+mjTileSpr:getContentSize().width*4*(#cardList)+space_gang*(#cardList-1)
+	local height = 24+mjTileSpr:getContentSize().height
+
+	local flimLayer = cc.LayerColor:create(cc.c4b(85, 85, 85, 0), width, height)
+	flimLayer:setContentSize(cc.size(width,height))
+	
+	-- 添加半透明底
+	local image_bg = ccui.ImageView:create()
+	image_bg:loadTexture("images/otherImages/laoyue_bg.png")
+	image_bg:setScale9Enabled(true)
+	image_bg:setCapInsets(cc.rect(10,10,1,1))
+	image_bg:setContentSize(cc.size(width,height))
+	image_bg:setAnchorPoint(cc.p(0,0))
+	flimLayer:addChild(image_bg)
+
+	-- 创建麻将
+	for idx,value in ipairs(cardList) do
+		local flag = value.flag
+		local mjColor = value.mjColor
+		local mjNumber = value.mjNumber
+
+		local mjSprName = string.format("p4s%d_%d.png", mjColor, mjNumber)
+		for i=1,4 do
+			local button = ccui.Button:create()
+			button:loadTextures(mjSprName,mjSprName,"",ccui.TextureResType.plistType)
+			button:setTouchEnabled(true)
+    		button:setAnchorPoint(cc.p(0,0))
+    		button:setPosition(cc.p(15+space_gang*(idx-1)+width_oneMJ*(i-1)+width_oneMJ*4*(idx-1), 10))
+   			button:setTag(idx)
+   			flimLayer:addChild(button)
+
+   			if Tools.isGhost(mjColor, mjNumber, self.m_room.m_gui) then
+   			-- if self.m_room.m_gui and self.m_room.m_gui.mjColor == mjColor and self.m_room.m_gui.mjNumber == mjNumber then
+				Tools.setMjTilesAngle( 4, button, gt.anglePngPath )
+			end
+
+    		local function touchEvent(ref, _type)
+       			if _type == ccui.TouchEventType.ended then
+        		 	self:setPlayerDecision(false)
+
+					local selfDrawnDcsNode = self:getDecisionNode()
+					selfDrawnDcsNode:removeAllChildren()
+
+					-- 发送消息
+					local cardData = cardList[ref:getTag()]
+					local msgToSend = {}
+					msgToSend.m_msgId = gt.CG_SHOW_MJTILE
+					msgToSend.m_type = self:getDecisionType(cardData.flag)
+					msgToSend.m_think = {}
+					local think_temp = {cardData.mjColor, cardData.mjNumber}
+					table.insert(msgToSend.m_think,think_temp)
+					gt.socketClient:sendMessage(msgToSend)
+
+					gt.log("发送消息")
+					dump(msgToSend)
+					gt.log("发送消息")
+
+					-- 删除弹出框（杠）
+					self:removeFlimLayer(Room.FLIMTYPE.FLIMLAYER_BAR)
+					-- 删除弹出框（补）
+					self:removeFlimLayer(Room.FLIMTYPE.FLIMLAYER_BU)
+       		 	end
+  	  		end
+   	 		button:addTouchEventListener(touchEvent)
+		end
+	end
+	return flimLayer
+end
+
+--?? 删除电影层
+function RoomScene:removeFlimLayer(flimLayerType)
+	local child = self:getChildByTag(Room.TAG.FLIMLAYER_BAR)
+	if flimLayerType == Room.FLIMTYPE.FLIMLAYER_BAR then
+		child = self:getChildByTag(Room.TAG.FLIMLAYER_BAR)
+	elseif flimLayerType == Room.FLIMTYPE.FLIMLAYER_BU then
+		child = self:getChildByTag(Room.TAG.FLIMLAYER_BU)
+	end
+	if child then
+		child:removeFromParent()
+	end
+end
+
+-- @class function
+-- @description 显示出牌动画
+-- @param seatIdx 座次
+-- end --
+function RoomScene:showMjTileAnimation(seatIdx, startPos, mjColor, mjNumber, cbFunc)
+	--print('RoomScene:showMjTileAnimation ');
+	logGame('Animate Start player[' ..seatIdx..']  出牌 '..Tools.infoMJ(mjColor,mjNumber));
+	local mjTilePos =  self:getMJWorldPoint(startPos) --startPos
+	local roomPlayer = self.m_room:getPlayer(seatIdx)
+	if not roomPlayer then
+		return
+	end
+    self.m_mjAniData = self.m_mjAniData or {};
+	local rotateAngle = {-90, 180, 90, 0}
+
+	local mjTileName = string.format("p4s%d_%d.png", mjColor, mjNumber)
+	local mjTileSpr = cc.Sprite:createWithSpriteFrameName(mjTileName)
+	self:addChild(mjTileSpr, 98)
+
+	if Tools.isGhost(mjColor, mjNumber, self.m_room.m_gui) then
+		Tools.setMjTilesAngle( 4, mjTileSpr, gt.anglePngPath )
+	end
+	mjTileSpr:setPosition(mjTilePos)
+
+	-- local nodeAction = self:addMJTileActionNode(seatIdx,mjColor,mjNumber)
+	-- nodeAction['tile_spr'] = mjTileSpr;
+	--local nodeAction = NodeAction.new();
+	--outTileActionManager:push(nodeAction);
+	local outTileIndex = #roomPlayer:getOutMJTiles() + 1; --> 添加当前数值的 索引
+
+	local aniData = {
+		['tileSpr'] = mjTileSpr,
+		['seatIdx'] = seatIdx,
+		['mjColor'] = mjColor,
+		['mjNumber']= mjNumber,
+		['outTileIndex'] = outTileIndex,
+	};
+	table.insert(self.m_mjAniData,aniData); --> 插入最后
+
+	local function onAnimateEnd(seat,tileIndex)
+		logGame('Animate End player['..tostring(seat)..'] 出牌 At: '.. tostring(tileIndex));
+		for i,v in ipairs(self.m_mjAniData) do 
+			if(v['seatIdx'] == seat) then 
+				--local tileIndexEqual = assert(v['outTileIndex'] == tileIndex,tostring(v['outTileIndex']) ..' :' ..tostring(tileIndex));
+				table.remove(self.m_mjAniData,i);
+				logGame("Delete Animate" ..'player['..tostring(seat)..'] At: ['..i..']');
+				return;
+			end 
+		end 
+	end 
+
+	local mjTilesReferPos = roomPlayer:getTilesReferPos()
+	local totalTime = 0.05
+	local moveToAc_1 = cc.MoveTo:create(totalTime, self:getMJWorldPoint(mjTilesReferPos.showMjTilePos))
+	local rotateToAc_1 = cc.ScaleTo:create(totalTime, 1.5)
+	local delayTime = cc.DelayTime:create(0.8)
+
+
+	local mjTilePos = mjTilesReferPos.outStart
+	local mjTilesCount = #roomPlayer:getOutMJTiles() + 1
+	local lineCount = math.ceil(mjTilesCount / 10) - 1
+	local lineIdx = mjTilesCount - lineCount * 10 - 1
+	mjTilePos = cc.pAdd(mjTilePos, cc.pMul(mjTilesReferPos.outSpaceV, lineCount))
+	mjTilePos = cc.pAdd(mjTilePos, cc.pMul(mjTilesReferPos.outSpaceH, lineIdx))
+
+	local moveToAc_2 = cc.MoveTo:create(totalTime, mjTilePos)
+	local rotateToAc_2 = cc.ScaleTo:create(totalTime, 1.0)
+	local rmAct = cc.RemoveSelf:create();
+
+	local callFunc = cc.CallFunc:create(function(sender)
+		sender:removeFromParent()
+		cbFunc()
+	end)
+
+	local callFunc2 = cc.CallFunc:create(function()
+		onAnimateEnd(seatIdx,outTileIndex)
+		cbFunc(outTileIndex)
+	end)
+
+	-- if(DEBUG_NODE_ACTION) then 
+		mjTileSpr:runAction(
+			cc.Sequence:create(cc.Spawn:create(moveToAc_1, rotateToAc_1),
+								delayTime,
+								cc.Spawn:create(moveToAc_2, rotateToAc_2),
+								callFunc2,
+								rmAct));
+	
+
+	-- else
+	-- 	mjTileSpr:runAction(cc.Sequence:create(cc.Spawn:create(moveToAc_1, rotateToAc_1),
+	-- 									delayTime,
+	-- 									cc.Spawn:create(moveToAc_2, rotateToAc_2),
+	-- 									callFunc));
+	-- end 
+
+
+end
+
+-- @class function
+-- @description 显示指示出牌标识箭头动画
+-- @param seatIdx 座次
+-- end --
+function RoomScene:showOutMjtileSign(seatIdx)
+	local roomPlayer = self.m_room:getPlayer(seatIdx)
+	if not roomPlayer then
+		return
+	end
+
+	local endIdx = #roomPlayer:getOutMJTiles()
+	local outMjTile = roomPlayer:getOutMJTiles()[endIdx]
+	if(outMjTile ~= nil and outMjTile.mjTileSpr ~= nil) then 
+		self.m_outMjtileSignNode:setVisible(true)
+		self.m_outMjtileSignNode:setPosition(self:getMJWorldPoint(outMjTile.mjTileSpr))
+	end 
+end
+
+-- @class function
+-- @description 显示已出牌
+-- @param seatIdx 座位号
+-- @param mjColor 麻将花色
+-- @param mjNumber 麻将编号
+-- end --
+function RoomScene:addAlreadyOutMjTiles(seatIdx, mjColor, mjNumber, isHide)
+	if(mjColor == nil or mjNumber == nil) then
+		return; 
+	end 
+	
+	local roomPlayer = self:getPlayer(seatIdx)
+	if not roomPlayer then
+		return
+	end
+
+    --[还没有创建 mjTiles 数组] 
+	if roomPlayer.m_outMjTiles == nil then 
+		--应该是有动画没有停止才可能出现这样
+		return;
+	end 
+
+
+	local mjTileSpr = cc.Sprite:createWithSpriteFrameName(string.format("p%ds%d_%d.png", roomPlayer:getDisplayIdx(), mjColor, mjNumber))
+	--mjTileSpr:setTag(tileTag)
+	roomPlayer:addOutMJTile(mjTileSpr, mjColor, mjNumber)
+
+	if Tools.isGhost(mjColor, mjNumber, self.m_room.m_gui) then
+	-- if self.m_room.m_gui and self.m_room.m_gui.mjColor == mjColor and self.m_room.m_gui.mjNumber == mjNumber then
+		Tools.setMjTilesAngle( roomPlayer:getDisplayIdx() , mjTileSpr, gt.anglePngPath )
+	end
+
+	-- 玩家已出牌缩小
+	if self.m_room:getMainSeatIdx() == seatIdx then
+		mjTileSpr:setScale(0.66)
+	end
+
+	if isHide then
+		mjTileSpr:setVisible( false )
+	end
+
+	-- 显示已出牌
+	local mjTilesReferPos = roomPlayer:getTilesReferPos()
+	local mjTilePos = mjTilesReferPos.outStart
+	local lineCount = math.ceil(#roomPlayer:getOutMJTiles() / RoomScene.CARD_LINE_MAX) - 1
+	local lineIdx = #roomPlayer:getOutMJTiles() - lineCount * RoomScene.CARD_LINE_MAX - 1
+	mjTilePos = cc.pAdd(mjTilePos, cc.pMul(mjTilesReferPos.outSpaceV, lineCount))
+	mjTilePos = cc.pAdd(mjTilePos, cc.pMul(mjTilesReferPos.outSpaceH, lineIdx))
+	mjTileSpr:setPosition(mjTilePos)
+	self.m_mahjongNode:addChild(mjTileSpr, (gt.winSize.height - mjTilePos.y))
+end
+
+-- @class function
+-- @description 自摸碰变成明杠
+-- @param seatIdx
+-- @param mjColor
+-- @param mjNumber
+-- end --
+function RoomScene:changePungToBrightBar(seatIdx, mjColor, mjNumber)
+	--print('RoomScene:changePungToBrightBar '..seatIdx ..' color '..mjColor ..' number '..mjNumber);
+	local roomPlayer = self.m_room:getPlayer(seatIdx)
+	if not roomPlayer then
+		return
+	end
+
+	if seatIdx == self.m_room:getMainSeatIdx() then
+		roomPlayer:removeHoldTileByCount(1, mjColor, mjNumber)
+	else
+		roomPlayer:removeHoldTileLast() --删除最后一张牌
+	end
+	self:sortSelfMjTiles()
+
+	-- 查找碰牌
+	local brightBarData = roomPlayer:removePungsTile(mjColor, mjNumber)
+	-- 添加到明杠列表
+	if brightBarData then
+		-- 加入杠牌第4个牌
+		local groupMjTilesPos = roomPlayer:getTilesReferPos().groupMjTilesPos
+		local mjTileName = string.format("p%ds%d_%d.png", roomPlayer:getDisplayIdx(), mjColor, mjNumber)
+		local mjTileSpr = cc.Sprite:createWithSpriteFrameName(mjTileName)
+		mjTileSpr:setPosition(groupMjTilesPos[4])
+		brightBarData.groupNode:addChild(mjTileSpr)
+		roomPlayer:addBrightBar(brightBarData)
+
+		if Tools.isGhost(mjColor, mjNumber, self.m_room.m_gui) then
+		-- if self.m_room.m_gui and self.m_room.m_gui.mjColor == mjColor and self.m_room.m_gui.mjNumber == mjNumber then
+			Tools.setMjTilesAngle( roomPlayer:getDisplayIdx() , mjTileSpr, gt.anglePngPath )
+		end
+	end
+end
+
+
+--返回播放胡的声音
+function RoomScene:getPlayHuSound( _huCard )
+	if not _huCard or #_huCard < 1 then
+		return
+	end
+
+	local huType = {
+		[8] = "gangshangkaihua",
+		[9] = "gangshangpao",
+		[10] = "haidilaoyue",
+		[11] = "haidipao",
+		[12] = "qiangganghu",
+		[103] = "pengpenghu",
+		[106] = "qingyise",
+		[116] = "haohuaxiaoqidui",
+		[117] = "qixiaodui",
+	}
+
+	local soundType = nil
+
+	for k,v in pairs(_huCard) do
+		if huType[v] then
+			soundType = huType[v]
+			break
+		end
+	end
+
+	return soundType or "hu"
+end
+
+--显示决策动画 ??
+function RoomScene:showDecisionAnimation(seatIdx, decisionType, huCard)
+	print('RoomScene:showDecisionAnimation');
+	if huCard~=nil then
+	 	-- 长沙麻将
+		-- local decisionSfx = {"hu", "haohuaxiaoqidui", "qixiaodui", "qingyise", "jiangjianghu" ,"pengpenghu", "quanqiuren", "gangshangkaihua", "gangshangpao", "haidilaoyue", "haidipao", "qiangganghu" }
+		-- 显示决策标识
+		local roomPlayer = self.m_room:getPlayer(seatIdx)
+		if not roomPlayer then
+			return
+		end
+
+		if not roomPlayer.isFirstHu then -- 没有胡过
+			roomPlayer.isFirstHu = 1
+		else
+			roomPlayer.isFirstHu = roomPlayer.isFirstHu + 1
+		end
+
+		local mjTilesReferPos = roomPlayer:getTilesReferPos()
+		local displaySeatIdx = roomPlayer:getDisplayIdx()
+		local groupNode = cc.Node:create()
+		groupNode:setCascadeOpacityEnabled( true )
+		local pos = self:getMJWorldPoint(mjTilesReferPos.showMjTilePos)
+		groupNode:setPosition(pos )
+		self:addChild( groupNode, Room.ZOrder.DECISION )
+
+		local nextX = 0
+		local nextY = 0
+		local totoalX = 0
+		local totoalY = 0
+		local xoffset = 0
+		local yoffset = 0
+		for i,v in ipairs(huCard) do -- 创建要显示的图片文字
+			--print("结算 ".. v)
+			if self:getGameType() == Tools.GAME_TYPE[gt.RoomType.ROOM_JIPINGHU + 1]  
+			  or self:getGameType() == Tools.GAME_TYPE[gt.RoomType.ROOM_CHAOSHAN + 1]  
+			  or self:getGameType() == Tools.GAME_TYPE[gt.RoomType.ROOM_HONGZHONGWANG + 1] 
+			  or self:getGameType() == Tools.GAME_TYPE[gt.RoomType.ROOM_HUIZHOUZHUANG_BUHUA + 1] 
+			  or self:getGameType() == Tools.GAME_TYPE[gt.RoomType.ROOM_JIEYANG + 1]
+			then
+				local animationFile = nil
+				if v == 118 then
+					animationFile = "renhu"
+				elseif v == 119 then
+					animationFile = "dihu"
+				elseif v == 120 then
+					animationFile = "tianhu"
+				end
+
+				if animationFile then
+					if self.huAnimateNode then
+						self.huAnimateNode:removeFromParent()
+						self.huAnimateNode = nil
+					end
+
+					local huAnimateNode, huAnimate = gt.createCSAnimation("da/" .. animationFile .. ".csb")
+					self.huAnimateNode = huAnimateNode					
+					self.huAnimateNode:setPosition(gt.winCenter)
+					self:addChild(huAnimateNode, Room.ZOrder.MJBAR_ANIMATION)
+
+					self.huAnimate = huAnimate
+					self.huAnimate:play(animationFile, false)
+				end
+			end
+		end
+
+		if displaySeatIdx == 1 or displaySeatIdx == 3 then -- 左右两边竖着显示
+			groupNode:setPosition( cc.pAdd( pos, cc.p(-xoffset,totoalY/2) ) )
+		else
+			groupNode:setPosition( cc.pAdd( pos, cc.p(-totoalX/2,-yoffset) ) )
+		end
+
+		-- 标识显示动画
+		groupNode:setScale(0)
+		local scaleToAction = cc.ScaleTo:create(0.5, 1)
+		local easeBackAction = cc.EaseBackOut:create(scaleToAction)
+		local fadeOutAction = cc.FadeOut:create(1)
+		local callFunc = cc.CallFunc:create(function(sender)
+			-- 播放完后移除
+			sender:removeFromParent()
+		end)
+		local seqAction = cc.Sequence:create(easeBackAction, fadeOutAction, callFunc)
+		groupNode:runAction(seqAction)
+
+		-- 播放全屏动画
+		if decisionType == Room.DecisionType.BRIGHT_BAR then
+			if not self.brightBarAnimateNode then
+				local brightBarAnimateNode, brightBarAnimate = gt.createCSAnimation("animation/BrightBar.csb")
+				self.brightBarAnimateNode = brightBarAnimateNode
+				self.brightBarAnimate = brightBarAnimate
+				self:addChild(brightBarAnimateNode, Room.ZOrder.MJBAR_ANIMATION)
+			end
+			self.brightBarAnimate:play("run", false)
+		elseif decisionType == Room.DecisionType.DARK_BAR then
+			if not self.darkBarAnimateNode then
+				local darkBarAnimateNode, darkBarAnimate = gt.createCSAnimation("animation/DarkBar.csb")
+				self.darkBarAnimateNode = darkBarAnimateNode
+				self.darkBarAnimate = darkBarAnimate
+				self:addChild(darkBarAnimateNode, Room.ZOrder.MJBAR_ANIMATION)
+			end
+			self.darkBarAnimate:play("run", false)
+		end
+		-- dj revise
+		-- gt.soundManager:PlaySpeakSound(roomPlayer:getSex(), decisionSfx[huCard[1]], roomPlayer)
+		gt.soundManager:PlaySpeakSound(roomPlayer:getSex(), self:getPlayHuSound(huCard), roomPlayer)
+	else
+		-- 接炮胡，自摸胡，明杠，暗杠，碰文件后缀
+		local decisionSuffixs = {1, 4, 2, 2, 3, 5, 6, 6,}
+		local decisionSfx = {"hu", "zimo", "gang", "gang", "peng" ,"chi", "buzhang", "buzhang"}
+
+		-- 显示决策标识
+		local roomPlayer = self.m_room:getPlayer(seatIdx)
+		local mjTilesReferPos = roomPlayer:getTilesReferPos()
+		local decisionSignSpr= cc.Sprite:createWithSpriteFrameName(string.format("decision_sign_cs_%d.png", decisionSuffixs[decisionType]))
+		decisionSignSpr:setPosition(mjTilesReferPos.showMjTilePos)
+		self:addChild(decisionSignSpr, Room.ZOrder.DECISION)
+		-- 标识显示动画
+		decisionSignSpr:setScale(0)
+		local scaleToAction = cc.ScaleTo:create(0.5, 1)
+		local easeBackAction = cc.EaseBackOut:create(scaleToAction)
+		local fadeOutAction = cc.FadeOut:create(1)
+		local callFunc = cc.CallFunc:create(function(sender)
+			-- 播放完后移除
+			sender:removeFromParent()
+		end)
+		local seqAction = cc.Sequence:create(easeBackAction, fadeOutAction, callFunc)
+		decisionSignSpr:runAction(seqAction)
+
+		-- 播放全屏动画
+		if decisionType == Room.DecisionType.BRIGHT_BAR then
+			if not self.brightBarAnimateNode then
+				local brightBarAnimateNode, brightBarAnimate = gt.createCSAnimation("animation/BrightBar.csb")
+				self.brightBarAnimateNode = brightBarAnimateNode
+				self.brightBarAnimate = brightBarAnimate
+				self:addChild(brightBarAnimateNode, Room.ZOrder.MJBAR_ANIMATION)
+			end
+			self.brightBarAnimate:play("run", false)
+		elseif decisionType == Room.DecisionType.DARK_BAR then
+			if not self.darkBarAnimateNode then
+				local darkBarAnimateNode, darkBarAnimate = gt.createCSAnimation("animation/DarkBar.csb")
+				self.darkBarAnimateNode = darkBarAnimateNode
+				self.darkBarAnimate = darkBarAnimate
+				self:addChild(darkBarAnimateNode, Room.ZOrder.MJBAR_ANIMATION)
+			end
+			self.darkBarAnimate:play("run", false)
+		end
+		-- dj revise
+		gt.soundManager:PlaySpeakSound(roomPlayer:getSex(), decisionSfx[decisionType], roomPlayer)
+	end
+end
+
+--摸牌
+--摸玩家的Tiles牌
+function RoomScene:touchPlayerMjTiles(touch)
+	local roomPlayer = self.m_room:getMainPlayer()
+	if not roomPlayer then
+		return
+	end
+
+	for idx, mjTile in ipairs(roomPlayer:getHoldMJTiles()) do
+		local touchPoint = mjTile.mjTileSpr:convertTouchToNodeSpace(touch)
+		local mjTileSize = mjTile.mjTileSpr:getContentSize()
+		local mjTileRect = cc.rect(0, 0, mjTileSize.width, mjTileSize.height)
+		if cc.rectContainsPoint(mjTileRect, touchPoint) then
+			gt.soundEngine:playEffect("common/audio_card_click")
+			return mjTile, idx
+		end
+	end
+
+	return nil
+end
+
+function RoomScene:onTouchBegan(touch, event)
+	if self.m_inTouch then
+		return false
+	end	
+
+	if(not gt.enableMoveCard) then 
+		if not self:getPlayerShow() then 
+			return false;
+		end 
+	end
+	
+	if self:getPlayerDecision() or self:getGhostAnimation() then
+		return false
+	end 
+
+	--结束了之后，不让他在点击了
+	--为了惠州庄-补花做的
+	local room = self:getRoom()
+	if room:getRoomStatus() == Room.Status.END then
+		return false
+	end
+
+	local touchMjTile, mjTileIdx = self:touchPlayerMjTiles(touch)
+	if not touchMjTile then
+		return false
+	end
+
+	-- 杠之后只能出最后刚摸到的牌
+	local roomPlayer = self.m_room:getMainPlayer()
+	if not roomPlayer then
+		return false
+	end
+
+	if not touchMjTile.mjTileSpr then
+		return false;
+	end 
+	-- 记录原始位置
+	self.m_mahjongNode:reorderChild(touchMjTile.mjTileSpr, gt.winSize.height)
+	self.m_chooseMjTile = touchMjTile
+	self.m_chooseMjTileIdx = mjTileIdx
+	self.mjTileOriginPos = cc.p(touchMjTile.mjTileSpr:getPosition())
+	self.preTouchPoint = self:convertTouchToNodeSpace(touch)
+	self.isTouchMoved = false
+	self.m_inTouch = true
+
+	return true
+end
+
+function RoomScene:onTouchMoved(touch, event)
+	--断线重连后数据重置
+	if not self.m_chooseMjTile or not self.m_chooseMjTileIdx then
+		return
+	end
+
+	local touchPoint = self.m_csbLayer:convertTouchToNodeSpace(touch)
+	self.m_chooseMjTile.mjTileSpr:setPosition(touchPoint)
+
+	self.isTouchMoved = true
+end
+
+function RoomScene:onTouchEnded(touch, event)
+	self.m_inTouch = false
+	local isShowMjTile = false
+	--断线重连后数据重置
+	if not self.m_chooseMjTile or not self.m_chooseMjTileIdx then
+		return
+	end
+	-- 拖拽出牌
+	local touchPoint = self:convertTouchToNodeSpace(touch)
+	if cc.pDistanceSQ(self.preTouchPoint, touchPoint) > 400 then
+		if(gt.enableMoveCard) then 
+			if(self:isInTileMoveRegion(touchPoint)) then 
+				print("inTouchMoveRegion ");
+				if(self:selfMoveMjTile(self.m_chooseMjTileIdx) ) then
+					self.preClickMjTile = nil; 
+					self.m_chooseMjTile = nil; 
+					return;
+				-- else --判断是否双击出牌
+				-- 	if self.m_chooseMjTile ~= self.preClickMjTile then
+				-- 		local mjTilePos = cc.p(self.m_chooseMjTile.mjTileSpr:getPosition())
+				-- 		local moveAction = cc.MoveTo:create(0.25, cc.p(mjTilePos.x, mjTilePos.y + 26))
+				-- 		self.m_chooseMjTile.mjTileSpr:runAction(moveAction)
+				-- 		-- 上一次点中的复位
+				-- 		if self.preClickMjTile then
+				-- 			mjTilePos = cc.p(self.preClickMjTile.mjTileSpr:getPosition())
+				-- 			local moveAction = cc.MoveTo:create(0.25, cc.p(mjTilePos.x, mjTilePos.y - 26))
+				-- 			self.preClickMjTile.mjTileSpr:runAction(moveAction)
+				-- 		end
+				-- 	else
+				-- 		self:selfOutMjTile(self.m_chooseMjTile)	
+				-- 	end
+				-- 	self.preClickMjTile = self.m_chooseMjTile
+				end 
+			end 
+		end
+		if(not self:getPlayerShow()) then 
+			self.m_chooseMjTile.mjTileSpr:setPosition(self.mjTileOriginPos)
+			self.m_mahjongNode:reorderChild(self.m_chooseMjTile.mjTileSpr, self.mjTileOriginPos.y)
+			return;
+		end 
+
+		local roomPlayer = self.m_room:getMainPlayer()
+		local limitPosY = roomPlayer:getTilesReferPos().outStart.y
+		if touchPoint.y > limitPosY then
+			-- 拖动位置大于上限认为出牌
+			isShowMjTile = true
+		end
+	else
+		-- 点击麻将牌
+		-- 点中弹出
+		if(not self:getPlayerShow()) then 
+			self.m_chooseMjTile.mjTileSpr:setPosition(self.mjTileOriginPos)
+			self.m_mahjongNode:reorderChild(self.m_chooseMjTile.mjTileSpr, self.mjTileOriginPos.y)
+			return;
+		end 
+		if self.m_chooseMjTile ~= self.preClickMjTile then
+			local mjTilePos = cc.p(self.m_chooseMjTile.mjTileSpr:getPosition())
+			local moveAction = cc.MoveTo:create(0.25, cc.p(mjTilePos.x, mjTilePos.y + 26))
+			self.m_chooseMjTile.mjTileSpr:runAction(moveAction)
+			-- 上一次点中的复位
+			if self.preClickMjTile then
+				mjTilePos = cc.p(self.preClickMjTile.mjTileSpr:getPosition())
+				local moveAction = cc.MoveTo:create(0.25, cc.p(mjTilePos.x, mjTilePos.y - 26))
+				self.preClickMjTile.mjTileSpr:runAction(moveAction)
+			end
+		end
+
+		-- 判断双击
+		if self.preClickMjTile and self.preClickMjTile == self.m_chooseMjTile then
+			isShowMjTile = true
+		end
+		self.preClickMjTile = self.m_chooseMjTile
+	end
+
+	if self.isTouchMoved and not isShowMjTile then
+		-- 放回原来的位置,不出牌
+		self.m_chooseMjTile.mjTileSpr:setPosition(self.mjTileOriginPos)
+		self.m_mahjongNode:reorderChild(self.m_chooseMjTile.mjTileSpr, self.mjTileOriginPos.y)
+	end
+
+	if isShowMjTile then
+		self:selfOutMjTile(self.m_chooseMjTile)
+	end
+
+end
+
+function RoomScene:onTouchBegan2(touch, event)
+	if(not gt.enableMoveCard) then 
+		return;
+	end 
+
+	print("RoomScene:onTouchBegan2");
+	self.mTouch = self.mTouch or 0;
+	self.mTouch = self.mTouch + 1;
+	--print("RoomScene:mTouch "..tostring(self.mTouch));
+	if(self.mTouch >= 2) then 
+		self.mTouch = 0;
+		self:restoreMJTiles();
+		return;
+	end 
+	performWithDelay(self,function()
+		if(self.mTouch == 1) then 
+			self.mTouch = 0
+		end 
+	end ,0.3)
+	
+	return true
+end 
+
+
+function RoomScene:onTouchEnded2(touch,event)
+	print("RoomScene:onTouchEnded2");
+
+end 
+
+function RoomScene:getDecisionType( flag )
+	return flag
+end
+
+-- 清理当前已选择牌
+function RoomScene:clearChoose()
+	self.m_chooseMjTile = nil
+	self.m_chooseMjTileIdx = nil
+end
+
+-- @class function
+-- @description 碰杠重新排序麻将牌,显示碰杠
+-- @param seatIdx
+-- @param mjColor
+-- @param mjNumber
+-- @param isBar
+-- @param isBrightBar
+-- @return
+-- end --
+function RoomScene:pungBarReorderMjTiles(seatIdx, mjColor, mjNumber, isBar, isBrightBar)
+	if mjColor < 1 or (type(mjNumber) == "number" and mjNumber < 1) then
+		return
+	end
+
+	local player = self.m_room:getPlayer(seatIdx)
+	local mjTilesReferPos = player:getTilesReferPos()
+	-- 显示碰杠牌
+	local groupMjTilesPos = mjTilesReferPos.groupMjTilesPos
+	local groupNode = cc.Node:create()
+	groupNode:setPosition(mjTilesReferPos.groupStartPos)
+	self.m_mahjongNode:addChild(groupNode)
+
+	local mjTilesCount = 3
+	if isBar then
+		mjTilesCount = 4
+	end
+	local displaySeatIdx = player:getDisplayIdx()
+	for i = 1, mjTilesCount do
+		local mjTileName = nil
+		local exMjColor = nil
+		local exMjNumber = 1
+		if isBar and not isBrightBar and i <= 3 then
+			-- 暗杠前三张牌扣着
+			mjTileName = string.format("tdbgs_%d.png", displaySeatIdx)
+		else
+			if type(mjNumber) == "number"  then
+				mjTileName = string.format("p%ds%d_%d.png", displaySeatIdx, mjColor, mjNumber)
+				exMjColor = mjColor
+				exMjNumber = mjNumber
+			else
+				mjTileName = string.format("p%ds%d_%d.png", displaySeatIdx, tonumber(mjColor), tonumber(mjNumber[i][1]))
+				exMjColor = tonumber(mjColor)
+				exMjNumber = tonumber(mjNumber[i][1])
+			end
+		end
+		local mjTileSpr = cc.Sprite:createWithSpriteFrameName(mjTileName)
+		mjTileSpr:setPosition(groupMjTilesPos[i])
+		groupNode:addChild(mjTileSpr)
+
+		if Tools.isGhost(exMjColor, exMjNumber, self.m_room.m_gui) then
+		-- if self.m_room.m_gui and  exMjColor and exMjNumber  and self.m_room.m_gui.mjColor == exMjColor and self.m_room.m_gui.mjNumber == exMjNumber then
+			Tools.setMjTilesAngle( displaySeatIdx, mjTileSpr, gt.anglePngPath )
+		end
+	end
+	mjTilesReferPos.groupStartPos = cc.pAdd(mjTilesReferPos.groupStartPos, mjTilesReferPos.groupSpace)
+	mjTilesReferPos.holdStart = cc.pAdd(mjTilesReferPos.holdStart, mjTilesReferPos.groupSpace)
+
+	-- 更新持有牌显示位置
+	if seatIdx == self.m_room:getMainSeatIdx() then
+		-- 玩家自己
+		-- 碰2张
+		local mjTilesCount = 2
+		if isBar then
+			-- 明杠3张
+			mjTilesCount = 3
+			-- 暗杠4张
+			if not isBrightBar then
+				mjTilesCount = 4
+			end
+		end
+		if type(mjNumber) == "number" then
+			if not self.pung then
+				player:removeHoldTileByCount(mjTilesCount, mjColor, mjNumber)
+			end
+		else
+			local removeTable = {}
+			for j = 1, 3 do
+				if tonumber(mjNumber[j][2]) ~= tonumber(1) then
+					table.insert(removeTable, {mjNumber[j][1], mjNumber[j][3]})
+				end
+			end
+
+			if #removeTable > 0 then
+				for i, mjTile in ipairs(player:getHoldMJTiles()) do
+					if mjTile.mjNumber == removeTable[1][1] and  mjTile.mjColor == removeTable[1][2] then
+						mjTile.mjTileSpr:removeFromParent()
+						table.remove(player:getHoldMJTiles(), i)
+						break
+					end
+				end
+				for i, mjTile in ipairs(player:getHoldMJTiles()) do
+						if mjTile.mjNumber == removeTable[2][1] and mjTile.mjColor == removeTable[2][2] then
+							mjTile.mjTileSpr:removeFromParent()
+							table.remove(player:getHoldMJTiles(), i)
+						break
+					end
+				end
+			end
+		end
+		-- 重新排序现持有牌
+		self:sortSelfMjTiles()
+	else
+		local mjTilesReferPos = player:getTilesReferPos()
+		local mjTilePos = mjTilesReferPos.holdStart
+		for _, mjTile in ipairs(player:getHoldMJTiles()) do
+			mjTile.mjTileSpr:setPosition(mjTilePos)
+			self.m_mahjongNode:reorderChild(mjTile.mjTileSpr, (gt.winSize.height - mjTilePos.y))
+			mjTilePos = cc.pAdd(mjTilePos, mjTilesReferPos.holdSpace)
+		end
+	end
+
+	return groupNode
+end
+
+-- 排序持有牌
+function RoomScene:sortSelfMjTiles()
+	local player = self.m_room:getMainPlayer()
+	if not player then
+		return
+	end
+	-- 重新放置位置
+	local holdTiles = player:getHoldMJTiles()
+	if(#holdTiles == 0 ) then
+		return;
+	end 
+	local mjTilesReferPos = player:getTilesReferPos()
+	if(mjTilesReferPos == nil) then 
+		return;
+	end 
+	player:sortHoldMJTiles()
+	self:drawSelfMJTiles();
+
+	-- local mjTilePos = mjTilesReferPos.holdStart
+	-- for k, mjTile in ipairs(player:getHoldMJTiles()) do
+	-- 	if(mjTile.mjTileSpr ~= nil) then 
+	-- 		mjTile.mjTileSpr:stopAllActions()
+	-- 		mjTile.mjTileSpr:setPosition(mjTilePos)
+	-- 		self.m_mahjongNode:reorderChild(mjTile.mjTileSpr, (gt.winSize.height - mjTilePos.y))
+	-- 		mjTilePos = cc.pAdd(mjTilePos, mjTilesReferPos.holdSpace)
+	-- 		if k == 13 then -- 如果手里有14张得话，那么说明是庄家
+	-- 			mjTilePos = cc.pAdd(mjTilePos, cc.p(36, 0))
+	-- 		end
+	-- 	end
+	-- end
+end
+
+-- 将麻将添加到玩家持有牌的列表内
+function RoomScene:addMJTileToSelf(mjColor, mjNumber)
+	--print('RoomScene:addMJTileToSelf color: '..mjColor..' number: ' ..mjNumber);
+	logGame('MainPlayer:摸牌 '..Tools.infoMJ(mjColor,mjNumber));
+	if mjColor < 1 or mjNumber < 1 then
+		return
+	end
+
+	local player = self.m_room:getMainPlayer()
+	if not player then
+		return
+	end
+
+	local mjTileName = string.format("p%db%d_%d.png", Room.PlayerTotal, mjColor, mjNumber)
+	local mjTileSpr = cc.Sprite:createWithSpriteFrameName(mjTileName)
+	self.m_mahjongNode:addChild(mjTileSpr)
+	if Tools.isGhost(mjColor, mjNumber, self.m_room.m_gui) then --是否鬼牌
+		Tools.setMjTilesAngle( 0, mjTileSpr, gt.anglePngPath )
+	end
+	local mjTile = player:addHoldMJTile(mjTileSpr, mjColor, mjNumber)
+	--logGame('MainPlayer:lastAdd '..Tools.infoMJ(mjColor,mjNumber));
+	self.m_lastMJTile = mjTile; --最后一次摸到的牌
+	return mjTile;
+end
+
+-- 其他玩家添加持有牌,显示牌背面
+function RoomScene:addMJTilesToOther(_player)
+	print("RoomScene:addMJTilesToOther");
+	
+	local mjTilesReferPos = _player:getTilesReferPos()
+	local mjTilePos = mjTilesReferPos.holdStart
+	local maxCount = _player:getHoldTilesTotal() + 1
+	for i = 1, maxCount do
+		local mjTileName = string.format("tbgs_%d.png", _player:getDisplayIdx())
+		local mjTileSpr = cc.Sprite:createWithSpriteFrameName(mjTileName)
+		mjTileSpr:setPosition(mjTilePos)
+		self.m_mahjongNode:addChild(mjTileSpr, (gt.winSize.height - mjTilePos.y))
+		mjTilePos = cc.pAdd(mjTilePos, mjTilesReferPos.holdSpace)
+
+		_player:addHoldMJTile(mjTileSpr)
+		-- 隐藏多产生的牌
+		if i > _player:getHoldTilesTotal() then
+			mjTileSpr:setVisible(false)
+		end
+	end
+end
+
+-- 添加玩家已出牌
+function RoomScene:addOutMjTiles(seatIdx, mjColor, mjNumber, isHide)
+	--添加到已出牌列表
+	--print('RoomScene:addOutMJTiles color: ' ..mjColor ..', number: '..mjNumber);
+	logGame('player['..seatIdx..'] 添加 已出牌 '..Tools.infoMJ(mjColor,mjNumber));
+
+	local player = self.m_room:getPlayer(seatIdx)
+	local mjTileSpr = cc.Sprite:createWithSpriteFrameName(string.format("p%ds%d_%d.png", player:getDisplayIdx(), mjColor, mjNumber))
+	player:addOutMJTile(mjTileSpr, mjColor, mjNumber)
+
+	if Tools.isGhost(mjColor, mjNumber, self.m_room.m_gui) then
+	-- if self.m_room.m_gui and self.m_room.m_gui.mjColor == mjColor and self.m_room.m_gui.mjNumber == mjNumber then
+		Tools.setMjTilesAngle( player:getDisplayIdx() , mjTileSpr, gt.anglePngPath )
+	end
+
+	-- 玩家已出牌缩小
+	if self.m_room:getMainSeatIdx() == seatIdx then
+		mjTileSpr:setScale(0.66)
+	end
+
+	if isHide then
+		mjTileSpr:setVisible(false)
+	end
+
+	-- 显示已出牌
+	local outTilesTotal = table.getn(player:getOutMJTiles())
+	local mjTilesReferPos = player:getTilesReferPos()
+	local mjTilePos = mjTilesReferPos.outStart
+	-- local lineCount = math.ceil(outTilesTotal / 10) - 1
+	-- local lineIdx = outTilesTotal - lineCount * 10 - 1
+	local lineCount = math.ceil(outTilesTotal / RoomScene.CARD_LINE_MAX) - 1
+	local lineIdx = outTilesTotal - lineCount * RoomScene.CARD_LINE_MAX - 1
+	mjTilePos = cc.pAdd(mjTilePos, cc.pMul(mjTilesReferPos.outSpaceV, lineCount))
+	mjTilePos = cc.pAdd(mjTilePos, cc.pMul(mjTilesReferPos.outSpaceH, lineIdx))
+	mjTileSpr:setPosition(mjTilePos)
+	self.m_mahjongNode:addChild(mjTileSpr, (gt.winSize.height - mjTilePos.y))
+end
+
+-- 添加玩家暗杠和明杠
+function RoomScene:addMjTileBar(seatIdx, mjColor, mjNumber, isBrightBar)
+	local barInfo = isBrightBar and "明" or "暗";
+	logGame("player["..tostring(seatIdx)..'] ' .. barInfo ..'杠 ' ..Tools.infoMJ(mjColor,mjNumber));
+	local player = self.m_room:getPlayer(seatIdx)
+	local groupNode = self:pungBarReorderMjTiles(seatIdx, mjColor, mjNumber, true, isBrightBar)
+	player:addBarMJTile(mjColor, mjNumber, groupNode, isBrightBar)
+end
+
+-- 添加玩家碰牌
+function RoomScene:addMjTilePung(seatIdx, mjColor, mjNumber)
+	logGame("player["..tostring(seatIdx)..']'  ..' 碰 ' ..Tools.infoMJ(mjColor,mjNumber));
+	local player = self.m_room:getPlayer(seatIdx)
+	local groupNode = self:pungBarReorderMjTiles(seatIdx, mjColor, mjNumber)
+	player:addPungMJTile(mjColor, mjNumber, groupNode)
+end
+
+-- @class function
+-- @description 补牌
+-- @param seatIdx 座位编号
+-- @param mjColor 麻将牌花色
+-- @param mjNumber 麻将牌编号
+-- @param isBrightBar 明补或者暗补
+-- end --
+function RoomScene:addMjTileBu(seatIdx, mjColor, mjNumber, isBrightBu)
+	local roomPlayer = self.m_room:getPlayer(seatIdx)
+	roomPlayer:addBuMJTile(mjColor, mjNumber,
+		self:pungBarReorderMjTiles(seatIdx, mjColor, mjNumber, true, isBrightBu), isBrightBu)
+end
+
+-- 胡牌之后,牌应该推到
+-- end --
+function RoomScene:showAllMjTilesWhenWin(seatIdx, m_cardCount, m_cardValue, m_color, m_number)
+
+	local player = self.m_room:getPlayer(seatIdx)
+	local mjTilesReferPos = player:getTilesReferPos()
+	-- 显示碰杠牌
+	local groupMjTilesPos = mjTilesReferPos.groupMjTilesPos
+	local space = cc.p(groupMjTilesPos[2].x - groupMjTilesPos[1].x, groupMjTilesPos[2].y - groupMjTilesPos[1].y)
+	local groupNode = cc.Node:create()
+	groupNode:setPosition(mjTilesReferPos.groupStartPos)
+	self.m_mahjongNode:addChild(groupNode)
+
+	-- 所有手牌
+	local setPos = groupMjTilesPos[1]
+	for i, mjTile in ipairs(m_cardValue) do
+		local mjTileName = string.format("p%ds%d_%d.png", player:getDisplayIdx(), mjTile[1], mjTile[2])
+		local mjTileSpr = cc.Sprite:createWithSpriteFrameName(mjTileName)
+		mjTileSpr:setPosition(setPos)
+		groupNode:addChild(mjTileSpr, -setPos.y)
+		setPos = cc.pAdd(setPos, mjTilesReferPos.m_huSpace)
+
+		if Tools.isGhost(mjTile[1], mjTile[2], self.m_room.m_gui) then
+		-- if self.m_room.m_gui and self.m_room.m_gui.mjColor == mjTile[1] and self.m_room.m_gui.mjNumber == mjTile[2] then
+			Tools.setMjTilesAngle( player:getDisplayIdx(), mjTileSpr, gt.anglePngPath )
+		end
+	end
+
+	-- if m_color > 0 and m_color <= 5 then
+	local mjTileName = string.format("p%ds%d_%d.png", player:getDisplayIdx(), m_color, m_number)
+	local mjTileFrame = cc.SpriteFrameCache:getInstance():getSpriteFrameByName(mjTileName)
+	if mjTileFrame then
+		local mjTileSpr = cc.Sprite:createWithSpriteFrame(mjTileFrame)
+		if player:getDisplayIdx() == 1 then
+			mjTileSpr:setPosition(cc.p(setPos.x, setPos.y + 35))
+		elseif player:getDisplayIdx() == 2 then
+			mjTileSpr:setPosition(cc.p(setPos.x - 10, setPos.y))
+		elseif player:getDisplayIdx() == 3 then
+			mjTileSpr:setPosition(cc.p(setPos.x, setPos.y - 35))
+		elseif player:getDisplayIdx() == 4 then
+			mjTileSpr:setPosition(cc.p(setPos.x + 15, setPos.y))
+		end
+		groupNode:addChild(mjTileSpr, -setPos.y)
+
+		if Tools.isGhost(m_color, m_number, self.m_room.m_gui) then
+		-- if self.m_room.m_gui and self.m_room.m_gui.mjColor == m_color and self.m_room.m_gui.mjNumber == m_number then
+			Tools.setMjTilesAngle( player:getDisplayIdx(), mjTileSpr, gt.anglePngPath )
+		end
+	end
+	-- end
+
+	-- 清除
+	player:cleanHoldMJTiles()
+	player:clearHoldFlower();
+end
+
+-- @class function
+-- @description 隐藏碰，杠牌
+-- @param seatIdx 座次
+-- @param isBar 杠
+-- @param isBrightBar 明杠
+-- end --
+function RoomScene:hideOtherPlayerMjTiles(seatIdx, isBar, isBrightBar)
+	
+	if seatIdx == self.m_room:getMainSeatIdx() then
+		return
+	end
+
+	-- 持有牌隐藏已经碰杠牌
+	-- 碰2张
+	local mjTilesCount = 2
+	if isBar then
+		-- 明杠3张
+		mjTilesCount = 3
+		-- 暗杠4张
+		if not isBrightBar then
+			mjTilesCount = 4
+		end
+	end
+	local roomPlayer = self.m_room:getPlayer(seatIdx)
+	local idx = roomPlayer:getHoldTilesTotal() - mjTilesCount + 1
+	for i = 1, mjTilesCount do
+		local mjTile = roomPlayer:getHoldTileByIdx(idx)
+		if(mjTile ~= nil and mjTile.mjTileSpr ~= nil) then 
+			mjTile.mjTileSpr:setVisible(false)
+		end 
+		idx = idx + 1
+	end
+	roomPlayer:setHoldTilesTotal(roomPlayer:getHoldTilesTotal() - mjTilesCount)
+end
+
+-- @class function
+-- @description 移除上家被下家，杠打出的牌
+-- end --
+function RoomScene:removePreRoomPlayerOutMjTile()
+	print('RoomScene:removePreRoomPlayerOutMjTile');
+	-- 移除上家打出的牌
+	local preShowSeatIdx = self.m_room:getPreShowSeatIdx()
+	if preShowSeatIdx then
+		logGame('player[' ..tostring(preShowSeatIdx) ..'] 删除最后一张牌');
+		local roomPlayer = self:getPlayer(preShowSeatIdx)
+		roomPlayer:removeOutTileLast()
+		self.m_outMjtileSignNode:setVisible(false)
+	end
+end
+
+-- 断线重连后,初始化玩家牌
+function RoomScene:resetTiles(msgTbl)
+	print('RoomScene:resetTiles');
+	
+	self.pung = true
+	-- 其他玩家牌
+	local playNode = gt.seekNodeByName(self.m_csbLayer, "Node_play")
+	table.foreach(self.m_room:getPlayers(), function(seatIdx, player)
+		-- 重新初始化牌数组
+		player:initMJTiles()
+		-- 初始化参考点数组
+		local tilesReferPos = MJTilesReferPos.new(playNode, player:getDisplayIdx())
+		player:setTilesReferPos(tilesReferPos)
+		-- 玩家持有牌总数
+		player:setHoldTilesTotal(msgTbl.m_CardCount[seatIdx])
+		-- 添加玩家持有牌
+		if player:getSeatIdx() == self.m_room:getMainSeatIdx() then
+			if msgTbl.m_myCard then
+				for _, v in ipairs(msgTbl.m_myCard) do
+					self:addMJTileToSelf(v[1], v[2])
+				end
+				-- 根据花色大小排序并重新放置位置
+				self:sortSelfMjTiles()
+			end
+		else
+			self:addMJTilesToOther(player)
+		end
+		-- 服务器座次编号
+		local turnPos = seatIdx - 1
+		-- 已出牌
+		local outMjTilesAry = msgTbl["m_oCard" .. turnPos]
+		if outMjTilesAry then
+			for _, v in ipairs(outMjTilesAry) do
+				self:addOutMjTiles(seatIdx, v[1], v[2])
+			end
+		end
+
+		-- 暗杠
+		local darkBarArray = msgTbl["m_aCard" .. turnPos]
+		if darkBarArray then
+			for _, v in ipairs(darkBarArray) do
+				self:addMjTileBar(seatIdx, v[1], v[2], false)
+			end
+		end
+
+		-- 明杠
+		local brightBarArray = msgTbl["m_mCard" .. turnPos]
+		if brightBarArray then
+			for _, v in ipairs(brightBarArray) do
+				self:addMjTileBar(seatIdx, v[1], v[2], true)
+			end
+		end
+
+		-- 碰
+		local pungArray = msgTbl["m_pCard" .. turnPos]
+		if pungArray then
+			for _, v in ipairs(pungArray) do
+				self:addMjTilePung(seatIdx, v[1], v[2])
+			end
+		end
+
+		--吃
+		local eatArray = msgTbl["m_eCard" .. turnPos]
+		if eatArray then
+			local eatTable = {}
+			local group1 = {}
+			local group2 = {}
+			local group3 = {}
+			local group4 = {}
+			for i, v in ipairs(eatArray) do
+				if i <= 3 then
+					table.insert(group1,{v[2],1,v[1]}) --牌号，手中牌标识，颜色
+					if i == 3 then
+						table.insert(eatTable,group1)
+						table.insert(player:getEatMJTiles(), group1)
+					end
+				elseif i > 3 and i <= 6 then
+					table.insert(group2,{v[2],1,v[1]})
+					if i == 6 then
+						table.insert(eatTable,group2)
+						table.insert(player:getEatMJTiles(), group2)
+					end
+				elseif i > 6 and i <= 9  then
+					table.insert(group3,{v[2],1,v[1]})
+					if i == 9 then
+						table.insert(eatTable,group3)
+						table.insert(player:getEatMJTiles(), group3)
+					end
+				elseif i > 9 and i <= 12  then
+					table.insert(group4,{v[2],1,v[1]})
+					if i == 9 then
+						table.insert(eatTable,group4)
+						table.insert(player:getEatMJTiles(), group4)
+					end
+				end
+			end
+
+			for j, eatTile in pairs(eatTable) do
+				self:pungBarReorderMjTiles(seatIdx, eatTile[j][3], eatTile)
+			end
+		end
+	end)
+	self.pung = false
+end
+
+function RoomScene:clearAnimation()
+	print("RoomScene:clearAnimation");
+	self.m_mjAniData = self.m_mjAniData or {};
+	if(#self.m_mjAniData == 0) then 
+		return false;
+	end
+
+	for i ,v in ipairs(self.m_mjAniData) do 
+		if(v['tileSpr'] ~= nil) then
+			v['tileSpr']:stopAllActions()
+			v['tileSpr']:removeFromParent();
+			--v['tileSpr'] = nil;
+		end 
+	end
+	self.m_mjAniData = {};
+	return true;
+end
+
+-- 断线重连,走一次登录流程
+function RoomScene:reLogin()
+	-- print("========重连登录1")
+	local accessToken 	= cc.UserDefault:getInstance():getStringForKey( "WX_Access_Token" )
+	local refreshToken 	= cc.UserDefault:getInstance():getStringForKey( "WX_Refresh_Token" )
+	local openid 		= cc.UserDefault:getInstance():getStringForKey( "WX_OpenId" )
+
+	local unionid 		= cc.UserDefault:getInstance():getStringForKey( "WX_Uuid" )
+	local sex 			= cc.UserDefault:getInstance():getStringForKey( "WX_Sex" )
+	local nickname 		= gt.wxNickName--cc.UserDefault:getInstance():getStringForKey( "WX_Nickname" )
+	local headimgurl 	= cc.UserDefault:getInstance():getStringForKey( "WX_ImageUrl" )
+
+	local msgToSend = {}
+	msgToSend.m_msgId = gt.CG_LOGIN
+	msgToSend.m_plate = "olduser"
+	msgToSend.m_accessToken = accessToken
+	msgToSend.m_refreshToken = refreshToken
+	msgToSend.m_openId = openid
+	msgToSend.m_severID = gt.AppID --10001
+	msgToSend.m_uuid = unionid
+	msgToSend.m_sex = tonumber(sex)
+	msgToSend.m_nikename = nickname
+	msgToSend.m_imageUrl = headimgurl
+	gt.unionid = unionid;
+
+	local catStr = string.format("%s%s%s%s", openid, accessToken, refreshToken, unionid)
+	msgToSend.m_md5 = cc.UtilityExtension:generateMD5(catStr, string.len(catStr))
+	gt.socketClient:sendMessage(msgToSend)
+	-- print("========重连登录2")
+end
+
+function RoomScene:onRcvLogin(msgTbl)
+	-- print("========重连登录3")
+	if msgTbl.m_errorCode == 5 then
+		-- 去掉转圈
+		gt.removeLoadingTips()
+		require("app/views/NoticeTips"):create("提示",	"您尚未在"..msgTbl.m_errorMsg.."退出游戏，请先退出后再登陆此游戏！", nil, nil, true)
+		return
+	end
+	-- print("========重连登录4")
+	-- 去掉转圈
+	gt.removeLoadingTips()
+
+	-- 发送登录gate消息
+	gt.loginSeed 		= msgTbl.m_seed
+	gt.GateServer.ip 	= gt.socketClient.serverIp
+	gt.GateServer.port 	= tostring(msgTbl.m_gatePort)
+
+	gt.socketClient:close()
+	-- print("===走这里,那么ip port是什么?",gt.GateServer.ip, gt.GateServer.port)
+	gt.socketClient:connect(gt.GateServer.ip, gt.GateServer.port, true)
+	local msgToSend = {}
+	msgToSend.m_msgId = gt.CG_LOGIN_SERVER
+	msgToSend.m_seed = msgTbl.m_seed
+	msgToSend.m_id = msgTbl.m_id
+	local catStr = tostring(gt.loginSeed)
+	msgToSend.m_md5 = cc.UtilityExtension:generateMD5(catStr, string.len(catStr))
+	gt.socketClient:sendMessage(msgToSend)
+	-- print("========重连登录5")
+	
+	--清除选中的牌，防止操作崩溃闪退
+	self:clearChoose()
+	self:clearAnimation() --> 清理动画
+	self:clearRedDragon();
+	self:clearFillup();
+end
+
+--当局结束
+function RoomScene:roundEnd(  )
+	local room = self:getRoom()
+	room:endRound()
+	--elf.hzNum =  {0,0,0,0}; --> 
+end
+
+--检测玩家准备手势
+function RoomScene:checkReady(  )
+	local room = self:getRoom()	
+	local players = room:getPlayers()
+
+	for idx, player in pairs(players) do
+		self:playerGetReady(idx)
+	end
+end
+
+--获取麻将的世界坐标
+function RoomScene:getMJWorldPoint( _mjTile )
+	if not _mjTile then
+		return cc.p(0, 0)
+	end
+
+	local point = nil
+	if not _mjTile.getPositionX then  --这是坐标点
+		point = self.m_csbLayer:convertToWorldSpace(_mjTile)
+	else
+		point = self.m_csbLayer:convertToWorldSpace(cc.p(_mjTile:getPositionX(), _mjTile:getPositionY()))
+	end
+	-- return self:convertToNodeSpace(point or cc.p(0, 0))
+	return self:convertToNodeSpace(point)
+end
+
+function RoomScene:setPlayMaAnimation( _isPlay )
+	self.m_isPlayMaAnimation = _isPlay
+end
+
+function RoomScene:getPlayMaAnimation(  )
+	return self.m_isPlayMaAnimation
+end
+
+function RoomScene:setGhostAnimation( _isPlay )
+	self.m_isPlayGhostAnimation = _isPlay
+end
+
+function RoomScene:getGhostAnimation(  )
+	return self.m_isPlayGhostAnimation
+end
+
+function RoomScene:getRuleDesc( _msgTbl, _splitChar , _type)
+	local ruleDesc = ""
+	if _type == RoomScene.RULEDESC_TYPE.ROOM then
+		ruleDesc = Room.TypeName[_msgTbl.m_state + 1]
+	end
+	for i, v in ipairs(_msgTbl.m_playtype) do
+		if Room.RuleType[v] then
+			ruleDesc = ruleDesc .. _splitChar .. Room.RuleType[v]
+		end
+	end
+
+	return ruleDesc
+end
+
+--碰之后设置牌的坐标
+--最后一张牌 和其他的牌 分隔开
+function RoomScene:setPosAfterPeng( _seatIdx )
+	if _seatIdx == self:getRoom():getMainSeatIdx() then
+		-- 末尾牌后移
+		local player = self:getRoom():getMainPlayer()
+		local holdTileList = player:getHoldMJTiles()
+		local holdNum = #holdTileList;
+		print("holdNum"..holdNum);
+		if(holdNum > 0) then 
+			self.m_lastMJTile = holdTileList[holdNum]
+			local mjTileSpr = holdTileList[holdNum].mjTileSpr
+			-- local mjTilePos = cc.pAdd(cc.p(mjTileSpr:getPositionX(), mjTileSpr:getPositionY()), cc.p(36, 0))
+			-- mjTileSpr:setPosition(mjTilePos)
+			local mjTilesReferPos = player:getTilesReferPos()
+			local mjTilePos  = cc.pAdd(mjTilesReferPos.holdStart, cc.pMul(mjTilesReferPos.holdSpace, holdNum -1))
+			mjTilePos = cc.pAdd(mjTilePos, cc.p(36, 0))
+			mjTileSpr:setPosition(mjTilePos)
+			print("setPosAfterPeng: move 36");
+		end 
+	else
+		local player = self:getRoom():getPlayer(_seatIdx)
+		local holdTileTotal = player:getHoldTilesTotal()
+		if(holdTileTotal > 0) then 
+			local tile = player:getHoldTileByIdx(holdTileTotal)
+			if(tile ~= nil and tile.mjTileSpr ~= nil) then 
+				local vv = tile.mjTileSpr
+				local mjTilePos = cc.p(vv:getPositionX() ,vv:getPositionY()) 
+				local room = self:getRoom()
+				local dn = room:getMainSeatIdx() - _seatIdx
+				if dn == 2 or dn == -2 then
+					vv:setPosition( cc.pAdd(mjTilePos,cc.p(-15,0)) )
+				elseif dn == -1 or dn == 3 then
+					vv:setPosition( cc.pAdd(mjTilePos,cc.p(0,30)) )
+				elseif dn == 1 or dn == -3 then
+					vv:setPosition( cc.pAdd(mjTilePos,cc.p(0,-40)) )
+				end
+			end
+		end
+	end
+end
+
+function RoomScene:initGhost(  )
+	self.m_ghostNode = gt.seekNodeByName(self.m_csbLayer, "Node_ghost")
+	self.m_ghostNode:setVisible(true)
+	
+	self.m_ghostBg = gt.seekNodeByName(self.m_csbLayer, "Spr_ghost_bg")
+	self.m_ghostBg:setVisible(false)
+	self.m_ghostSpr = gt.seekNodeByName(self.m_csbLayer, "Spr_ghost_mj")
+	self.m_ghostSpr:setVisible(false)
+	self.m_ghost_word = gt.seekNodeByName(self.m_csbLayer, "gui_ghost_word")
+	self.m_ghost_word:setVisible(false)
+
+	self.m_ghostSpr_two = {}
+	for i=1,2 do
+		self.m_ghostSpr_two[i] = gt.seekNodeByName(self.m_csbLayer, "Spr_ghost_mj_" .. i)
+		self.m_ghostSpr_two[i]:setVisible(false)
+	end
+end
+
+function RoomScene:setGhost( msgTbl )
+	print("BaseRoom RoomScene:setGhost")	
+	self:setGhostDesk(msgTbl)
+	self:setGhostMJ( )	
+end
+
+--设置左上角鬼牌标识
+function RoomScene:setGhostDesk( _msgTbl )
+	print('RoomScene:setGhostDesk');
+	dump(_msgTbl);
+	
+	self.m_ghostBg:setVisible(true)
+	self.m_ghost_word:setVisible(true)
+	
+	if self.m_ghost_type == 28 then
+		self.m_room:setGui(_msgTbl, true, true)
+	else
+		self.m_room:setGui(_msgTbl, true)
+	end
+
+	local ghostTable = self.m_room.m_gui
+	for k,v in pairs(ghostTable) do
+		local farme = string.format("p4s%d_%d.png", v.mjColor, v.mjNumber)
+		if #ghostTable < 2 then
+			self.m_ghostSpr:setSpriteFrame(farme)
+			self.m_ghostSpr:setVisible(true)
+			self.m_ghostSpr:setScale(0.65)
+		else
+			self.m_ghostSpr_two[k]:setSpriteFrame(farme)
+			self.m_ghostSpr_two[k]:setVisible(true)
+			self.m_ghostSpr_two[k]:setScale(0.65)
+		end
+	end
+	
+	if #ghostTable < 2 then
+		self.m_ghostBg:setContentSize(cc.size(80, 109))
+	else
+		self.m_ghostBg:setContentSize(cc.size(120, 109))
+	end
+end
+
+--刷新桌面上牌的鬼牌标识
+function RoomScene:setGhostMJ( )
+	print('RoomScene:setGhostMJ');
+	local player = self.m_room:getMainPlayer()
+	if player then	
+		for k,mjTile in pairs(player:getHoldMJTiles()) do
+			if Tools.isGhost(mjTile.mjColor, mjTile.mjNumber, self.m_room.m_gui) then
+				local guiSpr = cc.Sprite:create(gt.anglePngPath)
+				guiSpr:setAnchorPoint(cc.p(1, 1))
+				guiSpr:setPosition(cc.p(mjTile.mjTileSpr:getContentSize().width, mjTile.mjTileSpr:getContentSize().height - 5))
+				mjTile.mjTileSpr:addChild(guiSpr)
+			else
+				--防止异步数据出现两鬼的问题
+				mjTile.mjTileSpr:removeAllChildren()
+			end
+		end
+		self:sortSelfMjTiles() 
+		--刷新已出的牌
+		for k,player in pairs(self.m_room:getPlayers()) do
+			for i,mjTile in pairs(player:getOutMJTiles()) do
+				if Tools.isGhost(mjTile.mjColor, mjTile.mjNumber, self.m_room.m_gui) then
+					Tools.setMjTilesAngle( player:getDisplayIdx(), mjTile.mjTileSpr, gt.anglePngPath)
+				end
+			end
+		end
+	end
+end
+
+--自己出牌动画
+-- @class function
+-- @description 显示出牌动画
+-- @param seatIdx 座次
+-- end --
+function RoomScene:showSelfMjTileAnimation(seatIdx, startPos, mjColor, mjNumber, cbFunc)
+	print('RoomScene:showSelfMjTileAnimation')
+	logGame('Animate Start [MainPlayer] player[' ..seatIdx..'] 出牌 '..Tools.infoMJ(mjColor,mjNumber));
+
+	local roomPlayer = self.m_room:getPlayer(seatIdx)
+	if not roomPlayer then
+		return
+	end
+
+
+	local mjTilePos =  self:getMJWorldPoint(startPos) --startPos
+	local rotateAngle = {-90, 180, 90, 0}
+
+	local mjTileName = string.format("p4s%d_%d.png", mjColor, mjNumber)
+	local mjTileSpr = cc.Sprite:createWithSpriteFrameName(mjTileName)
+	self:addChild(mjTileSpr, 98)
+
+	if Tools.isGhost(mjColor, mjNumber, self.m_room.m_gui) then
+	-- if self.m_room.m_gui and self.m_room.m_gui.mjColor == mjColor and self.m_room.m_gui.mjNumber == mjNumber then
+		Tools.setMjTilesAngle( 4, mjTileSpr, gt.anglePngPath )
+	end
+
+	local outTileIndex = #roomPlayer:getOutMJTiles() + 1; --> 添加当前数值的 索引
+	local aniData = {
+		['tileSpr'] = mjTileSpr,
+		['seatIdx'] = seatIdx,
+		['mjColor'] = mjColor,
+		['mjNumber']= mjNumber,
+		['outTileIndex'] = outTileIndex,
+	};
+	table.insert(self.m_mjAniData,aniData); --> 插入最后
+
+	local function onAnimateEnd(seat,tileIndex)
+		logGame('Animate End [MainPlayer] player['..tostring(seat)..'] 出牌 At: '.. tostring(tileIndex));
+		for i,v in ipairs(self.m_mjAniData) do 
+			if(v['seatIdx'] == seat) then 
+				local tileIndexEqual = assert(v['outTileIndex'] == tileIndex,tostring(v['outTileIndex']) ..' :' ..tostring(tileIndex));
+				table.remove(self.m_mjAniData,i);
+				--logGame('Delete Animate At:['..i..']');
+				logGame("Delete Animate" ..'player['..tostring(seat)..'] At: ['..i..']');
+				return;
+			end 
+		end 
+	end 
+
+	mjTileSpr:setPosition(mjTilePos)
+
+	local mjTilesReferPos = roomPlayer:getTilesReferPos()
+	local totalTime = 0.1
+	local moveToAc_1 = cc.MoveTo:create(totalTime, self:getMJWorldPoint(mjTilesReferPos.showMjTilePos))
+	local rotateToAc_1 = cc.ScaleTo:create(totalTime, 1.5)
+
+	local delayTime = cc.DelayTime:create(0.4)
+
+
+	local mjTilePos = mjTilesReferPos.outStart
+	local mjTilesCount = #roomPlayer:getOutMJTiles() + 1
+	local lineCount = math.ceil(mjTilesCount / 10) - 1
+	local lineIdx = mjTilesCount - lineCount * 10 - 1
+	mjTilePos = cc.pAdd(mjTilePos, cc.pMul(mjTilesReferPos.outSpaceV, lineCount))
+	mjTilePos = cc.pAdd(mjTilePos, cc.pMul(mjTilesReferPos.outSpaceH, lineIdx))
+
+	local moveToAc_2 = cc.MoveTo:create(totalTime, mjTilePos)
+	local rotateToAc_2 = cc.ScaleTo:create(totalTime, 1.0)
+	local rmAct = cc.RemoveSelf:create();
+
+	local callFunc = cc.CallFunc:create(function(sender)
+		sender:removeFromParent()
+		cbFunc()
+	end)
+
+	local callFunc2 = cc.CallFunc:create(function()
+		onAnimateEnd(seatIdx,outTileIndex)
+		cbFunc(outTileIndex)
+	end)
+	-- if(DEBUG_NODE_ACTION) then 
+		mjTileSpr:runAction(
+			cc.Sequence:create(cc.Spawn:create(moveToAc_1, rotateToAc_1),
+							   delayTime,
+							   cc.Spawn:create(moveToAc_2, rotateToAc_2),
+							   callFunc2,
+							   rmAct));
+	-- else
+	-- 	mjTileSpr:runAction(cc.Sequence:create(cc.Spawn:create(moveToAc_1, rotateToAc_1),
+	-- 										delayTime,
+	-- 										cc.Spawn:create(moveToAc_2, rotateToAc_2),
+	-- 										callFunc));
+	-- end 
+	
+end
+
+function RoomScene:sendOutMj( _mjColor, _mjNumber )
+	-- 发送出牌消息
+	local msgToSend = {}
+	msgToSend.m_msgId = gt.CG_SHOW_MJTILE
+	-- 出牌标识
+	msgToSend.m_type = 1
+	msgToSend.m_think = {}
+	local think_temp = {_mjColor, _mjNumber}
+	table.insert(msgToSend.m_think,think_temp)
+	gt.socketClient:sendMessage(msgToSend)	
+end
+
+--自己出牌
+function RoomScene:selfOutMjTile( _mjTile )
+	print("RoomScene:selfOutMjTile");
+	-- 清除自己出的牌
+	self:setSelfOutMjTile( )
+
+	-- 停止倒计时音效
+	if self.playCDAudioID then
+		gt.soundEngine:stopEffect(self.playCDAudioID)
+		self.playCDAudioID = nil
+	end
+	
+	--锁住操作，清理数据
+	self:setPlayerShow(false)
+	self.preClickMjTile = nil
+
+	local seatIdx = self:getRoom():getMainSeatIdx() 
+	local posX = _mjTile.mjTileSpr:getPositionX()
+	local posY = _mjTile.mjTileSpr:getPositionY()
+
+	--移除手牌
+	if self:getRoom():getMainPlayer():removeHoldTileByMJ(_mjTile.mjColor, _mjTile.mjNumber) then
+		self:sortSelfMjTiles()
+		self:clearChoose()
+	else
+		print("移除失败，数据异常")
+	end
+
+	local outTileIndex = #self:getRoom():getMainPlayer():getOutMJTiles() + 1;
+	-- 发送数据
+	self:sendOutMj(_mjTile.mjColor, _mjTile.mjNumber)
+
+	-- 播放出牌动画
+	self:showSelfMjTileAnimation(seatIdx, cc.p(posX, posY),_mjTile.mjColor, _mjTile.mjNumber, function()
+		-- -- 显示出的牌
+		-- -- 显示出的牌箭头标识
+		self:addOutTileAndSignImmed(seatIdx,_mjTile.mjColor, _mjTile.mjNumber,outTileIndex);
+		--移除动画
+		-- 播放声音
+		gt.soundManager:PlayCardSound(self:getRoom():getMainPlayer():getSex(), _mjTile.mjColor, _mjTile.mjNumber)
+		-- -- 发送数据
+		-- self:sendOutMj(_mjTile.mjColor, _mjTile.mjNumber)		
+	end)
+
+	-- 记录出牌，做验证
+	self:setSelfOutMjTile(_mjTile.mjColor, _mjTile.mjNumber)
+end
+
+--自己移动牌
+--应该是一个可以移动的麻将牌
+function RoomScene:selfMoveMjTile(tileIndex)
+	print("RoomScene:selfMoveMjTile")
+	local player = self:getRoom():getMainPlayer();
+	if(not player) then --应该重链吧 @@
+		return false;
+	end 
+
+	local mjTile = player:getHoldTileByIdx(tileIndex);
+	if(not mjTile or not mjTile.mjTileSpr) then 
+		return false;
+	end 
+
+	local mjTilesReferPos = player:getTilesReferPos();
+	local mjTilePos = mjTilesReferPos.holdStart
+	local path = mjTilesReferPos.holdSpace
+	local theMovedistance  = path.x;
+
+	local function moveRight(begin,_end)
+		print ("moveRight: "..tostring(begin)..' '.. tostring(_end));
+		local duration = 0.1;
+		for i = begin, _end do
+			local moveAction  = cc.MoveBy:create(duration, cc.p(theMovedistance, 0));
+			local tile = player:getHoldTileByIdx(i);
+			if(tile.mjTileSpr ~= nil) then 
+				tile.mjTileSpr:runAction(moveAction);
+			end  
+		end 
+
+		local delayTime = cc.DelayTime:create(duration);
+		local callFunc = cc.CallFunc:create(function()
+			self:drawSelfMJTiles();
+			self:drawSelfLastTile();
+		end)
+
+		self:runAction(cc.Sequence:create(delayTime,callFunc))
+
+	end 
+
+	local function moveLeft(begin,_end)
+		print ("moveLeft: "..tostring(begin)..' '.. tostring(_end));
+		--[begin,end] 区间内的所有的牌移动一个牌的位置 
+		local duration = 0.1;
+		for i = begin, _end do
+			local moveAction  = cc.MoveBy:create(duration, cc.p(-theMovedistance, 0));
+			local tile = player:getHoldTileByIdx(i);
+			if(tile.mjTileSpr ~= nil) then 
+				tile.mjTileSpr:runAction(moveAction);
+			end  
+		end 
+
+		local delayTime = cc.DelayTime:create(duration+0.02);
+		local callFunc = cc.CallFunc:create(function()
+			self:drawSelfMJTiles();
+			self:drawSelfLastTile();
+		end)
+
+		self:runAction(cc.Sequence:create(delayTime,callFunc))
+
+	end 
+	--根据 
+	local mjTileSpr = mjTile.mjTileSpr;
+	local destIdx = player:findInsertPosIndex(mjTileSpr);
+	print("destIdx: ".. tostring(destIdx))
+	if(player:moveHoldTile(tileIndex,destIdx))  then 
+
+		player:sortHoldMJTilesWithFlags(true); --不真正的走排序了
+		if(destIdx > tileIndex) then
+			moveLeft(tileIndex ,destIdx -2);
+		else --不可能相等
+			moveRight(destIdx + 1,tileIndex);
+		end
+		--return true; 
+	else
+		self:drawSelfMJTiles();
+		self:drawSelfLastTile();
+		--return false;
+	end
+	return true;
+end 
+
+
+function RoomScene:isInTileMoveRegion(touchPoint)
+	--dump(touchPoint,"touchPoint")
+	local player = self:getRoom():getMainPlayer();
+	if(not player) then --应该重链吧 @@
+		return false;
+	end 
+
+	local mjTilesReferPos = player:getTilesReferPos()
+	local outStart = cc.p(mjTilesReferPos.holdStart.x,mjTilesReferPos.showRedDragonTilePos.y);
+	local endTopPos =   cc.pAdd(outStart, cc.pMul(mjTilesReferPos.holdSpace, 14));
+	endTopPos = self:getMJWorldPoint(endTopPos);
+
+	local  x0 = 0;
+	local  y0 = -720
+	local  x1 = endTopPos.x;
+	local  y1 = endTopPos.y;
+	--dump(endTopPos,'endTopPos');
+
+
+
+	if(touchPoint.x > x0  and   touchPoint.y > y0 --[[and touchPoint.x < x1 --]]and touchPoint.y < y1 ) then 
+		return true;
+	end 
+
+	return false;
+end 
+
+function RoomScene:drawSelfMJTiles()
+	print("RoomScene:drawSelfMJTiles");
+	local player = self:getRoom():getMainPlayer();
+	if(not player) then --应该重链吧 @@
+		return;
+	end 
+
+	local mjTilesReferPos = player:getTilesReferPos()
+	if(not mjTilesReferPos) then --某些情况下，会出现没有牌的情况。加个判定
+		return;
+	end 
+
+	local mjTilePos = mjTilesReferPos.holdStart
+	for k, mjTile in ipairs(player:getHoldMJTiles()) do
+		--print ('mjTiles ['..k..']: ('..mjTile.mjColor ..','..mjTile.mjNumber..')')
+		if(mjTile.mjTileSpr ~= nil) then 
+			mjTile.mjTileSpr:stopAllActions()
+			mjTile.mjTileSpr:setPosition(mjTilePos)
+			--print ('mjTiles ['..k..']: pos: ('..mjTilePos.x ..','..mjTilePos.y..')')
+			self.m_mahjongNode:reorderChild(mjTile.mjTileSpr, (gt.winSize.height - mjTilePos.y))
+			mjTilePos = cc.pAdd(mjTilePos, mjTilesReferPos.holdSpace)
+			if k == 13 then -- 如果手里有14张得话，那么说明是庄家
+				mjTilePos = cc.pAdd(mjTilePos, cc.p(36, 0))
+				print("drawSelfMJTiles: move 36");
+			end
+		end
+	end
+end
+
+function RoomScene:drawSelfLastTile()
+	local player = self:getRoom():getMainPlayer();
+	if(not player) then --应该重链吧 @@
+		return;
+	end 
+
+	local mjTilesReferPos = player:getTilesReferPos()
+	if(not mjTilesReferPos) then 
+		return;
+	end 
+	
+	local mjTiles = player:getHoldMJTiles();
+	local number = #mjTiles;
+	if(number > 0) then 
+		local mjTileLast = mjTiles[number];
+		if(self:getPlayerShow()) then
+			print("number = "..number); 
+			local mjTilePos = cc.pAdd(mjTilesReferPos.holdStart, cc.pMul(mjTilesReferPos.holdSpace,(number -1)));
+			mjTilePos = cc.pAdd(mjTilePos, cc.p(36, 0))
+			if(mjTileLast and mjTileLast.mjTileSpr) then 
+				mjTileLast.mjTileSpr:setPosition(mjTilePos)
+			end 
+			print("drawSelfLastTile move 36");
+		end
+	end
+end 
+function RoomScene:restoreMJTiles()
+	print("RoomScene:restoreMJTiles");
+	local player = self:getRoom():getMainPlayer();
+	if(not player) then --应该重链吧 @@
+		return;
+	end 
+
+	player:sortHoldMJTilesWithFlags(false,self.m_lastMJTile);
+	self:drawSelfMJTiles();
+	self:drawSelfLastTile();
+end  
+
+function RoomScene:setSelfOutMjTile( _mjColor, _mjNumber )
+	--logGame("RoomScene:setSelfOutMjTile",Tools.infoMJ(_mjColor,_mjNumber));
+	if not _mjColor or not _mjNumber then
+		self.m_selfOutMjTitle = nil
+	else
+		logGame("MainPlayer:出牌 "..Tools.infoMJ(_mjColor,_mjNumber));
+		self.m_selfOutMjTitle = {mjColor = _mjColor, mjNumber = _mjNumber}
+		--出牌,上次摸牌去掉
+		self.m_lastMJTile = nil; -- 
+	end
+end
+
+function RoomScene:changeMoveCard()
+	if(not gt.enableMoveCard) then 
+		--self:sortHoldMJTilesWithFlags(false);
+		local player = self:getRoom():getMainPlayer();
+		if(not player) then --应该重链吧 @@
+			return;
+		end
+		player:setHoldTileSortFlag(false); 
+		self:sortSelfMjTiles();
+	end
+end 
+--改变桌布
+function RoomScene:changeTableCloth()
+	--local zhuobu_type = cc.UserDefault:getInstance():getStringForKey("zhuobu_type")
+	dump(self,'RoomScene')
+	local csbLayer = self:getCsbLayer()
+	if(csbLayer == nil) then
+		return;
+	end 
+
+	local bg = gt.seekNodeByName(self:getCsbLayer(),"mahjong_table")
+	local bg_img_map = {
+		["Node_zhuobo1"] = "background/zhuomianditu012.png",
+		["Node_zhuobo2"] = "background/zhuomianditu013.png",
+	}
+
+	local userDefault =cc.UserDefault:getInstance();
+	local zhuobu_type = userDefault:getStringForKey("zhuobu_type")
+	if(zhuobu_type == "") then
+		userDefault:setStringForKey("zhuobu_type","Node_zhuobo1");
+		zhuobu_type = "Node_zhuobo1"
+	end 
+	bg:setTexture(bg_img_map[zhuobu_type])
+	
+	--tolua.cast(bg,"cc.Sprite"):setTexture(bg_img_map[zhuobu_type]);
+
+end 
+
+-- 初始化菜单
+function RoomScene:initAnimationMenu( )
+	-- 添加按钮
+	local rootNode = self:getCsbLayer()
+	local posNode = self.m_yuyinButton
+
+	local menuNode, menuAnimate = gt.createCSAnimation("views/base/PlayAnimeMenu.csb")
+	menuNode:setPosition(cc.p(posNode:getPositionX() - 5, posNode:getPositionY() - 90))
+	rootNode:addChild(menuNode)
+	menuAnimate:play("init", false)
+	menuAnimate:setFrameEventCallFunc(function(frameEventName)
+		print("call back")
+        -- print(frameEventName:getEvent())
+	end)
+
+	self.m_menuNode = menuNode
+
+	self.m_menuAnimate = menuAnimate
+	self.m_isOpen = false
+	self.m_funnyIsPlay = false
+
+	-- 初始化按钮
+	local controlButton = gt.seekNodeByName(menuNode, "Button_1")
+	self.m_controlButton = controlButton
+	gt.addBtnPressedListener(controlButton, function(  )
+		if not self.m_menuAnimate:isPlaying() and self.m_funnyIsPlay == false then
+			self:changeMenuStatus()
+		end
+	end)
+
+	local animateList = {"ani_qumo", "ani_shaoxiang", "ani_xishou"}
+	-- 表情按钮 
+	for i,v in ipairs(animateList) do
+		local button = gt.seekNodeByName(menuNode, "Button_" .. (i+1))
+		gt.addBtnPressedListener(button, function ( sender )
+			if self.m_menuAnimate:isPlaying() then
+				return
+			end
+
+			self:changeMenuStatus( )
+			self:addFunnyAnimation({file = "da/" .. v .. ".csb",actionname = v , type = 1})
+		end)
+	end
+end
+
+-- 显示动画菜单
+function RoomScene:changeMenuStatus(  )
+	self.m_isOpen = not self.m_isOpen
+	self.m_menuAnimate:play((self.m_isOpen and "open") or "close", false)
+end
+
+-- 添加动画
+function RoomScene:addFunnyAnimation( _msgTbl )
+	if not _msgTbl or not _msgTbl.type then
+		return
+	end
+
+	self.m_animDataList = self.m_animDataList or {}
+	table.insert(self.m_animDataList, _msgTbl)
+
+	self:playFunnyAnimation()
+end
+
+function RoomScene:playFunnyAnimation(  )
+	if self.m_funnyIsPlay == true  then
+		return
+	end
+
+	if not self.m_animDataList or #self.m_animDataList < 1 then
+		return
+	end
+
+	local animData = self.m_animDataList[1]
+	if animData.type == 1 then
+		local animNode, animation = gt.createCSAnimation(animData.file)
+		animNode:setPosition(gt.winCenter)
+		self:addChild(animNode, gt.PlayZOrder.TOP)
+		animation:play(animData.actionname, false)		
+
+		--动画结束回调
+		local duration = gt.getAnimationDuration(animation)
+		local block = cc.CallFunc:create( function(sender) 
+			table.remove(self.m_animDataList, 1)
+			self.m_funnyIsPlay = false		   
+			sender:removeFromParent()
+			self:playFunnyAnimation()
+		end )  
+
+		animNode:runAction(cc.Sequence:create(cc.DelayTime:create(duration), block))
+		self.m_funnyIsPlay = true  
+	elseif animData.type == 2 then
+		local animNode, animation = gt.createCSAnimation(animData.file[1])
+		animNode:setPosition(animData.pos[1])
+		self:addChild(animNode, gt.PlayZOrder.TOP)
+		animation:play(animData.actionname[1], true) 
+		self.m_funnyIsPlay = true
+
+		animNode:runAction(cc.Sequence:create(cc.MoveTo:create(animData.time, animData.pos[2]), cc.CallFunc:create(function( sender )
+			--print("call back")
+			sender:removeFromParent()
+			local animNode2, animation2 = gt.createCSAnimation(animData.file[2])
+			animNode2:setPosition(animData.pos[2])
+			self:addChild(animNode2, gt.PlayZOrder.TOP)
+			animation2:play(animData.actionname[2], false) 
+
+			--动画结束回调
+			local duration = gt.getAnimationDuration(animation2)
+			local block = cc.CallFunc:create( function(sender2) 
+				table.remove(self.m_animDataList, 1)
+				self.m_funnyIsPlay = false		   
+				sender2:removeFromParent()
+				self:playFunnyAnimation()
+			end )  
+
+			animNode2:runAction(cc.Sequence:create(cc.DelayTime:create(duration), block))
+		end)))
+		 
+	end
+end
+
+--添加上一个人的出的牌
+function RoomScene:addPreOutMjTiles()
+	-- if(DEBUG_NODE_ACTION) then 
+		self:doLastPlayerAddOutMJTiles();
+	-- return;
+	-- end  
+end
+-- 上一个Player添加 MJTiles
+function RoomScene:doLastPlayerAddOutMJTiles()
+	print('doLastPlayerAddOutMJTiles');
+	if(self.m_mjAniData == nil) then 
+		return;
+	end 
+	local function doPlayerAddOutTile(seatIdx,mjColor,mjNumber,outTileIndex)
+		logGame('doPlayerAddOutTile play['..tostring(seatIdx)..'] '..Tools.infoMJ(mjColor,mjNumber)..' At:'..tostring(outTileIndex));
+		local player = self:getRoom():getPlayer(seatIdx);
+		if(player) then 
+			if(outTileIndex) then 
+				local tile = player:getOutTileByIdx(outTileIndex);
+				if(tile == nil) then 
+					self:addAlreadyOutMjTiles(seatIdx, mjColor, mjNumber)
+				else
+					logGame("already add  tile "..tostring(outTileIndex));
+				end
+			else
+				self:addAlreadyOutMjTiles(seatIdx, mj_color, mj_number)
+			end 
+		end
+	end  
+	repeat
+		local  aniData = self.m_mjAniData[1]
+		if(aniData ~= nil) then
+			if(aniData['tileSpr'] ~= nil) then 
+				aniData['tileSpr']:stopAllActions()
+				aniData['tileSpr']:removeFromParent();
+				--aniData['tileSpr'] = nil;
+				doPlayerAddOutTile(aniData.seatIdx,aniData.mjColor,aniData.mjNumber,aniData.outTileIndex);
+				table.remove(self.m_mjAniData,1);
+			end 
+		end
+	until(#self.m_mjAniData ==0);
+end 
+
+function RoomScene:addOutTileAndSignImmed(seatIdx, mj_color, mj_number,outTileIndex)
+	logGame('Now: player['..tostring(seatIdx)..'] 出牌 ' ..Tools.infoMJ(mj_color,mj_number)..' At: '..tostring(outTileIndex))
+	local player = self:getRoom():getPlayer(seatIdx);
+	if(player) then 
+	-- 显示出的牌
+		if(outTileIndex ~= nil) then 
+			local tile = player:getOutTileByIdx(outTileIndex);
+			if(tile == nil) then 
+				self:addAlreadyOutMjTiles(seatIdx, mj_color, mj_number)
+			else
+				logGame("already add  tile "..tostring(outTileIndex));
+			end
+		else
+			self:addAlreadyOutMjTiles(seatIdx, mj_color, mj_number)
+		end
+		-- 显示出的牌箭头标识
+		self:showOutMjtileSign(seatIdx)  	
+	end 
+
+end
+
+function RoomScene:addOutTileAndSignWithAnimate(seatIdx,realpos,mj_color,mj_number)
+	self:showMjTileAnimation(seatIdx, realpos, mj_color, mj_number,function(outTileIndex)
+		self:addOutTileAndSignImmed(seatIdx, mj_color, mj_number,outTileIndex);
+	end)
+end 
+
+--判断是否主要位置
+function RoomScene:isMainSeat(seatIdx)
+	return self:getRoom():getMainSeatIdx() == seatIdx;
+end 
+
+function RoomScene:addFillupMJTileToPlayer(seatIdx, mjColor, mjNumber)
+	local player = self:getRoom():getPlayer(seatIdx);
+	local mjTilesReferPos = player:getTilesReferPos()
+	local displayIdx = player:getDisplayIdx();
+	-- local str = "p%ds%d_%d.png";
+	local str = "p4s%d_%d.png"
+	local mjTileName = string.format(str,mjColor, mjNumber)
+	local mjTileSpr = cc.Sprite:createWithSpriteFrameName(mjTileName)
+	self:addChild(mjTileSpr,99)
+	--self.m_mahjongNode:reorderChild(mjTileSpr,gt.winSize.height);
+	if Tools.isGhost(mjColor, mjNumber, self.m_room.m_gui) then --是否鬼牌
+		Tools.setMjTilesAngle( 0, mjTileSpr, gt.anglePngPath )
+	end
+	local mjTilePos = mjTilesReferPos.outStart
+	mjTileSpr:setPosition(mjTilePos);
+
+	return {
+		['mjTileSpr'] = mjTileSpr, 
+		['mjColor'] = mjColor, 
+		['mjNumber'] = mjNumber
+	}
+end 
+
+
+
+
+--插入在最前面
+function RoomScene:addActionRdTile(seatIdx,tile)
+	self.m_rdTiles = self.m_rdTiles or {
+		{},{},{},{}
+	};
+	table.insert( self.m_rdTiles[seatIdx],1, tile);
+end 
+
+function RoomScene:removeActionRdTile(seatIdx)
+	--table.remove(self.m_rdTiles);
+	if(type(self.m_rdTiles) == 'table' and type(self.m_rdTiles[seatIdx]) == 'table' )  then 
+		table.remove(self.m_rdTiles[seatIdx]);
+	end 
+end
+-- function RoomScene:setRdTiles(rdTiles)
+-- 	self.m_rdTiles = rdTiles;
+-- end 
+
+function RoomScene:setRdHideTiles(seatIdx,rdHideTiles)
+	self.m_rdHideTiles = self.m_rdHideTiles or {
+		{},{},{},{}
+	};
+	self.m_rdHideTiles[seatIdx] = rdHideTiles
+end
+
+
+function RoomScene:clearRedDragon()
+	self.m_rdActionImmiFunc  = {};
+	self.m_rdTiles = self.m_rdTiles or {
+		{},{},{},{}
+	};
+	-- if(#self.m_rdTiles > 0) then 
+	for _,tiles in ipairs(self.m_rdTiles) do 
+		for i,v in ipairs(tiles) do
+			v.mjTileSpr:stopAllActions();
+			v.mjTileSpr:removeSelf();
+		end
+	end
+	self.m_rdTiles = { {},{},{},{} };
+	self.m_tmpRdNum = {0,0,0,0};
+	local room = self:getRoom();
+	room:clearRedDragonNum()
+end
+
+function RoomScene:clearFillup()
+	print("Base ClearFillup");
+	
+end 
+
+function RoomScene:setRdImmiFunction(seatIdx,func)
+	self.m_rdActionImmiFunc = self.m_rdActionImmiFunc or {};
+	self.m_rdActionImmiFunc[seatIdx] = func;
+end 
+
+function RoomScene:setRedDragonAniStartNum(seatIdx,num)
+	self.m_tmpRdNum = self.m_tmpRdNum  or {0,0,0,0};
+	self.m_tmpRdNum[seatIdx] = num;
+end 
+
+function RoomScene:appendRedDragonNum(seatIdx,num)
+	num = num or 1;
+	print('appendRedDragonNum seatIdx = '.. tostring(seatIdx) ..' '..tostring(num));
+	local roomPlayer = self:getPlayer(seatIdx)
+	if(not roomPlayer ) then
+		return; 
+	end 
+	-- local room = self:getRoom();
+	-- if(not room) then 
+	-- 	return;
+	-- end 
+
+	local uiIndex = roomPlayer:getDisplayIdx();
+	local csbLayer = self:getCsbLayer();
+	local playerInfoNode = gt.seekNodeByName(csbLayer, "Node_playerInfo_" .. uiIndex)
+	local hongzhongNode = gt.seekNodeByName(playerInfoNode,'Node_hongzhong');
+	local hzNumNode= gt.seekNodeByName(hongzhongNode,'Atlas_num');
+
+	self.m_tmpRdNum = self.m_tmpRdNum or {0,0,0,0}
+	dump(self.m_tmpRdNum,'self.m_tmpRdNum');
+	local hzNum = self.m_tmpRdNum[seatIdx] or 0 -- + 1;
+	--hzNum = hzNum or 0;
+	hzNum = hzNum +1;
+	-- end 
+	--self.m_tmpRdNum[seatIdx] = room:getRedDragonNum(seatIdx);
+	print('hzNum '..tostring(hzNum));
+	hzNumNode:setString(tostring(hzNum));
+	self.m_tmpRdNum [seatIdx] = hzNum;
+end 
+
+function RoomScene:realAddRedDragonNum(seatIdx,num)
+	num = num or 1;
+	print('realAddRedDragonNum player ['..seatIdx ..'] '..num )
+	local roomPlayer = self:getPlayer(seatIdx)
+	if(not roomPlayer ) then
+		return; 
+	end 
+	local room = self:getRoom();
+	-- if(not room) then 
+	-- 	return;
+	-- end 
+
+	local uiIndex = roomPlayer:getDisplayIdx();
+	local csbLayer = self:getCsbLayer();
+	local playerInfoNode = gt.seekNodeByName(csbLayer, "Node_playerInfo_" .. uiIndex)
+	local hongzhongNode = gt.seekNodeByName(playerInfoNode,'Node_hongzhong');
+	local hzNumNode= gt.seekNodeByName(hongzhongNode,'Atlas_num');
+	local hzNum = room:getRedDragonNum(seatIdx) --+ num
+	print('hzNum '..hzNum);
+	hzNumNode:setString(tostring(hzNum));
+	 --room:setRedDragonNum(seatIdx,hzNum)
+
+	self.m_tmpRdNum = self.m_tmpRdNum  or {0,0,0,0};
+	self.m_tmpRdNum[seatIdx] = 0;
+end 
+
+
+
+function RoomScene:removeAllRdHideTiles(seatIdx)
+	if(type(self.m_rdHideTiles) == 'table' and type(self.m_rdHideTiles[seatIdx]) == 'table' )  then 
+		for i,v in ipairs(self.m_rdHideTiles[seatIdx]) do 
+			--v:removeSelf();
+			--donothing,防止出错..暂时这么做
+			--dump(v,'allRdHideTiles v '..tostring(i));
+		end
+		self.m_rdHideTiles[seatIdx]= {};
+	end 
+end
+
+function RoomScene:onRedDragonAnimation(seatIdx,rdNum,func)
+	--if(seatIdx == self:getRoom():getMainSeatIdx()) then 
+	--print('m_scene.m_TurnShowMjTile = '..tostring(self.m_TurnShowMjTile))
+	local player = self:getPlayer(seatIdx)
+	if(not player ) then
+		return; 
+	end 
+	local mjTilesReferPos = player:getTilesReferPos()
+	local isMainPlayer = (seatIdx == self:getRoom():getMainSeatIdx()); 
+	local uiIndex = player:getDisplayIdx();
+	--dump(mjTilesReferPos ,'player['..uiIndex..'] referPos');
+	local csbLayer = self:getCsbLayer();
+	local playerInfoNode = gt.seekNodeByName(csbLayer, "Node_playerInfo_" .. uiIndex)
+	local hongzhongNode = gt.seekNodeByName(playerInfoNode,'Node_hongzhong');
+	local totalTime = 0.05;
+	--动画 从 延时 delayTimer,从posStart启动，到 posMid，然后消失在posEnd,调用回调，删除自己
+	local function onAction(mjTile ,posStart,posMid,posEnd,delayTimer,callback)
+		print('onAction '..tostring(mjTile) ..' '..tostring(posStart)..' '..tostring(posMid)..' '..tostring(posEnd).. ' '..tostring(delayTimer));
+		--dump(posStart,'posStart');
+		local spr = mjTile.mjTileSpr;
+		spr:setPosition(posStart);
+		--self.m_mahjongNode:reorderChild(mjTile, 99);
+		local delay1 = cc.DelayTime:create(delayTimer);
+		local moveToAc_1 = cc.MoveTo:create(totalTime,posMid);
+		local rotateToAc_1 = cc.ScaleTo:create(totalTime, 1.5)
+
+		local delay2 = cc.DelayTime:create(0.8)
+		local moveToAc_2 = cc.MoveTo:create(totalTime, posEnd)
+		local rotateToAc_2 = cc.ScaleTo:create(totalTime, 1.0)
+		local callFunction = cc.CallFunc:create(callback);
+		local rmAct = cc.RemoveSelf:create();
+		spr:runAction(cc.Sequence:create(delay1,
+					cc.Spawn:create(moveToAc_1, rotateToAc_1),
+					delay2,
+					cc.Spawn:create(moveToAc_2, rotateToAc_2),
+					callFunction,
+					rmAct));
+	end
+
+
+	--local rdTiles  = {};
+	--取得当前的 红中牌 数组
+	local function makeRedDragonArray(seatIdx)
+		local playerMJTiles = player:getHoldMJTiles();
+		local rdTiles  = {};
+		local rdHideTiles = {};
+		local rdPos = {};
+
+		for i,v in ipairs(playerMJTiles) do
+			if(v.mjColor == 5 and  v.mjNumber == 1) then --红中
+				table.insert(rdHideTiles ,v);
+			end  
+		end
+
+		for i,v in ipairs(rdHideTiles) do 
+			table.removebyvalue(playerMJTiles,v);
+			v.mjTileSpr:setVisible(false);
+		end
+
+		-- local p1Len = #rdTiles;
+		-- local p2Len = rdNum - p1Len;
+		local function newFillupRedDragonTile()
+			return self:addFillupMJTileToPlayer(seatIdx,5,1);
+		end 
+		for i = 1,rdNum do
+			local tile = newFillupRedDragonTile();
+			table.insert(rdTiles,tile);
+		end
+
+		local len = #rdTiles;
+		--rdHideTiles
+		--for i,v in ipairs(rdTiles) do
+		for i = 1,len do 
+			if(rdHideTiles[i] == nil)then 
+				rdPos[i] = cc.pAdd(mjTilesReferPos.holdStart,cc.pMul(mjTilesReferPos.holdSpace, player:getHoldTilesTotal()))  --mjTilesReferPos.outStart
+			else
+				rdPos[i] = cc.p(rdHideTiles[i].mjTileSpr:getPosition());
+			end 
+		end 
+
+		dump(rdPos,'rdPos_'..player:getDisplayIdx(),5)
+		return rdTiles,rdPos,rdHideTiles;
+	end
+
+	local function getPosMid()
+		local basePosStart = self:getMJWorldPoint(mjTilesReferPos.showRedDragonTilePos)
+		--local basePosStart = self:getMJWorldPoint(mjTilesReferPos.showMjTilePos) --mjTilesReferPos.showMjTilePos;
+		--basePosStart.x = basePosStart.x - mjTilesReferPos.holdSpace.x *0.5 * (rdNum /2);
+		local posArray = {};
+		for i = 1,rdNum do 
+			posArray[i]  = cc.pAdd(basePosStart, cc.pMul(mjTilesReferPos.showRedDragonSpace, i))
+		end
+		dump(posArray,'getPosMid: posArray');
+		return posArray; 
+	end 
+
+	local function getPosEnd()
+		local posEnd = gt.getWorldPos(hongzhongNode) --self:convertToNodeSpace(gt.getWorldPos(hongzhongNode));
+		--local posEnd = csbLayer:convertToNodeSpace(gt.getWorldPos(hongzhongNode));
+		print(tostring(seatIdx)..' posEnd '..tostring(posEnd));
+		return posEnd;
+	end 
+
+	--取得起始位置，和 中间位置,是个数组
+	--local posStarts,posMids = getPosStartMid(seatIdx) --
+	--结束位置	
+	--取得红中MJ的数组
+	local rdTiles,posStarts,rdHideTiles= makeRedDragonArray(seatIdx);
+	--self:setRdTiles(rdTiles);
+	self:setRdHideTiles(seatIdx,rdHideTiles);
+	local posMids = getPosMid();
+	local posEnd  = getPosEnd();
+		--回调函数
+	local function onActionEnd(index)
+		print('onActionEnd '..index )
+		self:appendRedDragonNum(seatIdx);
+		if(index == rdNum) then
+			self:removeAllRdHideTiles(seatIdx);
+			func();
+		end
+	end
+
+	for i,v in ipairs(rdTiles) do
+		local delay = 0.05 + (i - 1) * 0.05;
+		self:addActionRdTile(seatIdx,v);
+		onAction(v,posStarts[i],posMids[i],posEnd,delay,function()
+			self:removeActionRdTile(seatIdx)
+			onActionEnd(i)
+		end)
+	end
+end
+
+function RoomScene:stopRedDragonActions(seatIdx)
+	if(self.m_rdTiles ~= nil) then 
+		local rdTiles = self.m_rdTiles[seatIdx] ;
+		if(type(rdTiles) == 'table') then 
+			for i,v in ipairs(rdTiles) do
+				v.mjTileSpr:stopAllActions();
+				v.mjTileSpr:removeSelf();
+			end 
+		end 
+		self.m_rdTiles[seatIdx] = {};
+		if(self.m_rdActionImmiFunc ~= nil and self.m_rdActionImmiFunc[seatIdx] ~= nil) then
+			self.m_rdActionImmiFunc[seatIdx]();
+			self.m_rdActionImmiFunc[seatIdx] = nil;
+		end
+	end
+end
+
+function RoomScene:setInFillupNum(num)
+	self.m_inFillupNum = num;
+end
+
+function RoomScene:getInFillupNum()
+	self.m_inFillupNum = self.m_inFillupNum or 0;
+	return self.m_inFillupNum ;
+end
+
+function RoomScene:initCatchHorse()	
+	print("Base-RoomScene:initCatchHorse");
+
+end 
+
+function RoomScene:catchHorse(horseInfos)
+	print("RoomScene:catchHorse");
+	if(horseInfos and #horseInfos > 0) then
+		table.foreach(horseInfos,function(i,info)
+			local roomPlayer = self:getPlayer(i)
+			if(roomPlayer ) then
+				local uiIndex = roomPlayer:getDisplayIdx();
+				local playerNode = gt.seekNodeByName(self:getCsbLayer(), "Node_playerInfo_" .. uiIndex)
+				local mapai = gt.seekNodeByName(playerNode,'Spr_mapai');
+				if(mapai) then
+					mapai:setVisible(true);
+					local color = info[2][1];
+					local number = info[2][2];
+					local textureInfo =  string.format("p4s%d_%d.png", color, number);
+					mapai:setSpriteFrame(textureInfo)
+					local zhong = (info[1] == 1);
+					if(zhong) then 
+						local lightSpr = cc.Sprite:create("images/otherImages/zhongma/mapai_light.png");
+						mapai:addChild(lightSpr);
+						local sz = mapai:getContentSize();
+						lightSpr:setPosition(ccp(sz.width/2,sz.height/2));
+						lightSpr:setScale(0.9);
+					end 
+				end
+			end
+		end)
+	end
+end
+
+function RoomScene:feedCard(msgTbl)
+	dump(msgTbl,'RoomScene:feedCard ');
+
+	
+end 
+
+return RoomScene

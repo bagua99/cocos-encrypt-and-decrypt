@@ -1,0 +1,16 @@
+--麻将块
+--
+local MahjongTile = class("MahjongTile")
+
+--麻将块 分花色和牌形
+function MahjongTile:ctor(_color, _number)
+	self.m_color = _color
+	self.m_number = _number
+end
+
+-- 通过color和number获取麻将对应的图片名称
+function MahjongTile:getFileName()
+	return string.format("p4s%d_%d.png", self.m_color, self.m_number)
+end
+
+return MahjongTile

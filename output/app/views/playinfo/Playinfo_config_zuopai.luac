@@ -1,0 +1,18 @@
+local PlayinfoConfigZuoPai = class("PlayinfoConfigBase", require("app/views/playinfo/Playinfo_config_base"))
+
+function PlayinfoConfigZuoPai:ctor(  )
+	PlayinfoConfigZuoPai.super.ctor(self)
+	self.ruleType[0].desc = "无马"
+end
+
+function PlayinfoConfigZuoPai:getShowList( )
+	return {
+		10, 20, 18, 30, 17, 19, 
+		21, 22, 32, 23, 24, 26,
+		27, 25, 31, 33, 35, 7,
+		8, 9, 28, 0, 2, 4, 6,
+		53
+	}
+end
+
+return PlayinfoConfigZuoPai

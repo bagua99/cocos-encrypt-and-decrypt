@@ -1,0 +1,24 @@
+local PlayinfoConfigJihubuhua = class("PlayinfoConfigBase", require("app/views/playinfo/Playinfo_config_base"))
+
+function PlayinfoConfigJihubuhua:ctor(  )
+	self.super.ctor(self)
+	self.ruleType[0].desc = "无马"
+	-- self.ruleType[5].desc = '可胡七对'
+	-- self.ruleType[12].desc = "可接炮胡"
+	-- self.ruleType[19].desc = "无花加倍"
+end
+
+function PlayinfoConfigJihubuhua:getShowList( )
+	return {
+			18, --可抢杠胡 
+			17, --抢杠全包
+			20, --杠爆全包			
+			12, --可接炮胡
+			0, 2, 4, 6,--马牌
+			-- --10, --不带风
+			-- 35, --马跟底分
+			-- 53, --马跟杠
+	}
+end
+
+return PlayinfoConfigJihubuhua

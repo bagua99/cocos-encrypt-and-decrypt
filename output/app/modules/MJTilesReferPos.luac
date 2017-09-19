@@ -1,0 +1,77 @@
+local MJTilesReferPos = class("MJTilesReferPos")
+
+function MJTilesReferPos:ctor(_playNode, _displaySeatIdx)
+	local mjTilesReferNode = gt.seekNodeByName(_playNode, "Node_playerMjTiles_" .. _displaySeatIdx)
+	-- 持有牌数据
+	local mjTileHoldSprF = gt.seekNodeByName(mjTilesReferNode, "Spr_mjTileHold_1")
+	local mjTileHoldSprS = gt.seekNodeByName(mjTilesReferNode, "Spr_mjTileHold_2")
+	self.holdStart = cc.p(mjTileHoldSprF:getPosition())
+	self.holdSpace = cc.pSub(cc.p(mjTileHoldSprS:getPosition()), cc.p(mjTileHoldSprF:getPosition()))
+	-- 打出牌数据
+	local mjTileOutSprF = gt.seekNodeByName(mjTilesReferNode, "Spr_mjTileOut_1")
+	local mjTileOutSprS = gt.seekNodeByName(mjTilesReferNode, "Spr_mjTileOut_2")
+	local mjTileOutSprT = gt.seekNodeByName(mjTilesReferNode, "Spr_mjTileOut_3")
+	self.outStart = cc.p(mjTileOutSprF:getPosition())
+	self.outSpaceH = cc.pSub(cc.p(mjTileOutSprS:getPosition()), cc.p(mjTileOutSprF:getPosition()))
+	self.outSpaceV = cc.pSub(cc.p(mjTileOutSprT:getPosition()), cc.p(mjTileOutSprF:getPosition()))
+
+	-- 碰，杠牌数据
+	local mjTileGroupPanel = gt.seekNodeByName(mjTilesReferNode, "Panel_mjTileGroup")
+	local groupMjTilesPos = {}
+	for _, groupTileSpr in ipairs(mjTileGroupPanel:getChildren()) do
+		table.insert(groupMjTilesPos, cc.p(groupTileSpr:getPosition()))
+	end
+	self.groupMjTilesPos = groupMjTilesPos
+	self.groupStartPos = cc.p(mjTileGroupPanel:getPosition())
+	local groupSize = mjTileGroupPanel:getContentSize()
+	if _displaySeatIdx == 1 or _displaySeatIdx == 3 then
+		self.groupSpace = cc.p(0, groupSize.height + 8)
+		if _displaySeatIdx == 3 then
+			self.groupSpace.y = -self.groupSpace.y
+		end
+	else
+		self.groupSpace = cc.p(groupSize.width + 8, 0)
+		if _displaySeatIdx == 2 then
+			self.groupSpace.x = -self.groupSpace.x
+		end
+	end
+
+	-- 胡牌显示坐标
+	if _displaySeatIdx == 1 then
+		self.m_huSpace = cc.p( groupMjTilesPos[2].x-groupMjTilesPos[3].x, groupMjTilesPos[2].y-groupMjTilesPos[3].y)
+	else
+		self.m_huSpace = cc.p( groupMjTilesPos[2].x-groupMjTilesPos[1].x, groupMjTilesPos[2].y-groupMjTilesPos[1].y)
+	end
+
+	-- 当前出牌展示位置
+	local showMjTileNode = gt.seekNodeByName(mjTilesReferNode, "Node_showMjTile")
+	self.showMjTilePos = cc.p(showMjTileNode:getPosition())
+
+	--红中王的展示位置
+	local rdMJTileNodeF = gt.seekNodeByName(mjTilesReferNode,"Spr_mjRedDargonHold_1");
+	local rdMJTileNodeS = gt.seekNodeByName(mjTilesReferNode,"Spr_mjRedDargonHold_2");
+	
+
+	if(rdMJTileNodeF ~= nil and rdMJTileNodeS ~= nil) then 
+		self.showRedDragonTilePos = cc.p(rdMJTileNodeF:getPosition())
+		self.showRedDragonSpace =  cc.pSub(cc.p(rdMJTileNodeF:getPosition()), cc.p(rdMJTileNodeS:getPosition()))
+	else
+		self.showRedDragonTilePos = holdStart
+		self.showRedDragonSpace = holdSpace
+	end
+
+	local holdFlowerTileSprF = gt.seekNodeByName(mjTilesReferNode, "Spr_flower_1")
+	local holdFlowerTileSprS = gt.seekNodeByName(mjTilesReferNode, "Spr_flower_2")
+	local holdFlowerTileSprT = gt.seekNodeByName(mjTilesReferNode, "Spr_flower_3")
+
+	if(holdFlowerTileSprF ~= nil and holdFlowerTileSprS ~= nil and holdFlowerTileSprT ~= nil) then 
+		self.flowerStart = cc.p(holdFlowerTileSprF:getPosition())
+		self.flowerSpace =  cc.pSub(cc.p(holdFlowerTileSprS:getPosition()), cc.p(holdFlowerTileSprF:getPosition()))
+		--self.flowerSpaceV =  cc.pSub(cc.p(holdFlowerTileSprT:getPosition()), cc.p(holdFlowerTileSprF:getPosition()))
+		self.flowerSpaceH = cc.pSub(cc.p(holdFlowerTileSprS:getPosition()), cc.p(holdFlowerTileSprF:getPosition()))
+		self.flowerSpaceV = cc.pSub(cc.p(holdFlowerTileSprT:getPosition()), cc.p(holdFlowerTileSprF:getPosition()))
+	end 
+	
+end
+
+return MJTilesReferPos

@@ -1,0 +1,37 @@
+local PlayinfoConfigHongzhongwang = class("PlayinfoConfigBase", require("app/views/playinfo/Playinfo_config_base"))
+
+function PlayinfoConfigHongzhongwang:ctor(  )
+	self.super.ctor(self)
+	self.ruleType[0].desc = "无马"
+	self.ruleType[5].desc = '可胡七对'
+	self.ruleType[12].desc = "可接炮胡"
+	self.ruleType[19].desc = "无鬼加倍"
+end
+
+function PlayinfoConfigHongzhongwang:getShowList( )
+	return {
+            10, --"不带风",
+            23, --碰碰胡
+            40, --混一色
+            41, --天胡10倍
+            5, --七对
+            24, --清一色
+            27, --十三幺
+            38,  --抢杠胡2倍
+            46, --十八罗汉
+            39,-- 杠上开花2倍
+            52, --海底捞月
+            35,--马跟底分
+            49, --红中当马
+            51, --红中做鬼
+            8, --白板做鬼
+            50,--无红中多2马
+            19,--无鬼加倍
+            0, --无马 
+            2, --买2马
+            4, --买4马
+            6, --买6马
+	}
+end
+
+return PlayinfoConfigHongzhongwang

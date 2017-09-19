@@ -1,0 +1,372 @@
+local RcvTurnShowMjTile = class("RcvTurnShowMjTile", BaseRoomAgreement)
+
+-- 通知玩家出牌
+function RcvTurnShowMjTile:ctor()
+	self:registerMsgListener(gt.GC_TURN_SHOW_MJTILE, self, self.onRcvTurnShowMjTile)
+end
+
+--这个消息 2 是胡
+--3，4 是杠
+--7，8 是补
+function RcvTurnShowMjTile:getDecisionTypes(msgTbl)
+	local decisionTypes = {}
+	for _, value in ipairs(msgTbl.m_think) do
+		local think_m_type = value[1]
+		if think_m_type == 2 then
+			local decisionData = {}
+			decisionData.flag = 2
+			decisionData.mjColor = msgTbl.m_color
+			decisionData.mjNumber = msgTbl.m_number
+			table.insert(decisionTypes, decisionData)
+		elseif think_m_type == 3 or think_m_type == 4 or  --杠
+			think_m_type == 7 or think_m_type == 8 then   --补庄
+			local decisionData = {}
+			decisionData.flag = think_m_type
+			decisionData.cardList = {}
+			for _,v in ipairs(value[2]) do
+				local card = {}
+				card.mjColor = v[1]
+				card.mjNumber = v[2]
+				table.insert(decisionData.cardList, card)
+			end
+			table.insert(decisionTypes, decisionData)
+		end
+	end
+	return decisionTypes
+end
+
+function RcvTurnShowMjTile:getBarBuList(_decisionTypes)
+	local cardList_bar = {}
+	local cardList_bu = {}
+	for idx, decisionData in ipairs(_decisionTypes) do
+		if decisionData.flag == 3 or decisionData.flag == 4 then
+			-- 明暗杠
+			for _,v in ipairs(decisionData.cardList) do
+				local card_bar = {}
+				card_bar.flag = decisionData.flag
+				card_bar.mjColor = v.mjColor
+				card_bar.mjNumber = v.mjNumber
+				table.insert(cardList_bar, card_bar)
+			end
+		elseif decisionData.flag == 7 or decisionData.flag == 8 then
+			-- 明暗补
+			for _,v in ipairs(decisionData.cardList) do
+				local card_bu = {}
+				card_bu.flag = decisionData.flag
+				card_bu.mjColor = v.mjColor
+				card_bu.mjNumber = v.mjNumber
+				table.insert(cardList_bu, card_bu)
+			end
+		end
+	end
+	return cardList_bar, cardList_bu
+end
+
+function RcvTurnShowMjTile:haveHu( _decisionTypes )
+	for idx, decisionData in pairs(_decisionTypes) do
+		if decisionData.flag == 2 then
+			return true
+		end
+	end
+	return false
+end
+
+function RcvTurnShowMjTile:getDecisionButton(_decisionTypes)
+    if not _decisionTypes then
+    	return false
+    end
+    self.m_scene:setPlayerDecision(true)
+    local csbLayer = self.m_scene:getCsbLayer()
+    local decisionNode = self.m_scene:getDecisionNode()
+    local cardList_bar, cardList_bu = self:getBarBuList(_decisionTypes)
+    -- 过
+    self:createGuoButton(decisionNode, self:haveHu(_decisionTypes))
+
+    -- 其他玩家出牌决策
+    for idx, decisionData in ipairs(_decisionTypes) do
+    	local isExist = false
+    	table.foreach(decisionNode:getChildren(), function(i, decisionChild)
+    		local name = tonumber(decisionChild:getName())
+    		if decisionData.flag == name then
+    			isExist = true
+    			return false
+    		end
+    		if (decisionData.flag == 3 and (name == 3 or name == 4))
+    			or (decisionData.flag == 4 and (name == 3 or name == 4)) then
+    			isExist = true
+    			return false
+    		end
+		end)
+		if not isExist then
+			local button = nil
+			if decisionData.flag == 3 or decisionData.flag == 4 then
+				self:createGangButton(decisionNode, decisionData, cardList_bar)
+			elseif decisionData.flag == 7 or decisionData.flag == 8 then
+				self:createBuZhangButton(decisionNode, decisionData, cardList_bu)
+			elseif decisionData.flag == 2 then
+				self:createHuButton(decisionNode, decisionData)
+			end
+		end
+    end
+    -- 对按钮进行排序
+    local sortlist = {}
+    table.foreach(decisionNode:getChildren(), function(i, decisionChild)
+    	table.insert(sortlist, decisionChild)
+	end)
+	table.sort(sortlist, function(a, b)
+		return tonumber(a:getName()) < tonumber(b:getName())
+	end)
+	for i, v in ipairs(sortlist) do
+		v:setPosition(cc.p(-(i - 1) * 280, 0))
+	end
+end
+
+-- 创建过按钮
+function RcvTurnShowMjTile:createGuoButton(decisionNode, haveHu)
+	local button = Tools.createButton(Room.DECISION_NAME.GUO)
+    button:setName(tostring(Room.PRIORITY_SHOW.GUO))
+    decisionNode:addChild(button)
+    gt.addBtnPressedListener(button, function(sender)
+    	if self.m_scene:getGhostAnimation() then
+			return
+		end
+		if haveHu then
+			require("app/views/NoticeTips"):create(gt.getLocationString("LTKey_0007"), 
+				gt.getLocationString("LTKey_0043"), function(  )
+					self:removeFlimLayer()
+			    	self.m_scene:setPlayerDecision(false)
+			    	decisionNode:removeAllChildren()
+				end, nil, false)
+		else
+			self:removeFlimLayer()
+	    	self.m_scene:setPlayerDecision(false)
+	    	decisionNode:removeAllChildren()
+		end   	
+	end)
+end
+
+-- 创建胡按钮
+function RcvTurnShowMjTile:createHuButton(decisionNode, decisionData)
+	local button = Tools.createButton(Room.DECISION_NAME.HU)
+	button:setName(tostring(Room.PRIORITY_SHOW.HU))
+	decisionNode:addChild(button)
+	gt.addBtnPressedListener(button, function(sender)
+		if self.m_scene:getGhostAnimation() then
+			return
+		end
+		self:sendDecision(decisionData.flag, decisionData.mjColor, decisionData.mjNumber)
+		self:removeFlimLayer()
+		decisionNode:removeAllChildren()
+	end)
+end
+
+-- 创建杠按钮
+function RcvTurnShowMjTile:createGangButton(decisionNode, decisionData, cardList_bar)
+	local button = Tools.createButton(Room.DECISION_NAME.GANG)
+	button:setName(tostring(Room.PRIORITY_SHOW.GANG))
+	decisionNode:addChild(button)
+	if #cardList_bar == 1 then
+		-- 只有一个杠
+		gt.addBtnPressedListener(button, function(sender)
+			if self.m_scene:getGhostAnimation() then
+				return
+			end
+			self:sendDecision(
+				decisionData.flag,
+				decisionData.cardList[1].mjColor,
+				decisionData.cardList[1].mjNumber)
+			self:removeFlimLayer()
+			decisionNode:removeAllChildren()
+		end)
+	else
+		-- 多个杠
+		gt.addBtnPressedListener(button, function(sender)
+			if self.m_scene:getGhostAnimation() then
+				return
+			end
+			self:removeFlimLayer()
+			local point = button:convertToWorldSpace(cc.p(0,0)) --self.m_scene:getMJWorldPoint(button)
+			-- add new
+			local flimLayer = self.m_scene:createFlimLayer(Room.FLIMTYPE.FLIMLAYER_BAR, cardList_bar)
+			self.m_scene:addChild(flimLayer, Room.ZOrder.FLIMLAYER, Room.TAG.FLIMLAYER_BAR)
+			flimLayer:ignoreAnchorPointForPosition(false)
+			flimLayer:setAnchorPoint(0.5,0)
+			local pos_x = 0
+			if point.x +flimLayer:getContentSize().width/2 > gt.winSize.width then
+				flimLayer:setPositionX(gt.winSize.width-flimLayer:getContentSize().width/2)
+			elseif point.x -flimLayer:getContentSize().width/2 < 0 then
+				flimLayer:setPositionX(flimLayer:getContentSize().width/2)
+			else
+				flimLayer:setPositionX(point.x)
+			end
+			flimLayer:setPositionY(point.y+flimLayer:getContentSize().height/2)
+		end)
+	end
+end
+
+-- 创建补张按钮
+function RcvTurnShowMjTile:createBuZhangButton(decisionNode, decisionData, cardList_bu)
+	local button = Tools.createButton(Room.DECISION_NAME.BUZHANG)
+	button:setName(tostring(Room.PRIORITY_SHOW.BUZHANG))
+	decisionNode:addChild(button)
+	if #cardList_bu == 1 then
+		-- 只有一个补张
+		gt.addBtnPressedListener(button, function(sender)
+			if self.m_scene:getGhostAnimation() then
+				return
+			end
+
+			self:sendDecision(
+				decisionData.flag,
+				decisionData.cardList[1].mjColor,
+				decisionData.cardList[1].mjNumber)
+			self:removeFlimLayer()
+			decisionNode:removeAllChildren()
+		end)
+	else
+		-- 多个补张
+		gt.addBtnPressedListener(button, function(sender)
+			if self.m_scene:getGhostAnimation() then
+				return
+			end
+			local flimLayer = self.m_scene:createFlimLayer(Room.FLIMTYPE.FLIMLAYER_BU, cardList_bu)
+			local point = button:convertToWorldSpace(cc.p(0,0))
+
+			self.m_scene:addChild(flimLayer, Room.ZOrder.FLIMLAYER, Room.TAG.FLIMLAYER_BU)
+			flimLayer:ignoreAnchorPointForPosition(false)
+			flimLayer:setAnchorPoint(0.5,0)
+			local pos_x = 0
+			if point.x+flimLayer:getContentSize().width/2 > gt.winSize.width then
+				flimLayer:setPositionX(gt.winSize.width-flimLayer:getContentSize().width/2)
+			elseif point.x-flimLayer:getContentSize().width/2 < 0 then
+				flimLayer:setPositionX(flimLayer:getContentSize().width/2)
+			else
+				flimLayer:setPositionX(point.x)
+			end
+			flimLayer:setPositionY(point.y+flimLayer:getContentSize().height/2)
+		end)
+	end
+end
+
+-- 玩家自己出牌
+function RcvTurnShowMjTile:turnShowMjTileDecision(msgTbl)
+	print('RcvTurnShowMjTile:turnShowMjTileDecision');
+	-- 轮到玩家出牌
+	self.m_scene:setPlayerShow(true)
+	local room = self.m_scene:getRoom()
+	local player = room:getMainPlayer()
+	-- 摸牌
+	if msgTbl.m_flag == 0 then
+		-- 添加牌放在末尾
+		local mjTilesReferPos = player:getTilesReferPos()
+		local mjTilePos = mjTilesReferPos.holdStart
+		mjTilePos = cc.pAdd(mjTilePos, cc.pMul(mjTilesReferPos.holdSpace, #player:getHoldMJTiles()))
+		mjTilePos = cc.pAdd(mjTilePos, cc.p(36, 0))
+
+		local mahjongNode = self.m_scene:getMahjongNode()
+		local mjTile = self.m_scene:addMJTileToSelf(msgTbl.m_color, msgTbl.m_number)
+		mjTile.mjTileSpr:setPosition(mjTilePos)
+		mahjongNode:reorderChild(mjTile.mjTileSpr, (gt.winSize.height - mjTilePos.y))
+	else
+		self.m_scene:setPosAfterPeng(msgTbl.m_pos + 1)
+	end
+
+	local haidiWinType = false
+	local decisionTypes = {}
+	if msgTbl.m_think then
+		decisionTypes = self:getDecisionTypes(msgTbl)
+		if #decisionTypes > 0 then
+			self:getDecisionButton(decisionTypes)
+		end
+	end
+end
+
+function RcvTurnShowMjTile:gangFinish(_player)
+	-- 杠完后其他牌显示灰色
+	if _player:getGang() == 1 then
+		for i, mjTile in ipairs(_player:getHoldMJTiles()) do
+			if i ~= #_player:getHoldMJTiles() then
+				mjTile.mjTileSpr:setColor(cc.c3b(100,100,100))
+			end
+		end
+	end
+end
+
+-- 其他玩家摸牌
+function RcvTurnShowMjTile:turnShowMjTile(msgTbl)
+   -- m_flag 是否需要摸牌 0 是需要。 1 是不需要
+    print('RcvTurnShowMjTile:turnShowMjTile');
+	if msgTbl.m_flag == 0 then
+		local seatIdx = msgTbl.m_pos + 1
+		local player = self.m_scene:getRoom():getPlayer(seatIdx)
+		local mjTilesReferPos = player:getTilesReferPos()
+		local mjTilePos = mjTilesReferPos.holdStart
+		local holdTileTotal = player:getHoldTilesTotal()
+		mjTilePos = cc.pAdd(mjTilePos, cc.pMul(mjTilesReferPos.holdSpace, holdTileTotal))
+		player:setHoldTilesTotal(holdTileTotal + 1)
+		if player:getHoldMJTiles()[holdTileTotal + 1] then
+			local vv = player:getHoldMJTiles()[holdTileTotal + 1].mjTileSpr
+			vv:setVisible(true)
+			local room = self.m_scene:getRoom()
+			local dn = room:getMainSeatIdx() - seatIdx
+			if dn == 2 or dn == -2 then
+				vv:setPosition( cc.pAdd(mjTilePos,cc.p(-15,0)) )
+			elseif dn == -1 or dn == 3 then
+				vv:setPosition( cc.pAdd(mjTilePos,cc.p(0,30)) )
+			elseif dn == 1 or dn == -3 then
+				vv:setPosition( cc.pAdd(mjTilePos,cc.p(0,-40)) )
+			end
+		end
+	else
+		self.m_scene:setPosAfterPeng(msgTbl.m_pos + 1)
+	end
+end
+
+
+function RcvTurnShowMjTile:onRcvTurnShowMjTile(msgTbl)
+	--print("Base RcvTurnShowMjTile:onRcvTurnShowMjTile");
+	
+	--self.m_scene.m_TurnShowMjTile = true;
+	-- 牌局状态,剩余牌
+	self.m_scene:setRemainTiles(msgTbl.m_dCount)
+	-- 推送的座位
+	local seatIdx = msgTbl.m_pos + 1
+	-- 当前出牌座位
+	self.m_scene:setTurnSeatSign(seatIdx)
+	-- 出牌倒计时
+	self.m_scene:playTimeCDStart(msgTbl.m_time)
+
+	local room = self.m_scene:getRoom()
+	local player = room:getPlayer(seatIdx)
+	-- 该玩家是否杠过（0-没杠过，1-杠过了）
+	player:setGang(msgTbl.m_gang)
+	local function onShowOut()
+		if seatIdx == room:getMainSeatIdx() then
+			self:turnShowMjTileDecision(msgTbl)
+		else
+			self:turnShowMjTile(msgTbl)
+		end
+	end 
+	onShowOut()
+
+end
+function RcvTurnShowMjTile:removeFlimLayer()
+	-- 删除弹出框（杠）
+	self.m_scene:removeFlimLayer(Room.FLIMTYPE.FLIMLAYER_BAR)
+	-- 删除弹出框（补）
+	self.m_scene:removeFlimLayer(Room.FLIMTYPE.FLIMLAYER_BU)
+end
+
+function RcvTurnShowMjTile:sendDecision(_flag, _mjColor, _mjNumber)
+	local msgToSend = {}
+	msgToSend.m_msgId = gt.CG_SHOW_MJTILE
+	msgToSend.m_type = _flag
+	msgToSend.m_think = {}
+	if _mjColor ~= 0 or _mjNumber ~= 0 then
+		table.insert(msgToSend.m_think, {_mjColor, _mjNumber})
+	end
+	gt.socketClient:sendMessage(msgToSend)
+	self.m_scene:setPlayerDecision(false)
+end
+
+return RcvTurnShowMjTile

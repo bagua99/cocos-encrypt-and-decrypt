@@ -1,0 +1,302 @@
+local gt = cc.exports.gt
+-- 带子结点控件点击事件（子结点同时缩放）
+local function addTouchEventListener(btn, listener, sfxType, scale)
+	if not btn or not listener then
+		return
+	end
+
+	if not scale then
+		scale = -0.1
+	end
+
+	local oriScale = btn:getScale()
+
+	btn:addTouchEventListener(function(uiwidget, eventType)
+		if eventType == 0 then
+			btn:runAction(cc.ScaleTo:create(0.05, oriScale+scale))
+			return true
+		end
+
+		if eventType == 2 then
+			btn:runAction(cc.ScaleTo:create(0.05, oriScale))
+			listener(uiwidget)
+		end
+
+		if eventType == 3 then
+			btn:runAction(cc.ScaleTo:create(0.05, oriScale))
+		end
+	end)
+
+end
+gt.addTouchEventListener = addTouchEventListener
+
+local function copyStrToClipBoard(str)
+	local luaBridge = Tools.getLuaBridge()
+	if gt.isIOSPlatform() then
+		local ok = luaBridge.callStaticMethod("AppController", "copyStr", {copystr = str})
+	elseif gt.isAndroidPlatform() then
+		local ok = luaBridge.callStaticMethod("org/cocos2dx/lua/AppActivity", "copyStr", {str}, "(Ljava/lang/String;)V")
+	end
+
+	gt.floatText("复制成功");
+end 
+
+gt.copyStr =  copyStrToClipBoard
+
+local function getCopyStrFromClipBoard()
+	local luaBridge = Tools.getLuaBridge()
+	local ok ,ret
+	if gt.isIOSPlatform() then
+		ok ,ret = luaBridge.callStaticMethod("AppController", "getCopyStr")
+	elseif gt.isAndroidPlatform() then
+		ok ,ret = luaBridge.callStaticMethod("org/cocos2dx/lua/AppActivity","getCopyStr",nil,"()Ljava/lang/String;")
+	end
+	local labString = ret
+	if labString == nil or string.len(labString) == 0 then
+		labString = ""
+	end
+	print("labString "..labString)
+	-- if string.len(labString) > 0 then
+	-- 	print("labString = "..labString)
+	-- end
+	return labString
+end
+
+gt.getCopyStr = getCopyStrFromClipBoard
+
+local function godNick(text) 
+-- 移动到这里吧。如果 出现 收到这个消息而 而当前界面不是MainScene，调用  
+	--MainScene:godNick 貌似报错
+	if(string.len(text) == 0) then
+		return ''; 
+	end 
+	
+	local s = string.find(text, "\"nickname\":\"")
+	if not s then
+		return text
+	end
+	local e = string.find(text, "\",\"sex\"")
+	local n = string.sub(text, s + 12, e - 1)
+	local m = string.gsub(n, '"', '\\\"')
+	local i = string.sub(text, 0, s + 11)
+	local j = string.sub(text, e, string.len(text))
+	return i .. m .. j
+end
+gt.godNick = godNick;
+
+-- local function  wxUserInfo()
+
+-- end 
+
+-- local function loadWxUserInfo()
+
+-- end 
+
+--加入这个函数是方便调试用
+local function saveUserInfo(key,value)
+	-- print('saveUserInfo: ' ..key .." : "..tostring(value));
+	-- if(key == "WX_OpenId" and value == "") then 
+	-- 	assert(false,"WX_OpenId  set null");
+	-- end
+	cc.UserDefault:getInstance():setStringForKey(key,value)
+end
+
+gt.saveUserInfo = saveUserInfo;
+
+local DAILILIST = 
+{
+	-- 'gdmj7777',
+	-- 'gdmj258',
+	-- 'gdmj336',
+	-- 'gdmj008',
+	-- 'gdmj6688',
+	-- 'gdmj018',
+	-- 'gdmj005',
+	-- 'gdmj858',
+	-- 'gdmj369',
+	-- 'gdmj3366',
+	-- 'gdmj525',
+	-- 'gdmj868',
+	-- 'gdmj006',
+	-- 'gdmj998',
+	-- 'gdmj567',
+	-- 'gdmj5588',
+	-- 'gdmj998',
+	-- 'gdmj3366',
+	-- 'gdmj6688', 
+	-- 'gdmj336',  
+	-- 'gdmj005', 
+	-- 'gdmj567',
+	-- 'gdmj2233',
+	-- 'gdmj868',
+	-- 'gdmj258',
+	
+	'gdmj5588',
+	'gdmj558',
+	'gdmj2233',
+	'gdmj005',
+	'gdmj138',
+	'gdmj6688',
+	'gdmj9988',
+}
+
+local  function getDaiLiNumber(_key)
+	local str = cc.UserDefault:getInstance():getStringForKey(_key)
+	local buyNumber =  tonumber(str)
+	if not buyNumber or buyNumber == "" or not DAILILIST[buyNumber] then
+		gt.setRandomSeed()
+		buyNumber = gt.getRangeRandom(1, #DAILILIST)
+		Tools.saveKeyValue(_key, tostring(buyNumber))
+	end
+	return DAILILIST[buyNumber] or DAILILIST[1]
+end
+
+-- 随机获取代理微信推广号
+local function getDaiLiNumRandom()
+	local index = gt.getRangeRandom(1, #DAILILIST)
+	return DAILILIST[index] or DAILILIST[1]
+end
+
+
+gt.getDaiLiNumber = getDaiLiNumber;
+gt.getDaiLiNumRandom = getDaiLiNumRandom;
+
+--定义一个签到数据
+gt.m_SignInInfo = {}; --状态值  0会掉 1 已经签到 2 可以签到 3 可以补签
+-- 	有些面板弹出只出现一次
+gt.activityViewIsShowed = {}
+--特效的 
+local EFFECT_ICONS = {
+	[32] = {'res/da/wuyi_touxiang_tx1.csb','GD_cat_tx_TX'},
+	[33] = {'res/da/wuyi_touxiang_tx2.csb','GD_cs_tx_TX'}
+}
+gt.EFFECT_ICONS = EFFECT_ICONS;
+
+local function addHeadFrames_Button(uiNode,iconIndex,scaleFactor,effectEnable)
+	if(not uiNode) then 
+		print("addHeadFrames_Button: uiNode control is nil")
+		return;
+	end
+	scaleFactor = scaleFactor or 1.0;
+	effectEnable = (effectEnable == nil) and true or false;
+	if(uiNode:getChildByTag(1000)) then 
+		uiNode:removeChildByTag(1000);
+	end 	
+	uiNode:setContentSize(cc.size(0,0));
+	if(EFFECT_ICONS[iconIndex] and effectEnable) then --是特效的
+		local str = "images/otherImages/headframes/place_holder.png";
+		uiNode:loadTextures(str,str,str)
+		local info = EFFECT_ICONS[iconIndex];
+		local beginAnimateNode, beginAnimate = gt.createCSAnimation(info[1]);
+		beginAnimateNode:setTag(1000);
+		uiNode:addChild(beginAnimateNode,1024);
+		local uiSize = uiNode:getContentSize();
+		beginAnimateNode:setPosition(ccp(uiSize.width/2,uiSize.height/2 ));
+		beginAnimate:play(info[2], true);
+	else 
+		local str = string.format("res/sd/images/otherImages/headframes/%03d.png",iconIndex)
+		uiNode:loadTextures(str,str,str)
+	end
+	uiNode:setScale(scaleFactor);
+end 
+gt.addHeadFrames_Button = addHeadFrames_Button;
+
+local function addHeadFrames_Image(uiNode,iconIndex,scaleFactor,effectEnable)
+	if(not uiNode) then 
+		print("addHeadFrames_Image uiNode control is nil")
+		return;
+	end 
+	scaleFactor = scaleFactor or 1.0;
+	effectEnable = (effectEnable == nil) and true or false;
+	if(uiNode:getChildByTag(1000)) then 
+		uiNode:removeChildByTag(1000);
+	end	
+	if(EFFECT_ICONS[iconIndex] and effectEnable) then --是特效的
+		local info = EFFECT_ICONS[iconIndex];
+		local beginAnimateNode, beginAnimate = gt.createCSAnimation(info[1]);
+		beginAnimateNode:setTag(1000);
+		uiNode:addChild(beginAnimateNode,1024);
+		local uiSize = uiNode:getContentSize();
+		beginAnimateNode:setPosition(ccp(uiSize.width/2,uiSize.height/2 ));
+		beginAnimate:play(info[2], true);
+		uiNode:loadTexture("images/otherImages/headframes/place_holder.png");
+	else
+		local file = string.format( "res/sd/images/otherImages/headframes/%03d.png",iconIndex);
+		uiNode:loadTexture(file);
+		-- if(uiNode:getChildByTag(1000)) then 
+		-- 	uiNode:removeChildByTag(1000);
+		-- end 
+	end
+	uiNode:setScale(scaleFactor);
+end
+
+gt.addHeadFrames_Image = addHeadFrames_Image;
+
+local function addHeadFrame_Sprite(uiNode,iconIndex,scaleFactor,effectEnable)
+	if(not uiNode) then 
+		print("addHeadFrame_Sprite uiNode control is nil")
+		return;
+	end  
+	scaleFactor = scaleFactor or 1.0;
+	effectEnable = (effectEnable == nil) and true or false;
+	if(uiNode:getChildByTag(1000)) then 
+		uiNode:removeChildByTag(1000);
+	end
+	if(EFFECT_ICONS[iconIndex] and effectEnable) then --是特效的
+		local str = "images/otherImages/headframes/place_holder.png";
+		uiNode:setTexture(str);
+		local info = EFFECT_ICONS[iconIndex];
+		local beginAnimateNode, beginAnimate = gt.createCSAnimation(info[1]);
+		beginAnimateNode:setTag(1000);
+		uiNode:addChild(beginAnimateNode,1024);
+		local uiSize = uiNode:getContentSize();
+		beginAnimateNode:setPosition(ccp(uiSize.width/2,uiSize.height/2 ));
+		beginAnimate:play(info[2], true);
+	else
+		local str = string.format("res/sd/images/otherImages/headframes/%03d.png",iconIndex)
+		uiNode:setTexture(str); 
+	end 
+	uiNode:setScale(scaleFactor);
+end 
+
+gt.addHeadFrames_Sprite = addHeadFrame_Sprite;
+
+local function buttonScaleEffect(button,min,max)
+	min = min or 1
+	max = max or 1.2
+	local scaleToAction1 = cc.ScaleTo:create(0.9, max)
+	local scaleToAction2 = cc.DelayTime:create(0.2)
+	local scaleToAction3 = cc.ScaleTo:create(0.9, min)
+	local seqAction = cc.Sequence:create(scaleToAction1, scaleToAction2, scaleToAction3)
+	button:runAction(cc.RepeatForever:create(seqAction))
+end
+gt.buttonScaleEffect = buttonScaleEffect
+
+--判断当前时间是否在区间之内
+local function isValidTimestamp(timestamps)
+	if(timestamps == nil) then 
+		return false;
+	end
+	if(type(timestamps) == 'table') then 
+		--dump(timestamps,"validTimestamp true");
+		local curTime = os.time();
+		return (curTime >= timestamps[1] and curTime <= timestamps[2]);
+	end 
+	--dump(timestamps,"validTimestamp false");
+	return false;
+end
+
+gt.isValidTimestamp = isValidTimestamp;
+--图方便，没有走hash的部分
+local function valueInArray(value,array)
+	if(value == nil or array == nil) then 	
+		return; 
+	end 
+	for _,v in ipairs(array) do
+		if(v == value) then 
+			return true;
+		end 
+	end 
+	return false;
+end
+gt.valueInArray = valueInArray;

@@ -1,0 +1,374 @@
+--region app.views.CreateRoom
+--desc: 创建房间的基础页面
+--?? 好多代码其实都是无效的，在派生的类里已经重载了
+--endregion
+
+local gt = cc.exports.gt
+
+local CreateRoom = class("CreateRoom", function()
+	return gt.createMaskLayer()
+end)
+
+function CreateRoom:ctor()
+	local csbNode = cc.CSLoader:createNode("CreateRoom.csb")
+	csbNode:setAnchorPoint(0.5, 0.5)
+	csbNode:setPosition(gt.winCenter)
+	self:addChild(csbNode)
+
+	-- 是否勾选红中
+	self.isChooseZhong = false
+	local isChoose = cc.UserDefault:getInstance():getStringForKey("isChooseZhong_flag")
+	if isChoose == "" or isChoose == "0" then
+		self.isChooseZhong = false
+	else
+		self.isChooseZhong = true
+	end
+	self.isChooseQiDui = false
+
+    local Btn_titlebg1 = gt.seekNodeByName(self, "Btn_titlebg1")
+    local Btn_titlebg_press1 = gt.seekNodeByName(self, "Btn_titlebg_press1")
+    local Spr_hn_title_press = gt.seekNodeByName(self, "Spr_hn_title_press")
+    local Spr_hn_title = gt.seekNodeByName(self, "Spr_hn_title")
+    local Btn_titlebg2 = gt.seekNodeByName(self, "Btn_titlebg2")
+    local Btn_titlebg_press2 = gt.seekNodeByName(self, "Btn_titlebg_press2")
+    local Spr_csh_title = gt.seekNodeByName(self, "Spr_csh_title")
+    local Spr_csh_title_press = gt.seekNodeByName(self, "Spr_csh_title_press")
+    local Spr_csh_explain = gt.seekNodeByName(self, "Spr_csh_explain")
+    local Node_playType_1  = gt.seekNodeByName(self, "Node_playType_1")
+	local Node_playType_2 = gt.seekNodeByName(self, "Node_playType_2")
+	local Spr_selectPlay = gt.seekNodeByName(self, "Spr_selectPlay")
+	local Node_playType_3 = gt.seekNodeByName(self, "Node_playType_3")
+	local Node_playType_4 = gt.seekNodeByName(self, "Node_playType_4")
+    local function setNodeVisible(state)
+    	Btn_titlebg1:setVisible(state)
+	    Btn_titlebg_press1:setVisible(not state)
+	    Spr_hn_title_press:setVisible(not state)
+	    Spr_hn_title:setVisible(state)
+	    Btn_titlebg2:setVisible(not state)
+	    Btn_titlebg_press2:setVisible(state)
+	    Spr_csh_title:setVisible(not state)
+	    Spr_csh_title_press:setVisible(state)
+	    Spr_csh_explain:setVisible(not state)
+	    Spr_selectPlay:setVisible(state)
+	    Node_playType_1:setVisible(state)
+	    Node_playType_2:setVisible(state)
+	    Node_playType_3:setVisible(state)
+	    Node_playType_4:setVisible(state)
+
+    end
+	self.majiang_type = cc.UserDefault:getInstance():getStringForKey("majiang_type")
+	if self.majiang_type == "" or self.majiang_type == "1" then
+		setNodeVisible(true)
+
+		-- local NodeP3 = gt.seekNodeByName(self, "Node_playType_3")
+		-- if NodeP3 then
+		-- 	NodeP3:setVisible( true )
+		-- end
+	else
+		setNodeVisible(false)
+		-- local NodeP3 = gt.seekNodeByName(self, "Node_playType_3")
+		-- if NodeP3 then
+		-- 	NodeP3:setVisible( false )
+		-- end
+	end
+ 	--湖南麻将
+	gt.addBtnPressedListener(Btn_titlebg_press1,function ()
+	    setNodeVisible(true)
+	    self.majiang_type = "1"
+	    -- local NodeP3 = gt.seekNodeByName(self, "Node_playType_3")
+	    -- if NodeP3 then
+	    -- 	NodeP3:setVisible( true )
+	    -- end
+    end)
+    --长沙麻将
+    gt.addBtnPressedListener(Btn_titlebg_press2,function ()
+	    setNodeVisible(false)
+	    self.majiang_type = "2"
+
+	    -- local NodeP3 = gt.seekNodeByName(self, "Node_playType_3")
+	    -- if NodeP3 then
+	    -- 	NodeP3:setVisible( false )
+	    -- end
+    end)
+
+	-- 局数选择
+	local roundTypeRadioGroup = ccui.RadioButtonGroup:create()
+	roundTypeRadioGroup:addEventListener(function(senderBtn, index, eventType)
+		if eventType == ccui.RadioButtonEventType.selected then
+			gt.log("name: = " .. senderBtn:getName() .. " selected")
+		elseif eventType == ccui.RadioButtonEventType.unselected then
+			gt.log("name: = " .. senderBtn:getName() .. " unselected")
+		end
+	end)
+	self:addChild(roundTypeRadioGroup)
+	-- 构建checkbox单个选择组,从8局开始
+	for i = 1, 2 do
+		local roundTypeNode = gt.seekNodeByName(self, "Node_roundType_" .. i)
+		local radioBtn = ccui.RadioButton:create("btn_checkbox.png", "btn_checkbox.png",
+									"check_mark.png", "btn_checkbox.png", "btn_checkbox.png",
+									ccui.TextureResType.plistType)
+		radioBtn:setName("Radio_roundType_" .. i)
+		radioBtn:setTag(i)
+		roundTypeRadioGroup:addRadioButton(radioBtn)
+		roundTypeNode:addChild(radioBtn)
+
+		if gt.isIOSPlatform() and gt.isInReview then
+			-- 苹果设备在评审状态不显示16局
+			if i == 2 and roundTypeNode then
+				roundTypeNode:setVisible(false)
+			end
+		end
+	end
+	-- 默认选择8局
+	roundTypeRadioGroup:setSelectedButton(0)
+	self.roundTypeRadioGroup = roundTypeRadioGroup
+
+	if gt.isInReview then
+		local Label_round_1_0 = gt.seekNodeByName(csbNode, "Label_round_1_0")
+		local Label_round_1_0_0 = gt.seekNodeByName(csbNode, "Label_round_1_0_0")
+		local fangka_1 = gt.seekNodeByName(csbNode, "fangka_1")
+		local fangka_1_0 = gt.seekNodeByName(csbNode, "fangka_1_0")
+		Label_round_1_0:setVisible(false)
+		Label_round_1_0_0:setVisible(false)
+		fangka_1:setVisible(false)
+		fangka_1_0:setVisible(false)
+	end
+
+	-- 红中赖子麻将
+	local zhongTypeChkBox = gt.seekNodeByName(csbNode, "ChkBox_playType_3")
+	zhongTypeChkBox:setTag(3)
+	zhongTypeChkBox:addEventListener(handler(self, self.zhongPlayTypeEvt))
+	if self.isChooseZhong == true then
+		zhongTypeChkBox:setSelected(true)
+	else
+		zhongTypeChkBox:setSelected(false)
+	end
+
+	-- 七小对
+	local qiduiTypeChkBox = gt.seekNodeByName(csbNode, "ChkBox_playType_4")
+	qiduiTypeChkBox:setTag(4)
+	qiduiTypeChkBox:addEventListener(handler(self, self.qiduiPlayTypeEvt))
+	if self.isChooseZhong == true then
+		qiduiTypeChkBox:setSelected(true)
+	else
+		qiduiTypeChkBox:setSelected(false)
+	end
+
+	-- 玩法选择
+	for i = 1, 2 do
+		local playTypeChkBox = gt.seekNodeByName(self, "ChkBox_playType_" .. i)
+		playTypeChkBox:setTag(i)
+		playTypeChkBox:addEventListener(handler(self, self.choosePlayTypeEvt))
+	end
+	-- 默认是可抢杠胡玩法
+	self.prePlayType = 2
+
+	local createBtn = gt.seekNodeByName(self, "Btn_create")
+	gt.addBtnPressedListener(createBtn, function()
+		--保存选择麻将类型
+		cc.UserDefault:getInstance():setStringForKey("majiang_type", self.majiang_type)
+		-- c++索引从0开始+1,房卡从8局开始+1
+		-- 房间局数类型
+		local roundType = self.roundTypeRadioGroup:getSelectedButtonIndex() + 2
+		gt.log("roundType:" .. roundType)
+
+		local playType = 1
+		local stateType = 1
+		--  长沙麻将
+		if self.majiang_type == "2" then
+			playType = 3
+			stateType = 3
+		else    --  转转麻将
+			stateType = 0
+			-- 玩法选择,默认点炮胡
+			playType = 1
+			for i = 1, 3 do
+				local playTypeChkBox = gt.seekNodeByName(self, "ChkBox_playType_" .. i)
+				if playTypeChkBox:isSelected() then
+					gt.log("play type:" .. i)
+					if i == 1 then
+						-- 自摸胡
+						playType = 0
+					elseif i == 2 then
+						-- 可抢杠胡
+						playType = 2
+					end
+				end
+			end
+		end
+
+		local robotNumber = 0
+		if gt.isShowRoot == true then
+			local Btn_Root = gt.seekNodeByName(self, "Node_Root")
+			if Btn_Root then
+				local textfield = gt.seekNodeByName(Btn_Root, "TxtField_RootName")
+				local robotN = textfield:getStringValue()
+				if string.len(robotN) ~= 0 then
+					robotNumber = tonumber(robotN)
+				end
+			end
+		end
+		local senTab = {}
+		if gt.isShowRoot == true then
+			local Btn_PaiType = gt.seekNodeByName(self, "Node_PaiType")
+			if Btn_PaiType then
+				local textfield = gt.seekNodeByName(Btn_PaiType, "TxtField_paiType")
+				local cardNum = textfield:getStringValue()
+				if string.len(cardNum) ~= 0 then
+					local subStrs = string.split(cardNum, ",")
+
+					for i,v in ipairs(subStrs) do
+						local carTab = {}
+						carTab[1] = math.floor(tonumber(v)/10)
+						carTab[2] = tonumber(v)%10
+						senTab[#senTab+1] = carTab
+					end
+				end
+			end
+		end
+		-- 天胡牌型
+		-- senTab = {{1,1},{1,1},{1,1},{1,2},{1,2},{1,2},{1,3},{1,3},{1,3},{1,4},{1,4},{1,4},{1,5}, {2,1},{2,1},{2,1},{2,2},{2,2},{2,2},{2,3},{2,3},{2,3},{2,4},{2,4},{2,4},{2,5}, {3,1},{3,1},{3,1},{3,2},{3,2},{3,2},{3,3},{3,3},{3,3},{3,4},{3,4},{3,4},{3,5}, {3,6},{3,6},{3,6},{3,7},{3,7},{3,7},{3,8},{3,8},{3,8},{3,9},{3,9},{3,9},{1,9}, {1,5}}
+		-- 默认机器人数量
+		-- robotNumber = 3
+		-- 发送创建房间消息
+		local msgToSend = {}
+		msgToSend.m_msgId = gt.CG_CREATE_ROOM
+		msgToSend.m_flag = roundType
+		msgToSend.m_secret = "123456"
+		msgToSend.m_gold = 1
+		msgToSend.m_state = stateType -- 0转转 3长沙
+		msgToSend.m_canInteraction = gt.funnyEnable
+		msgToSend.m_antiCheat = gt.antiCheat
+
+		if stateType == 3 then -- 长沙麻将发送空
+			msgToSend.m_playtype = {}
+		else -- 转转麻将
+			if playType == 0 then -- 自摸胡
+				msgToSend.m_playtype = {1}
+			elseif playType == 1 then -- 都不选的玩法
+				msgToSend.m_playtype = {3}
+			elseif playType == 2 then -- 可抢杠胡
+				msgToSend.m_playtype = {2}
+			end
+			if self.isChooseZhong then
+				table.insert(msgToSend.m_playtype, 4)
+			end
+			if self.isChooseQiDui then
+				table.insert(msgToSend.m_playtype, 5)
+			end
+		end
+		msgToSend.m_robotNum = robotNumber
+		msgToSend.m_cardValue = senTab
+		msgToSend.m_location = Tools.getLocationStr()
+		-- print("============111111111111111")
+		-- dump( msgToSend )
+		gt.socketClient:sendMessage(msgToSend)
+		-- 等待提示
+		gt.showLoadingTips(gt.getLocationString("LTKey_0005"))
+	end)
+
+	-- 接收创建房间消息
+	gt.socketClient:registerMsgListener(gt.GC_CREATE_ROOM, self, self.onRcvCreateRoom)
+
+	-- 返回按键
+	local backBtn = gt.seekNodeByName(self, "Btn_back")
+	gt.addBtnPressedListener(backBtn, function()
+		self:removeFromParent()
+	end)
+
+	--  底部背景条
+	local Spr_btmTips = gt.seekNodeByName(self, "Spr_btmTips")
+	--  底部背景条上描述文字
+	local Spr_btmTips_text = gt.seekNodeByName(self, "Text_1")
+	if gt.isIOSPlatform() and gt.isInReview then
+		Spr_btmTips_text:setVisible(false)
+	else
+		Spr_btmTips_text:setVisible(true)
+	end
+
+	--  显示机器人
+	if gt.isShowRoot == true then
+		local Btn_PaiType = gt.seekNodeByName(self, "Node_PaiType")
+		local Btn_Root = gt.seekNodeByName(self, "Node_Root")
+		if Btn_PaiType then
+			Btn_PaiType:setVisible( true )
+		end
+		if Btn_Root then
+			Btn_Root:setVisible( true )
+		end
+	else
+		local Btn_PaiType = gt.seekNodeByName(self, "Node_PaiType")
+		local Btn_Root = gt.seekNodeByName(self, "Node_Root")
+		if Btn_PaiType then
+			Btn_PaiType:setVisible( false )
+		end
+		if Btn_Root then
+			Btn_Root:setVisible( false )
+		end
+	end
+end
+
+-- start --
+--------------------------------
+-- @class function
+-- @description 选择玩法
+-- @param senderBtn 触发事件按钮
+-- @param eventType 事件类型
+-- end --
+function CreateRoom:choosePlayTypeEvt(senderBtn, eventType)
+	if eventType == ccui.CheckBoxEventType.selected then
+		gt.log("name: = " .. senderBtn:getName() .. " selected")
+		local btnTag = senderBtn:getTag()
+		if btnTag == 1 or btnTag == 2 then
+			-- 自摸胡和可抢杠胡玩法互斥
+			if self.prePlayType ~= btnTag then
+				-- 恢复上一个玩法未选中状态
+				local playTypeChkBox = gt.seekNodeByName(self, "ChkBox_playType_" .. self.prePlayType)
+				playTypeChkBox:setSelected(false)
+
+				self.prePlayType = btnTag
+			end
+		end
+	elseif eventType == ccui.CheckBoxEventType.unselected then
+		gt.log("name: = " .. senderBtn:getName() .. " unselected")
+	end
+end
+
+-- 红中赖子按钮
+function CreateRoom:zhongPlayTypeEvt(senderBtn, eventType)
+	if eventType == ccui.CheckBoxEventType.selected then
+		self.isChooseZhong = true
+	elseif eventType == ccui.CheckBoxEventType.unselected then
+		self.isChooseZhong = false
+	end
+end
+
+-- 七小对按钮
+function CreateRoom:qiduiPlayTypeEvt(senderBtn, eventType)
+	if eventType == ccui.CheckBoxEventType.selected then
+		self.isChooseQiDui = true
+	elseif eventType == ccui.CheckBoxEventType.unselected then
+		self.isChooseQiDui = false
+	end
+end
+
+-- start --
+--------------------------------
+-- @class function
+-- @description 创建房间消息
+-- @param msgTbl 消息体
+-- end --
+function CreateRoom:onRcvCreateRoom(msgTbl)
+	if msgTbl.m_errorCode ~= 0 then
+		-- 创建失败
+		gt.removeLoadingTips()
+
+		-- 房卡不足提示
+		require("app/views/NoticeTips"):create(gt.getLocationString("LTKey_0007"),
+			gt.getLocationString("LTKey_0046", gt.roomCardBuyInfo), nil, nil, true)
+	end
+end
+
+return CreateRoom
+
+

@@ -1,0 +1,44 @@
+local cacheip = class("cacheip")
+
+function cacheip:ctor( ... )
+	local args = {...}
+	self.succeedCall = args[1]
+	self.failedCall = args[2]
+end
+
+function cacheip:request()
+	secure.log("cacheip request")
+	self:reset()
+	
+	self.ip = self:_getCacheIp()
+	secure.log("cacheip response:" .. self.ip)
+	if self.ip and self.ip ~= "" then
+		if self.succeedCall then
+			self.succeedCall(self)
+		end
+	else
+		if self.failedCall then
+			self.failedCall(self)
+		end
+	end
+end
+
+function cacheip:_getCacheIp(  )
+	return cc.UserDefault:getInstance():getStringForKey(secure.CACHEIP_KEY)
+end
+
+
+function cacheip:getIP()
+	secure.log("cacheip getIP:" .. self.ip)
+	return self.ip
+end
+
+function cacheip:getName()
+	return "cacheip"
+end
+
+function cacheip:reset()
+	self.ip = nil
+end
+
+return cacheip

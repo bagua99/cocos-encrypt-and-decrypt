@@ -1,0 +1,148 @@
+local RcvChatMsg = class("RcvChatMsg", BaseRoomAgreement)
+
+function RcvChatMsg:ctor()
+	self:registerMsgListener(gt.GC_CHAT_MSG, self, self.onRcvChatMsg)
+end
+
+function RcvChatMsg:onRcvChatMsg(msgTbl)
+	if msgTbl.m_type ~= gt.ChatType.EMOJI and not msgTbl.m_source then
+		local data = clone(msgTbl)
+		data.m_source = 1
+		data.m_isMine = self:isMine(msgTbl.m_pos + 1)
+		data.m_nickname = self:getPlayerNickname(msgTbl.m_pos + 1)
+		data.m_uid = self:getPlayerUUID(msgTbl.m_pos + 1)
+		table.insert(self.m_scene.m_chatData, data)
+	end
+
+	if msgTbl.m_type == 4 then
+		--语音
+		local videoTime = 0
+		local url = ""
+		if msgTbl.m_source or not gt.ShieldVoice then
+			gt.soundEngine:pauseAllSound()
+			require("json")
+			local curUrl = string.gsub(msgTbl.m_musicUrl,"\\","")
+			local respJson = json.decode(curUrl)
+			url = respJson.url
+			videoTime = respJson.duration
+			
+			gt.log("the play voide url is " .. url)
+
+			local luaBridge = Tools.getLuaBridge()
+			if gt.isIOSPlatform() then
+				local ok = luaBridge.callStaticMethod("AppController", "playVoice", {voiceUrl = url})
+			elseif gt.isAndroidPlatform() then
+				local ok = luaBridge.callStaticMethod("org/cocos2dx/lua/AppActivity", "playVoice", {url}, "(Ljava/lang/String;)V")
+			end
+		end
+		local yuyinChatNode = self.m_scene:getYuYinChatNode()
+
+		yuyinChatNode:setVisible(true)
+
+		local seatIdx = msgTbl.m_pos + 1
+		for i = 1, 4 do
+			local chatBgImg = gt.seekNodeByName(yuyinChatNode, "Image_" .. i)
+			chatBgImg:setVisible(false)
+		end
+
+		local roomPlayer = self.m_scene:getPlayer(seatIdx)
+		local chatBgImg = gt.seekNodeByName(yuyinChatNode, "Image_" .. roomPlayer:getDisplayIdx())
+		chatBgImg:setVisible(true)
+		yuyinChatNode:stopAllActions()
+		local fadeInAction = cc.FadeIn:create(0.5)
+		local delayTime = cc.DelayTime:create(videoTime)
+		local fadeOutAction = cc.FadeOut:create(0.5)
+		local callFunc = cc.CallFunc:create(function(sender)
+			sender:setVisible(false)
+			gt.soundEngine:resumeAllSound()
+		end)
+		yuyinChatNode:runAction(cc.Sequence:create(fadeInAction, delayTime, fadeOutAction, callFunc))
+	else
+		local chatBgNode = gt.seekNodeByName(self.m_scene:getCsbLayer(), "Node_chatBg")
+		chatBgNode:setVisible(true)
+		local seatIdx = msgTbl.m_pos + 1
+		for i = 1, 4 do
+			local chatBgImg = gt.seekNodeByName(chatBgNode, "Img_playerChatBg_" .. i)
+			if chatBgImg:getNumberOfRunningActions() < 1 then
+				chatBgImg:setVisible(false)
+			end			
+		end
+		local roomPlayer = self.m_scene:getPlayer(seatIdx)
+		local chatBgImg = gt.seekNodeByName(chatBgNode, "Img_playerChatBg_" .. roomPlayer:getDisplayIdx())
+		chatBgImg:setVisible(true)
+		local msgLabel = gt.seekNodeByName(chatBgImg, "Label_msg")
+		local emojiSpr = gt.seekNodeByName(chatBgImg, "Spr_emoji")
+		local emojiNode = gt.seekNodeByName(chatBgImg, "Node_emoji")
+		emojiNode:removeAllChildren()
+		local isTextMsg = false
+		if msgTbl.m_type == gt.ChatType.FIX_MSG then
+			msgLabel:setString(gt.getLocationString("LTKey_0028_" .. msgTbl.m_id))
+			isTextMsg = true
+			gt.soundManager:PlayFixSound(roomPlayer:getSex(), msgTbl.m_id)
+		elseif msgTbl.m_type == gt.ChatType.INPUT_MSG then
+			msgLabel:setString(msgTbl.m_msg)
+			isTextMsg = true
+		elseif msgTbl.m_type == gt.ChatType.EMOJI then
+			local picStr = string.sub(msgTbl.m_msg,1,-5)
+			gt.log("EmotionName:" .. picStr)
+			local animationStr = "biaoqingbao/".. picStr .. ".csb"
+			local animationNode, animationAction = gt.createCSAnimation(animationStr)
+			animationAction:play(picStr, true)
+			animationNode:setAnchorPoint(cc.p(0.5, 0.5))
+			animationNode:setPosition(cc.p((emojiSpr:getContentSize().width + 50) / 2 , emojiSpr:getContentSize().height / 2))
+			emojiNode:addChild(animationNode)
+			isTextMsg = false
+		elseif msgTbl.m_type == gt.ChatType.VOICE_MSG then
+		end
+
+		msgLabel:setVisible(isTextMsg)
+		emojiSpr:setVisible(false)
+		local chatBgSize = chatBgImg:getContentSize()
+		local bgWidth = chatBgSize.width
+		if isTextMsg then
+			local labelSize = msgLabel:getContentSize()
+			bgWidth = labelSize.width + 30
+			msgLabel:setPositionX(bgWidth * 0.5)
+		else
+			-- local emojiSize = emojiSpr:getContentSize()
+			bgWidth = 0 --emojiSize.width + 50
+			-- emojiSpr:setPositionX(bgWidth * 0.5)
+		end
+		chatBgImg:setContentSize(cc.size(bgWidth, chatBgSize.height))
+
+		chatBgImg:stopAllActions()
+		local fadeInAction = cc.FadeIn:create(0.5)
+		local delayTime = cc.DelayTime:create(2)
+		local fadeOutAction = cc.FadeOut:create(0.5)
+		local callFunc = cc.CallFunc:create(function(sender)
+			self.m_scene.m_messageBtn:setEnabled(true)
+			sender:setVisible(false)
+		end)
+		chatBgImg:runAction(cc.Sequence:create(fadeInAction, delayTime, fadeOutAction, callFunc))
+		if self:isMine(msgTbl.m_pos + 1) then
+			self.m_scene.m_messageBtn:setEnabled(false)
+		end
+	end
+end
+
+function RcvChatMsg:getPlayerNickname( seatIdx )
+	local roomPlayer = self.m_scene:getPlayer(seatIdx)
+	if roomPlayer then
+		return roomPlayer:getName() or " "
+	end
+	return " "
+end
+
+function RcvChatMsg:getPlayerUUID( seatIdx )
+	local roomPlayer = self.m_scene:getPlayer(seatIdx)
+	if roomPlayer then
+		return roomPlayer:getuid() or ""
+	end
+	return ""
+end
+
+function RcvChatMsg:isMine( seatIdx )
+	return seatIdx == self.m_scene:getRoom():getMainSeatIdx()
+end
+
+return RcvChatMsg

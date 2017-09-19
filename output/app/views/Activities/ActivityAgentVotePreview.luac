@@ -1,0 +1,48 @@
+--	端午节代理投票活动 - 预热
+--	by:house
+--	date:2017.05.23
+
+local ActivityAgentVotePreview = class("ActivityAgentVotePreview", function()
+	return cc.LayerColor:create(cc.c4b(85, 85, 85, 85), gt.winSize.width, gt.winSize.height)
+end)
+
+local gt = cc.exports.gt
+
+function ActivityAgentVotePreview:ctor()
+	-- 注册节点事件
+	self:registerScriptHandler(handler(self, self.onNodeEvent))
+
+	local csbNode = cc.CSLoader:createNode("ActivityAgentVotePreview.csb")
+	csbNode:setPosition(gt.winCenter)
+	self:addChild(csbNode)
+	self.rootNode = csbNode
+	self.closeBtn = gt.seekNodeByName(self.rootNode, "closeBtn")
+	gt.addBtnPressedListener(self.closeBtn, function()
+		self:removeFromParent()
+	end)
+	
+end
+
+function ActivityAgentVotePreview:onNodeEvent(eventName)
+	if "enter" == eventName then
+		local listener = cc.EventListenerTouchOneByOne:create()
+		listener:setSwallowTouches(true)
+		listener:registerScriptHandler(handler(self, self.onTouchBegan), cc.Handler.EVENT_TOUCH_BEGAN)
+		listener:registerScriptHandler(handler(self, self.onTouchEnded), cc.Handler.EVENT_TOUCH_ENDED)
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:addEventListenerWithSceneGraphPriority(listener, self)
+	elseif "exit" == eventName then
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:removeEventListenersForTarget(self)
+	end
+end
+
+function ActivityAgentVotePreview:onTouchBegan(touch, event)
+	return true
+end
+
+function ActivityAgentVotePreview:onTouchEnded(touch, event)
+	self:removeFromParent()
+end
+
+return ActivityAgentVotePreview

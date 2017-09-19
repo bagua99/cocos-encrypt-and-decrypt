@@ -1,0 +1,23 @@
+local RcvOffLineState = class("RcvOffLineState", BaseRoomAgreement)
+
+-- 同步玩家离线状态 40
+function RcvOffLineState:ctor()
+	self:registerMsgListener(gt.GC_OFF_LINE_STATE, self, self.onRcvOffLineState)
+end
+
+function RcvOffLineState:onRcvOffLineState(msgTbl)
+	local seatIdx = msgTbl.m_pos + 1
+	local player = self.m_scene:getRoom():getPlayer(seatIdx)
+	local playerInfoNode = gt.seekNodeByName(self.m_scene:getCsbLayer(), "Node_playerInfo_" .. player:getDisplayIdx())
+	-- 离线标示
+	local offLineSignSpr = gt.seekNodeByName(playerInfoNode, "Spr_offLineSign")
+	if msgTbl.m_flag == 0 then
+		-- 掉线了
+		offLineSignSpr:setVisible(true)
+	elseif msgTbl.m_flag == 1 then
+		-- 回来了
+		offLineSignSpr:setVisible(false)
+	end
+end
+
+return RcvOffLineState

@@ -1,0 +1,145 @@
+local RoomScene = class("RoomScene", BaseRoomScene)
+
+function RoomScene:ctor(msgTbl)
+	RoomScene.super.ctor(self, msgTbl, Tools.GAME_TYPE[1])
+	self.m_room:setGui({m_color = 5, m_number = 1})
+	gt.anglePngPath = "res/sd/images/otherImages/lai_icon.png"
+end
+
+
+function RoomScene:initListener( _subArgeements )	
+	local argeements = {
+		"RecvPlayerScore",		-- 同步玩家分数 116
+		"RcvZhaNiao",			--抓鸟数据 72
+	}
+	
+	RoomScene.super.initListener(self, argeements)
+end
+
+
+
+-- 玩法设置
+function RoomScene:getRuleDesc( _msgTbl, _splitChar , _type)
+	local ruleDesc = ""
+	if _type == RoomScene.RULEDESC_TYPE.ROOM then
+		ruleDesc = Room.TypeName[_msgTbl.m_state + 1]
+	end
+	local isDianPaoHu = true
+	for i, v in ipairs(_msgTbl.m_playtype) do
+		if v == 0 then
+			ruleDesc = ruleDesc .. _splitChar .. "无鸟"
+		elseif v == 2 or v == 4 or v == 6 then
+			ruleDesc = ruleDesc .. _splitChar .. v .. "鸟"
+		elseif Room.RuleType[v] then
+			ruleDesc = ruleDesc .. _splitChar .. Room.RuleType[v]
+		end
+
+		if  v == 11 or v == 13 then
+			isDianPaoHu = false
+		end
+	end
+
+	if isDianPaoHu then
+		ruleDesc = ruleDesc .. _splitChar .. "点炮胡"
+	end
+
+	return ruleDesc
+end
+
+function RoomScene:showDecisionAnimation(seatIdx, decisionType, huCard)
+	if decisionType == 7 then
+		decisionType = 3
+	end
+	if decisionType == 8 then
+		decisionType = 4
+	end
+	-- 接炮胡，自摸胡，明杠，暗杠，碰文件后缀
+	local decisionSuffixs = {1, 4, 2, 2, 3}
+	local decisionSfx = {"hu", "zimo", "gang", "angang", "peng"}
+	-- 显示决策标识
+	local roomPlayer = self.m_room:getPlayer(seatIdx)
+	local mjTilesReferPos = roomPlayer:getTilesReferPos()
+	local decisionSignSpr = cc.Sprite:createWithSpriteFrameName(string.format("decision_sign_cs_%d.png", decisionSuffixs[decisionType]))
+	decisionSignSpr:setPosition(mjTilesReferPos.showMjTilePos)
+	self:addChild(decisionSignSpr, Room.ZOrder.DECISION)
+	-- 标识显示动画
+	decisionSignSpr:setScale(0)
+	local scaleToAction = cc.ScaleTo:create(0.5, 1)
+	local easeBackAction = cc.EaseBackOut:create(scaleToAction)
+	local fadeOutAction = cc.FadeOut:create(1)
+	local callFunc = cc.CallFunc:create(function(sender)
+		-- 播放完后移除
+		sender:removeFromParent()
+	end)
+	local seqAction = cc.Sequence:create(easeBackAction, fadeOutAction, callFunc)
+	decisionSignSpr:runAction(seqAction)
+
+	-- 播放全屏动画
+	if decisionType == Room.DecisionType.BRIGHT_BAR then
+		if not self.brightBarAnimateNode then
+			local brightBarAnimateNode, brightBarAnimate = gt.createCSAnimation("animation/BrightBar.csb")
+			self.brightBarAnimateNode = brightBarAnimateNode
+			self.brightBarAnimate = brightBarAnimate
+			self:addChild(brightBarAnimateNode, Room.ZOrder.MJBAR_ANIMATION)
+		end
+		self.brightBarAnimate:play("run", false)
+	elseif decisionType == Room.DecisionType.DARK_BAR then
+		if not self.darkBarAnimateNode then
+			local darkBarAnimateNode, darkBarAnimate = gt.createCSAnimation("animation/DarkBar.csb")
+			self.darkBarAnimateNode = darkBarAnimateNode
+			self.darkBarAnimate = darkBarAnimate
+			self:addChild(darkBarAnimateNode, Room.ZOrder.MJBAR_ANIMATION)
+		end
+		self.darkBarAnimate:play("run", false)
+	end
+	
+	-- dj revise
+	gt.soundManager:PlaySpeakSound(roomPlayer:getSex(), decisionSfx[decisionType], roomPlayer)
+end
+
+
+function RoomScene:addAlreadyOutMjTilesByCopy(seatIdx, mjColor, mjNumber, roomPlayer)
+	-- 添加到已出牌列表
+	local mjTileSpr = cc.Sprite:createWithSpriteFrameName(string.format("p%ds%d_%d.png", roomPlayer:getDisplayIdx(), mjColor, mjNumber))
+	local mjTile = {}
+	mjTile.mjTileSpr = mjTileSpr
+	mjTile.mjColor = mjColor
+	mjTile.mjNumber = mjNumber
+	table.insert(roomPlayer:getOutMJTiles(), mjTile)
+	
+	-- 玩家已出牌缩小
+	if self.m_room:getMainSeatIdx() == seatIdx then
+		mjTileSpr:setScale(0.66)
+	end
+
+	-- 显示已出牌
+	local mjTilesReferPos = roomPlayer:getTilesReferPos()
+	local mjTilePos = mjTilesReferPos.outStart
+	local lineCount = math.ceil(#roomPlayer:getOutMJTiles() / 10) - 1
+	local lineIdx = #roomPlayer:getOutMJTiles() - lineCount * 10 - 1
+	mjTilePos = cc.pAdd(mjTilePos, cc.pMul(mjTilesReferPos.outSpaceV, lineCount))
+	mjTilePos = cc.pAdd(mjTilePos, cc.pMul(mjTilesReferPos.outSpaceH, lineIdx))
+	mjTileSpr:setPosition(mjTilePos)
+	self.m_mahjongNode:addChild(mjTileSpr, (gt.winSize.height - mjTilePos.y))
+	return mjTileSpr
+end
+
+-- 将麻将添加到玩家持有牌的列表内
+function RoomScene:addMJTileToSelf(mjColor, mjNumber)
+	local mjTileName = string.format("p%db%d_%d.png", Room.PlayerTotal, mjColor, mjNumber)
+	local mjTileSpr = cc.Sprite:createWithSpriteFrameName(mjTileName)
+	
+	if Tools.isGhost(mjColor, mjNumber, self.m_room.m_gui) then
+		local guiSpr = cc.Sprite:create(gt.anglePngPath)
+		guiSpr:setAnchorPoint(cc.p(1, 1))
+		guiSpr:setPosition(cc.p(mjTileSpr:getContentSize().width, mjTileSpr:getContentSize().height - 5))
+		mjTileSpr:addChild(guiSpr)
+	end
+	
+	self.m_mahjongNode:addChild(mjTileSpr)
+
+	local player = self.m_room:getMainPlayer()
+	return player:addHoldMJTile(mjTileSpr, mjColor, mjNumber)
+end
+
+return RoomScene

@@ -1,0 +1,114 @@
+local RcvGhostMsg = class("RcvGhostMsg", BaseRoomAgreement)
+
+function RcvGhostMsg:ctor(  )
+	self:registerMsgListener(gt.GC_START_GHOST, self, self.onRcvGhost)
+end
+
+function RcvGhostMsg:onRcvGhost( msgTbl )
+	local isDouble = (self.m_scene.m_ghost_type == 28 and true) or false
+	local mjTable = Tools.getGhostTable(msgTbl, false, isDouble)
+	if not mjTable or #mjTable < 1 then
+		self.m_scene:initGhost()
+		self.m_scene:setGhostAnimation(false)
+		return
+	end
+
+	self.m_scene:setGhostAnimation(true)
+	local ghostTable = Tools.getGhostTable(msgTbl, true, isDouble)
+	local len = #mjTable
+	local endTime = 0
+
+	for i=1,len do
+		local pos, sequence, totleTime  = nil, nil, 0
+		local farme1 = string.format("p4s%d_%d.png", mjTable[i].mjColor, mjTable[i].mjNumber)
+		local farme2 = string.format("p4s%d_%d.png", ghostTable[i].mjColor, ghostTable[i].mjNumber)
+
+		local cardSpr = cc.Sprite:createWithSpriteFrameName("tdbgs_4.png")
+		cardSpr:setAnchorPoint(cc.p(0.5, 0.5))
+		cardSpr:setScale(0.1) 
+
+		cardSpr:setPosition(gt.winCenter)
+		if len == 1 then
+			-- cardSpr:setPosition(gt.winCenter)
+			pos = cc.p(self.m_scene.m_ghostSpr:getPositionX(), self.m_scene.m_ghostSpr:getPositionY()) 
+			sequence, totleTime = self:getAnimation(farme1, farme2, pos)
+		elseif len > 1 then
+			-- cardSpr:setPosition(cc.p(gt.winCenter.x + ((i == len and 50) or -50), gt.winCenter.y))
+			pos = cc.p(self.m_scene.m_ghostSpr_two[i]:getPositionX(), self.m_scene.m_ghostSpr_two[i]:getPositionY())
+			sequence, totleTime = self:getAnimation(farme1, farme2, pos, true, i > 1 and 50 or -50)
+		end
+
+		self.m_scene.m_ghostNode:addChild(cardSpr, i, i)
+		cardSpr:runAction(sequence)
+
+		if totleTime > endTime then
+			endTime = totleTime
+		end
+	end
+
+	self.m_scene.m_ghostNode:runAction(cc.Sequence:create(cc.DelayTime:create(endTime), 
+		cc.CallFunc:create(function( ... )
+			self:endAnimation(msgTbl)
+	end)))
+end
+
+--------------------------------
+-- @class function
+-- @description 播放鬼牌动画
+-- @param 创建动画图片，翻牌1， 翻牌2，移动到坐标, 双鬼动画， 
+-- @return 动画,播放动画时长
+function RcvGhostMsg:getAnimation( _mjFarme1, _mjFarme2, _mjPos, _isDouble, _moveDelta )
+	local totleTime = 0
+
+	local scaleTo = cc.ScaleTo:create(0.5, 1.5)
+	totleTime = totleTime + 0.5
+
+	local orbitCamera = cc.OrbitCamera:create(0.5, 1, 0, 0, 90, 0, 0)
+	totleTime = totleTime + 0.5
+
+	local callFunc = cc.CallFunc:create(function( sender )
+		sender:setSpriteFrame(_mjFarme1)
+	end)
+
+	local orbitCamera2 = cc.OrbitCamera:create(0.5, 1, 0, 90, -90, 0, 0)
+	totleTime = totleTime + 0.5
+
+	local fadeOut = cc.FadeOut:create(0.7)
+	totleTime = totleTime + 0.7
+	local callFunc1 = cc.CallFunc:create(function( sender )
+		cc.Director:getInstance():setProjection(cc.DIRECTOR_PROJECTION_2D)
+		sender:setSpriteFrame(_mjFarme2)
+		if _isDouble then
+			sender:setPositionX(sender:getPositionX() + _moveDelta)
+		end
+	end)
+
+	local fadeIn = nil 
+	if _isDouble then
+		fadeIn = cc.Spawn:create(cc.MoveBy:create(0.3, cc.p(_moveDelta, 0)), cc.FadeIn:create(0.3))
+	else
+		fadeIn = cc.FadeIn:create(0.3)
+	end
+	totleTime = totleTime + 0.3
+
+	local delayTime = cc.DelayTime:create(0.3)
+	totleTime = totleTime + 0.3
+
+	local spawn = cc.Spawn:create(cc.MoveTo:create(0.6, _mjPos),cc.ScaleTo:create(0.6,0.65))
+	totleTime = totleTime + 0.6
+
+	local callFunc2 = cc.CallFunc:create(function( sender )
+		sender:removeFromParent()
+	end)
+
+	local sequence = cc.Sequence:create(scaleTo, orbitCamera, callFunc, orbitCamera2, fadeOut, callFunc1, fadeIn, delayTime, spawn, callFunc2)
+
+	return sequence, totleTime
+end
+
+function RcvGhostMsg:endAnimation( _msgTbl )
+	self.m_scene:setGhostAnimation(false)
+	self.m_scene:setGhost( _msgTbl )
+end
+
+return RcvGhostMsg

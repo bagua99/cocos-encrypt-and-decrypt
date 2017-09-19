@@ -1,0 +1,141 @@
+--require("app/secure/init")
+
+local poll = class("poll")
+
+local _instance = nil
+function poll:getInstance()
+	if not _instance then
+		_instance = require("app/secure/poll"):new()
+	end
+	return _instance
+end
+
+function poll:ctor(...)
+	self.polls = secure.polls
+	self.pollIdx = 1
+	self.cacheStatu = true
+end
+
+function poll:init(params)
+	self.uuid = params.uuid
+	self.succeedCall = params.succeedCall
+	self.failedCall = params.failedCall
+end
+
+function poll:request()
+	self:reset()
+	self:nextState()
+end
+
+function poll:getCurIPState()
+	return self.curIPState
+end
+
+function poll:nextState()
+	if self.cacheStatu then
+		local cacheip = require("app/secure/cacheip").new(handler(self, self.onRespSucceed), handler(self, self.onRespFailed), self.uuid)
+		cacheip:request()
+		return
+	end
+
+	if #self.polls <= 0 then
+		secure.log("secure error: not config")
+		return
+	end
+
+	if self.pollIdx > #self.polls then
+		self.pollIdx = 1
+	end
+
+	local statename = self.polls[self.pollIdx]
+	if statename == "ips" then
+		self.curIPState = require("app/secure/ips").new(handler(self, self.onRespSucceed), handler(self, self.onRespFailed), self.uuid)
+	elseif statename == "oss" then
+		self.curIPState = require("app/secure/oss").new(handler(self, self.onRespSucceed), handler(self, self.onRespFailed), self.uuid)
+	elseif statename == "gaofang" then
+		self.curIPState = require("app/secure/gaofang").new(handler(self, self.onRespSucceed), handler(self, self.onRespFailed))
+	elseif statename == "backupip" then
+		self.curIPState = require("app/secure/backupip").new(handler(self, self.onRespSucceed), handler(self, self.onRespFailed))
+	end
+	self.pollIdx = self.pollIdx + 1
+
+	self:reset2()
+	if self.curIPState then
+		self.scheduleHandler = gt.scheduler:scheduleScriptFunc(handler(self, self.update), 5, false)
+		self.curIPState:request()
+	end
+end
+
+function poll:update(delta)
+	self:reset2()
+	self:nextState()
+end
+
+function poll:reset()	
+	self:reset2()
+	self.curIPState = nil
+	-- self.pollIdx = 1
+end
+
+function poll:reset2()
+	if self.curIPState then 
+		self.curIPState:reset()
+	end
+	if self.scheduleHandler then
+		gt.scheduler:unscheduleScriptEntry(self.scheduleHandler)
+		self.scheduleHandler = nil
+	end
+end
+
+function poll:getIP()
+	if self.curIPState then
+		return self.curIPState:getIP()
+	end
+	return nil
+end
+
+function poll:savePlayCount(count)
+	require("app/secure/oss").savePlayCount(count)
+end
+
+function poll:onRespSucceed(ipstate)
+	secure.log(ipstate:getName() .. " request Succeed")
+	if self.scheduleHandler then
+		gt.scheduler:unscheduleScriptEntry(self.scheduleHandler)
+		self.scheduleHandler = nil
+	end
+	if self.succeedCall then
+		secure.log("succeedCall")
+		self.succeedCall(ipstate)
+	end
+end
+
+function poll:onRespFailed(ipstate)
+	secure.log(ipstate:getName() .. " request failed")
+	if ipstate:getName() == "cacheip" then
+		self.cacheStatu = false
+	end
+	
+	self:nextState()
+	if self.failedCall then
+		self.failedCall(ipstate)
+	end
+end
+
+function poll:succeedConnect( _ip )
+	self.cacheStatu = true
+	self:setCathcIp(_ip)
+end
+
+function poll:failedConnect( ... )
+	self.cacheStatu = false
+end
+
+function poll:setCathcIp( _ip )
+	if _ip and _ip ~= "" then
+		cc.UserDefault:getInstance():setStringForKey(secure.CACHEIP_KEY, _ip)
+		cc.UserDefault:getInstance():flush()
+	end
+end
+
+return poll

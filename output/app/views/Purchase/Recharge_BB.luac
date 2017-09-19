@@ -1,0 +1,6 @@
+local Recharge={
+    [1]={["ID"]=1,["AppStore"]="com.mahjong.guangdong.10001",["Description"]="购买获得1张房卡",["Title"]="房卡1张",["CostValue"]="6元",["Cost"]=6,["CardCount"]=1,["ExDescription"]="6元购买1张房卡",},
+    [2]={["ID"]=2,["AppStore"]="com.mahjong.guangdong.10002",["Description"]="购买获得6张房卡",["Title"]="房卡6张",["CostValue"]="30元",["Cost"]=30,["CardCount"]=6,["ExDescription"]="30元购买6张房卡",},
+    [3]={["ID"]=3,["AppStore"]="com.mahjong.guangdong.10003",["Description"]="购买获得32张房卡",["Title"]="房卡32张",["CostValue"]="128元",["Cost"]=128,["CardCount"]=32,["ExDescription"]="128元购买32张房卡",},
+}
+return Recharge

@@ -1,0 +1,85 @@
+local gt = cc.exports.gt
+
+local LogoScene = class("LogoScene", function()
+	return cc.Scene:create()
+end)
+
+
+function LogoScene:ctor()
+	-- 注册节点事件
+	self:registerScriptHandler(handler(self, self.onNodeEvent))
+
+	if gt.isDebugPackage then
+		local logfile = cc.FileUtils:getInstance():getWritablePath() .. "log.log"
+		io.writefile(logfile, "")
+	end
+end
+
+
+function LogoScene:onNodeEvent(eventName)
+	if "enter" == eventName then
+		if gt.isAndroidPlatform() then
+			local logoSpr = cc.Sprite:create("res/sd/images/otherImages/logo.jpg")
+
+			local delayAction = cc.FadeIn:create(1)
+			local fadeOutAction = cc.FadeOut:create(1)
+			local callFunc = cc.CallFunc:create(function(sender)
+				logoSpr:removeFromParent()
+				self:showAnimation()
+			end)
+			local seqAction = cc.Sequence:create(delayAction, fadeOutAction, callFunc)	
+			
+			logoSpr:setPosition( display.cx, display.cy )
+			logoSpr:runAction(seqAction)
+
+			self:addChild( logoSpr )
+			
+		else
+			self:showAnimation()
+		end
+	end
+end
+
+function LogoScene:showAnimation(  )
+	-- local beginAnimateNode, beginAnimate = gt.createCSAnimation("da/chuchangdonghua.csb")
+	-- beginAnimateNode:setPosition(gt.winCenter)
+	-- self:addChild(beginAnimateNode)
+	-- beginAnimate:play("chuchangdonghua", false)
+	
+	-- --动画结束回调
+	-- local duration = gt.getAnimationDuration(beginAnimate)
+	-- local block = cc.CallFunc:create( function(sender)  
+	--    self:starEnterGame()
+	-- end )    
+	-- self:runAction(cc.Sequence:create(cc.DelayTime:create(duration), block))
+	LogoScene:starEnterGame(  )
+end
+
+function LogoScene:changeScene(  )
+	local updateScene = require("app/views/UpdateScene"):create()
+	cc.Director:getInstance():replaceScene(updateScene)
+end
+
+function LogoScene:starEnterGame(  )
+	self:changeScene()
+
+	-- 30s启动Lua垃圾回收器
+	gt.scheduler:scheduleScriptFunc(function(delta)
+		local preMem = collectgarbage("count")
+		-- 调用lua垃圾回收器
+		for i = 1, 3 do
+			collectgarbage("collect")
+		end
+		local curMem = collectgarbage("count")
+		gt.log(string.format("Collect lua memory:[%d] cur cost memory:[%d]", (curMem - preMem), curMem))
+		local luaMemLimit = 30720
+		if curMem > luaMemLimit then
+			gt.log("Lua memory limit exceeded!")
+		end
+	end, 30, false)
+end
+
+
+return LogoScene
+
+

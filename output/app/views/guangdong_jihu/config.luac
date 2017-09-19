@@ -1,0 +1,119 @@
+--region app.views.huizhouzhuang.config
+--author:liubing
+--desc:  尝试吧一些数据拿到这里来
+--endregion
+
+local Room = Room;
+local Tools = Tools;
+local gt = gt;
+
+--一种想法，可能实现的话，写起来更舒服
+-- local RuleType = extends(Room.RuleType)
+-- {
+    
+-- }
+
+--仅仅扩展数据，不牵涉道元表的ext 
+local function simple_extends(basic)
+    local rt = clone(basic);
+    return function(ext)
+        ext = ext or {};
+        if(type(ext) ~= 'table') then
+            ext = {}; 
+        end 
+
+        for k,v in pairs(ext) do
+            rt[k] = v; 
+        end
+        return rt;
+    end 
+end 
+
+--使用方式 
+--最简单的clone ，但是还是要传入参数 {}
+-- simple_extends(Room.RuleType)
+-- {
+
+-- }
+--这个是才有数据的扩展
+-- simple_extends(Room.RuleType)
+-- {
+--     [12] = "可接炮胡",
+--     [19] = "无花加倍"
+-- }
+
+--RuleType = 
+-- local RuleType = clone(Room.RuleType);
+-- RuleType[12] = "可接炮胡"
+-- RuleType[19] = "无花加倍"
+
+local config = {
+
+    ['RoomType'] = gt.RoomType.ROOM_GUANGDONG_JIHU,
+    ['RuleType'] = simple_extends(Room.RuleType){
+        -- [12] = "可接炮胡",
+        -- [19] = "无花加倍",
+        -- [29] = '花牌做鬼',
+        --[54] = '报九',
+    },
+    --玩法类型
+    Wanfa_Type = {
+        18, --可抢杠胡
+        17, --抢杠全包
+        10, --不带风
+        33, --跟庄
+        43, --节节高
+
+
+    },
+    --鬼牌
+    Guipai_Type = {
+        7, --无鬼
+        9, --翻鬼
+        28 --双鬼
+    },
+
+    --买几个马
+    Mapai_Type = {
+        0, --无马 
+        2, --买2马
+        4, --买4马
+        6, --买6马
+        67, --买8马
+        80,--买10马,
+        105,--买20马
+    },
+    --？？有马才胡
+    Hu_Only_Ma = {},
+    --默认选中 
+    defaltConfig = {
+        --保存值
+        WANFA_KEY  = "guangdong_guangdong_jihu_wanfa",
+        MAPAI_KEY  = "guangdong_guangdong_jihu_mapai",
+        GUIPAI_KEY = "guangdong_guangdong_jihu_guipai",
+        --玩法
+        wanfa = {1,2,3,4,5},
+        --鬼牌
+        guipai = {1,0,0,}, --无鬼 和 翻鬼
+        --马牌
+        mapai = 2, --默认买2马
+    },
+};
+
+
+
+function config:getGameType()
+    return Tools.GAME_TYPE[self.RoomType + 1];
+end 
+
+function config:loadFromFile()
+
+end 
+
+function config:saveToFile(fileType)
+
+end 
+
+
+
+return config;

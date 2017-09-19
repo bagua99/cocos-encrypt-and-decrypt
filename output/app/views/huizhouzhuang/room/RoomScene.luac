@@ -1,0 +1,66 @@
+--region app.views.huizhouzhuag.room.RoomScene
+--desc: 惠州庄的房间内Scene
+--endregion 
+
+--加入一个config 尝试一下
+local _mod = ...;
+_mod= string.gsub(_mod,"%/","%.");
+
+print('mod = '.._mod);
+
+local config = import('..config',_mod);
+local RuleType = config.RuleType;
+--dump(RuleType,'RuleType',5);
+
+local RoomScene = class("RoomScene", BaseRoomScene)
+
+function RoomScene:ctor(msgTbl)
+	self.super.ctor(self,msgTbl,config:getGameType());
+end
+
+-- 玩法设置
+function RoomScene:getRuleDesc( _msgTbl, _splitChar , _type)
+	print('getRuleDesc: ')
+	dump(_msgTbl ,'msgTbl',5);
+	print('_type = '.._type);
+	
+	local ruleDesc = ""
+	if _type == RoomScene.RULEDESC_TYPE.ROOM then
+		ruleDesc = Room.TypeName[_msgTbl.m_state + 1]
+	end
+	local qianggangType = nil
+	local minggang = nil
+	for i, v in ipairs(_msgTbl.m_playtype) do
+		if v == 0 then
+			ruleDesc = ruleDesc .. " 无马"
+		elseif v == 17 or v == 18 then
+			if qianggangType then
+				if qianggangType > v then
+					qianggangType = v
+				end
+			else
+				qianggangType = v
+			end
+		elseif v == 30 then
+			minggang = true
+		elseif RuleType[v] then
+			ruleDesc = ruleDesc .. _splitChar .. RuleType[v]
+		end
+	end
+
+	if minggang then
+		ruleDesc = ruleDesc .. _splitChar .. RuleType[30]
+	end
+
+	if qianggangType then
+		if qianggangType == 18 and minggang then
+		else
+			ruleDesc = ruleDesc .. _splitChar .. RuleType[qianggangType]
+		end
+	end
+	
+	print('ruleDesc = '..ruleDesc);
+	return ruleDesc
+end
+
+return RoomScene

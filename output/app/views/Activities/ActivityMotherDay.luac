@@ -1,0 +1,464 @@
+local FONTSCOLOR = cc.c3b(254,205,255);
+
+local ActivityMotherDay = class("ActivityMotherDay", function()
+	return gt.createMaskLayer()
+end)
+
+ActivityMotherDay.m_isRun = false
+ActivityMotherDay.MAX_SPEED = 30
+ActivityMotherDay.m_stopIndex = 0
+ActivityMotherDay.m_count = 12
+
+-- local activityMotherDayLayer = require("app/views/Activities/ActivityMotherDay"):create()
+-- self:addChild(activityMotherDayLayer, 8)
+
+ActivityMotherDay.m_listName = {
+	"话费10元",
+	"话费20元",
+	"房卡1张",
+	"房卡10张",
+	"话费100元",
+	"房卡1张",
+	"话费10元",
+	"谢谢惠顾",
+	"房卡1张",
+	"话费50元",
+	"房卡15张",
+	"iPhone6s",
+}
+
+local ActivityDoubleWeixin = {"xianlai0122", "xianlai0188", "xianlai0221", "xianlai0222", "xianlaigd01", "xianlaigd02"}
+
+
+
+function ActivityMotherDay:ctor()
+
+	local csbNode = cc.CSLoader:createNode("res/ActivityMotherDay.csb")
+	csbNode:setPosition(gt.winCenter)
+	self:addChild(csbNode)
+
+	-- 获取控件对象
+	self:initControl()
+	-- 将不需要的隐藏
+	self:setAllVisible()
+	-- 显示可以抽奖下标
+	self:showJiangPinNumber()
+	-- 抽奖按钮设置
+	if gt.lotteryInfoTab.m_LastGiftState == 0 then
+		self:showFenXiangChouJiang()
+		-- self.m_button_Start:setEnabled(true)
+	else
+		self:showNoNum()
+		-- self.m_button_Start:setEnabled(false)
+		local result = self.m_listName[gt.lotteryInfoTab.m_RewardID]
+		if result then
+			if string.find(result, "房卡") then
+				self.m_isCard = true
+				self:showFenXiangJieGuo()
+			elseif string.find(result, "话费") then
+				self:showFenXiangHuaFei()
+			end
+			-- self.m_sprite_roulette:setRotation(360-gt.lotteryInfoTab.m_RewardID*360/self.m_count)
+		end
+	end
+	
+	-- 按钮回调
+	gt.addBtnPressedListener(self.m_button_Start, handler(self, self.startCallback))
+	gt.addBtnPressedListener(self.m_button_exit, handler(self, self.exitCallback))
+	gt.addBtnPressedListener(self.m_button_explain, handler(self, self.explainCallback))
+	gt.addBtnPressedListener(self.m_button_record, handler(self, self.recordCallback))
+
+	gt.addBtnPressedListener(self.m_button_fxghy, handler(self, self.wxFenXiangGetHaoYou))
+	gt.addBtnPressedListener(self.m_button_fxlq, handler(self, self.wxFenXiangLingQu))
+	gt.addBtnPressedListener(self.m_button_back1, handler(self, self.backCallback1))
+	gt.addBtnPressedListener(self.m_button_back2, handler(self, self.backCallback2))
+	gt.addBtnPressedListener(self.m_button_lqjl, handler(self, self.lingquCallback))
+	gt.addBtnPressedListener(self.m_button_2, handler(self, self.recordFenXiangCallback))
+
+	self.scheduleHandler = gt.scheduler:scheduleScriptFunc(handler(self, self.update), 0, false)
+
+	gt.socketClient:registerMsgListener(gt.GC_RET_GETLOTTERY, self, self.onRecvRetGetLottery)
+	gt.socketClient:registerMsgListener(gt.GC_SAVE_PHONENUM, self, self.onRecvSavePhoneNum)
+	gt.socketClient:registerMsgListener(gt.GC_GET_GETLOTTERYRESULT, self, self.onRecvGetLotteryResult)
+	if gt.lotteryInfoTab.m_NeedPhoneNum == 1 then -- 需要输入手机号码
+		self:showFenXiangHuaFei()
+	end
+
+	if gt.lotteryInfoTab.m_NeedPhoneNum ~= 1 and gt.lotteryInfoTab.m_LastGiftState==1 then
+		self.m_node_huode:setVisible(true)
+		self:judgeWeixinShow()
+		self.m_button_fxlq:setVisible(false)
+		self.m_text_msg2:setString(self.m_listName[gt.lotteryInfoTab.m_RewardID])
+	end
+end
+
+function ActivityMotherDay:showJiangPinNumber()
+	if gt.localVersion then
+		-- self.m_sprite_roulette:setRotation(330)
+		local radius = 250
+		local cx = self.m_sprite_roulette:getPositionX()
+		local cy = self.m_sprite_roulette:getPositionY()
+		cx = cx / 1.5
+		cy = cy / 1.2
+		local angle = self:getAngle()
+	    for i = 1, self.m_count do
+	    	local label = gt.createTTFLabel(tostring(i), 28)
+	    	local x = cx + radius * math.sin(angle * i)
+	    	local y = cy + radius * math.cos(angle * i)
+	    	label:setPosition(cc.p(x, y))
+	    	label:setTextColor(FONTSCOLOR)
+	    	label:setRotation(30 * i)
+	    	label:setVisible( false )
+	    	self.m_sprite_roulette:addChild(label)
+	    end
+	end
+end
+
+-- 关闭历史奖励
+function ActivityMotherDay:backCallback1()
+	self.m_panel_2:setVisible(false)
+end
+
+-- 关闭活动规则
+function ActivityMotherDay:backCallback2()
+	self.m_panel_3:setVisible(false)
+end
+
+-- 显示历史奖励
+function ActivityMotherDay:recordCallback()
+	self:sendLotteryResult()
+end
+-- 显示活动规则
+function ActivityMotherDay:explainCallback()
+	self.m_panel_3:setVisible(true)
+end
+
+
+
+function ActivityMotherDay:initControl()
+	-- visible
+	self.m_button_Start = gt.seekNodeByName(self, "Button_Start") -- 抽奖
+    self.m_text_count = gt.seekNodeByName(self, "Text_count") -- 抽奖次数
+    self.m_button_explain = gt.seekNodeByName(self, "Button_explain") -- 活动说明
+    self.m_button_exit = gt.seekNodeByName(self, "Button_exit") -- 退出
+    self.m_sprite_roulette = gt.seekNodeByName(self, "Sprite_roulette") -- 奖品轮盘
+    self.m_button_record = gt.seekNodeByName(self, "Button_record") -- 我的奖励
+
+    self.m_button_2 = gt.seekNodeByName(self, "Button_2") -- 历史记录分享给朋友
+
+    self.m_listView_content = gt.seekNodeByName(self, "ListView_content") -- 历史记录容器
+
+    -- panel2
+    self.m_panel_2 = gt.seekNodeByName(self, "Panel_2") -- 历史奖励
+    self.m_button_back1 = gt.seekNodeByName(self, "Button_back1")
+
+    -- panel3
+    self.m_panel_3 = gt.seekNodeByName(self, "Panel_3") -- 活动规则
+    self.m_button_back2 = gt.seekNodeByName(self, "Button_back2")
+
+    -- not visible
+	self.m_text_msg = gt.seekNodeByName(self, "Text_msg1") -- 抽奖提示
+	self.m_button_fxlq = gt.seekNodeByName(self, "Button_fxlq") -- 分享领取
+    self.m_button_fxghy = gt.seekNodeByName(self, "Button_fxghy") -- 分享给好友
+    self.m_button_lqjl = gt.seekNodeByName(self, "Button_lqjl") -- 领取奖励
+    self.m_node_huode = gt.seekNodeByName(self, "Node_huode")--获奖提示容器
+    self.m_text_msg2 = gt.seekNodeByName(self, "Text_msg2") -- 获奖提示
+    self.m_textField_phone = gt.seekNodeByName(self, "TextField_phone") -- 手机输入
+    self.m_Sprite_phone_bg = gt.seekNodeByName(self, "Sprite_phone_bg") -- 手机输入背景框
+    self.m_text_msg3 = gt.seekNodeByName(self, "Text_msg3") -- 领取话费结束提示
+
+    self.m_text_weixintip = gt.seekNodeByName(self, "Text_3_0")	-- 微信加倍提示
+    self.m_text_weixin = gt.seekNodeByName(self, "Text_weixin")	-- 微信号
+end
+
+function ActivityMotherDay:setAllVisible()
+    self.m_button_fxlq:setVisible(false)
+	self.m_button_fxghy:setVisible(false)
+	self.m_button_lqjl:setVisible(false)
+	self.m_node_huode:setVisible(false)
+	self.m_text_msg:setVisible(false)
+	self.m_textField_phone:setVisible(false)
+	self.m_Sprite_phone_bg:setVisible(false)
+	self.m_text_msg3:setVisible(false)
+
+    self.m_panel_2:setVisible(false)
+    self.m_panel_3:setVisible(false)
+end
+
+-- 奖励记录分享给玩家
+function ActivityMotherDay:recordFenXiangCallback()
+	self:showFenXiangMessage("闲来麻将发奖啦,iPhone,话费通通有,大家快来抢啊!!点击参与!")
+end
+
+function ActivityMotherDay:wxFenXiangLingQu()
+	self:showFenXiangMessage(string.format(
+		"我通过闲来麻将获得了%s,百分百中奖,赶紧来拿奖吧!点击参与!",
+		self.m_listName[gt.lotteryInfoTab.m_RewardID]))
+	self:showLingQuHuaFei()
+end
+
+function ActivityMotherDay:wxFenXiangGetHaoYou()
+	if gt.lotteryInfoTab.m_LastGiftState == 0 then
+		self:showFenXiangMessage("闲来麻将发奖啦,iPhone,话费通通有,大家快来抢啊!!点击参与!")
+	else
+		self:showFenXiangMessage(string.format(
+			"我通过闲来麻将获得了%s,百分百中奖,赶紧来拿奖吧!点击参与!",
+			self.m_listName[gt.lotteryInfoTab.m_RewardID]))
+	end
+end
+
+-- 领取话费卡奖励
+function ActivityMotherDay:lingquCallback()
+	self:sendSavePhoneNum()
+end
+
+-- 还未抽奖
+function ActivityMotherDay:showFenXiangChouJiang()
+	self:setAllVisible()
+	self.m_text_msg:setVisible(true)
+	self.m_text_msg:setString("亲,恭喜您\n获得抽奖活动资格")
+	self.m_button_fxghy:setVisible(true)
+end
+
+-- 抽到房卡
+function ActivityMotherDay:showFenXiangJieGuo()
+	self:setAllVisible()
+	self.m_node_huode:setVisible(true)
+	self:judgeWeixinShow()
+	self.m_text_msg2:setString(self.m_listName[gt.lotteryInfoTab.m_RewardID])
+	self.m_button_fxghy:setVisible(true)
+end
+
+-- 抽到话费
+function ActivityMotherDay:showFenXiangHuaFei()
+	self:setAllVisible()
+	self.m_node_huode:setVisible(true)
+	self:judgeWeixinShow()
+	self.m_button_fxlq:setVisible(true)
+	self.m_text_msg2:setString(self.m_listName[gt.lotteryInfoTab.m_RewardID])
+end
+
+-- 领取话费
+function ActivityMotherDay:showLingQuHuaFei()
+	self:setAllVisible()
+	self.m_node_huode:setVisible(true)
+	self:judgeWeixinShow()
+	self.m_textField_phone:setVisible(true)
+	self.m_Sprite_phone_bg:setVisible(true)
+	self.m_button_lqjl:setVisible(true)
+	self.m_text_msg2:setString(self.m_listName[gt.lotteryInfoTab.m_RewardID])
+end
+
+-- 领取话费分享
+function ActivityMotherDay:showLingQuHuaFeiFenXiang()
+	self:setAllVisible()
+	self.m_button_fxghy:setVisible(true)
+	self.m_text_msg3:setVisible(true)
+end
+
+-- 无抽奖机会
+function ActivityMotherDay:showNoNum()
+	self:setAllVisible()
+	self.m_text_count:setString("还有0次抽奖机会")
+end
+
+function ActivityMotherDay:showFenXiangMessage(text)
+	if gt.isIOSPlatform() then
+		local luaoc = require("cocos/cocos2d/luaoc")
+		local ok = luaoc.callStaticMethod("AppController", "shareURLToWX",
+			{url = gt.getLocationString("LTKey_0051"), title = "【闲来广东麻将】", description = text})
+	elseif gt.isAndroidPlatform() then
+		local luaj = require("cocos/cocos2d/luaj")
+		local ok = luaj.callStaticMethod("org/cocos2dx/lua/AppActivity", "shareURLToWX",
+			{gt.getLocationString("LTKey_0051"), "【闲来广东麻将】", text},
+			"(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V")
+	end
+end
+
+-- 服务器推送抽奖结果 96
+function ActivityMotherDay:onRecvRetGetLottery(msgTbl)
+	-- 收到消息则初始化数据
+	gt.lotteryInfoTab.m_LastJoinDate = msgTbl.m_date
+	gt.lotteryInfoTab.m_NeedPhoneNum = msgTbl.m_NeedPhoneNum
+	gt.lotteryInfoTab.m_LastGiftState = 1
+
+	if msgTbl.m_errorCode == 0 then
+		gt.lotteryInfoTab.m_RewardID = msgTbl.m_RewardID
+		self.m_isRun = true
+		self.m_stopIndex = 0
+		-- require("app/views/NoticeTips"):create("提示", "抽奖成功", nil, nil, true)
+	elseif msgTbl.m_errorCode == 1 then
+		require("app/views/NoticeTips"):create("提示", "亲,今日次数已经用完了哦!", nil, nil, true)
+		self.m_button_Start:setEnabled(true)
+		return
+	elseif msgTbl.m_errorCode == 2 then
+		require("app/views/NoticeTips"):create("提示", "亲,活动已经结束了哦!", nil, nil, true)
+		self.m_button_Start:setEnabled(true)
+		return
+	end
+	-- 延迟2s结束转盘
+	local delayA = cc.DelayTime:create( 2 )
+	local callFunc = cc.CallFunc:create(function(sender)
+		gt.log("errorCode = " .. msgTbl.m_errorCode
+		.. ", data = " .. msgTbl.m_date
+		.. ", rewardId = " .. msgTbl.m_RewardID
+		.. ", m_NeedPhoneNum = " .. msgTbl.m_NeedPhoneNum)
+
+
+		self.m_stopIndex = msgTbl.m_RewardID
+
+		self:showNoNum()
+		self.m_button_Start:setEnabled(true)
+
+		sender:removeSelf()
+	end)
+	local seqAction = cc.Sequence:create(delayA, callFunc)
+	local newS = cc.Sprite:create()
+	newS:runAction( seqAction )
+	self:addChild( newS )
+end
+
+-- 服务器推送写入电话 98
+function ActivityMotherDay:onRecvSavePhoneNum(msgTbl)
+	if msgTbl.m_errorCode == 0 then
+		require("app/views/NoticeTips"):create("提示", "记录成功", nil, nil, true)
+	elseif msgTbl.m_errorCode == 1 then
+		require("app/views/NoticeTips"):create("提示", "未找到记录", nil, nil, true)
+	elseif msgTbl.m_errorCode == 2 then
+		require("app/views/NoticeTips"):create("提示", "活动结束", nil, nil, true)
+	end
+	self.m_phoneNum = msgTbl.m_phoneNum
+	self:showLingQuHuaFeiFenXiang()
+
+	gt.lotteryInfoTab.m_NeedPhoneNum = 0
+end
+
+-- 服务器推送抽奖信息 100
+function ActivityMotherDay:onRecvGetLotteryResult(msgTbl)
+	if msgTbl.m_DrawInfo then
+		self.m_listView_content:removeAllItems()
+
+		table.foreach(msgTbl.m_DrawInfo, function(i, v)
+			local name = self.m_listName[v[1]]
+			local date = string.format("%s年%s月%s日", string.sub(v[2], 1, 4), string.sub(v[2], 5, 6), string.sub(v[2], 7, 8))
+			local item1 = ccui.Text:create()
+			item1:setString(date)
+			item1:setTextColor(FONTSCOLOR)
+			item1:setFontSize(32)
+			self.m_listView_content:pushBackCustomItem(item1)
+
+			local item2 = ccui.Text:create()
+			item2:setString(name)
+			item2:setTextColor(FONTSCOLOR)
+			item2:setFontSize(32)
+			self.m_listView_content:pushBackCustomItem(item2)
+		end)
+	end
+	self.m_panel_2:setVisible(true)
+end
+
+-- 发送请求抽奖 95
+function ActivityMotherDay:sendGetLottery()
+	local msgToSend = {}
+	msgToSend.m_msgId = gt.CG_GET_GETLOTTERY
+	gt.socketClient:sendMessage(msgToSend)
+end
+
+-- 发送请求写入电话 97
+function ActivityMotherDay:sendSavePhoneNum()
+	local phoneNum = self.m_textField_phone:getStringValue()
+	if tonumber(phoneNum) and string.len(phoneNum)~= 11 then
+		require("app/views/NoticeTips"):create("输入有误", "请输入11位手机号码", nil, nil, true)
+		return false
+	end
+	if not phoneNum or not tonumber(phoneNum) then
+		self.m_textField_phone:setString("")
+		require("app/views/NoticeTips"):create("输入有误", "请输入11位手机号码", nil, nil, true)
+		return false
+	end
+	local msgToSend = {}
+	msgToSend.m_msgId = gt.CG_SAVE_PHONENUM
+	msgToSend.m_activeID = gt.lotteryInfoTab.m_activeID
+	msgToSend.m_date = gt.lotteryInfoTab.m_LastJoinDate
+	msgToSend.m_phoneNum = phoneNum
+	dump(msgToSend)
+	gt.socketClient:sendMessage(msgToSend)
+end
+
+-- 发送请求抽奖信息 98
+function ActivityMotherDay:sendLotteryResult()
+	local msgToSend = {}
+	msgToSend.m_msgId = gt.CG_GET_GETLOTTERYRESULT
+	gt.socketClient:sendMessage(msgToSend)
+end
+
+-- 开始抽奖
+function ActivityMotherDay:startCallback()
+	self.m_button_Start:setEnabled(false)
+	self:sendGetLottery()
+end
+
+function ActivityMotherDay:exitCallback()
+	gt.socketClient:unregisterMsgListener(gt.GC_RET_GETLOTTERY)
+	gt.socketClient:unregisterMsgListener(gt.GC_SAVE_PHONENUM)
+	gt.socketClient:unregisterMsgListener(gt.GC_GET_GETLOTTERYRESULT)
+
+	self:removeSelf()
+end
+
+function ActivityMotherDay:getAngle()
+	return 360 / self.m_count * math.pi / 180
+end
+
+function ActivityMotherDay:update(delta)
+	if not self.m_isRun then
+		return false
+	end
+
+	local rouletteAngle = self.m_sprite_roulette:getRotation()
+	rouletteAngle = rouletteAngle + self.MAX_SPEED
+	if rouletteAngle > 360 then
+		rouletteAngle = rouletteAngle - 360
+	end
+	self.m_sprite_roulette:setRotation(rouletteAngle)
+
+	if self.m_stopIndex == 0 then
+		return false
+	end
+
+	local stopAngle = 360 - (360 / self.m_count * self.m_stopIndex)
+
+	if stopAngle == rouletteAngle then
+		self.m_stopIndex = 0
+		self.m_isRun = false
+		if gt.lotteryInfoTab.m_LastGiftState == 0 then
+			self.m_button_Start:setEnabled(true)
+		end
+
+		local result = self.m_listName[gt.lotteryInfoTab.m_RewardID]
+		if string.find(result, "房卡") then
+			self.m_isCard = true
+			self:showFenXiangJieGuo()
+		elseif string.find(result, "话费") then
+			self:showFenXiangHuaFei()
+		end
+	end
+end
+
+function ActivityMotherDay:judgeWeixinShow()
+	if self.m_isCard then
+	    self.m_text_weixintip:setVisible(true)
+	    self.m_text_weixin:setVisible(true)
+		local str = Tools.getValue("Card_Weixin")
+		if str == "" then
+			str = ActivityDoubleWeixin[math.random(6)]
+			Tools.saveKeyValue("Card_Weixin", str)
+		end
+	    self.m_text_weixin:setString("微信号:" .. str)
+	else
+		self.m_text_weixintip:setVisible(false)
+		self.m_text_weixin:setVisible(false)
+	end
+end
+
+return ActivityMotherDay

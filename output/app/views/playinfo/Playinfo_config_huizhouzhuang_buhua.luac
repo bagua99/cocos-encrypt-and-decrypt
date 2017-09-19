@@ -1,0 +1,34 @@
+local PlayinfoConfigHuizhouzhuang_buhua = class("PlayinfoConfigBase", require("app/views/playinfo/Playinfo_config_base"))
+
+function PlayinfoConfigHuizhouzhuang_buhua:ctor(  )
+	self.super.ctor(self)
+	self.ruleType[0].desc = "无马"
+	-- self.ruleType[5].desc = '可胡七对'
+	-- self.ruleType[12].desc = "可接炮胡"
+	-- self.ruleType[19].desc = "无花加倍"
+	self.ruleType[33].desc = "跟庄 (1分)"
+    self.ruleType[53].desc = "马跟杠分"
+end
+
+function PlayinfoConfigHuizhouzhuang_buhua:getShowList( )
+	return {
+        18, --可抢杠胡 
+        30, --明杠可抢
+        17, --抢杠全包
+        35, --马跟底分
+        53, --马跟杠
+        117,--一炮多响
+        118, --鸡胡可抢杠
+		--跟庄
+        33, --跟庄 (1分)
+        78, --跟庄（2分）
+        79, --跟庄 (3分)
+		--马牌
+		0, --无马 
+        2, --买2马
+        4, --买4马
+        6, --买6马
+	}
+end
+
+return PlayinfoConfigHuizhouzhuang_buhua

@@ -1,0 +1,120 @@
+--region app.views.hongzhongwang.config
+--author:liubing
+--desc:  尝试吧一些数据拿到这里来
+--endregion
+
+local Room = Room;
+local Tools = Tools;
+local gt = gt;
+
+--一种想法，可能实现的话，写起来更舒服
+-- local RuleType = extends(Room.RuleType)
+-- {
+    
+-- }
+
+--仅仅扩展数据，不牵涉道元表的ext 
+local function simple_extends(basic)
+    local rt = clone(basic);
+    return function(ext)
+        ext = ext or {};
+        if(type(ext) ~= 'table') then
+            ext = {}; 
+        end 
+
+        for k,v in pairs(ext) do
+            rt[k] = v; 
+        end
+        return rt;
+    end 
+end 
+
+--使用方式 
+--最简单的clone ，但是还是要传入参数 {}
+-- simple_extends(Room.RuleType)
+-- {
+
+-- }
+--这个是才有数据的扩展
+-- simple_extends(Room.RuleType)
+-- {
+--     [12] = "可接炮胡",
+--     [19] = "无花加倍"
+-- }
+
+local config = {
+
+    ['RoomType'] = gt.RoomType.ROOM_HONGZHONGWANG,
+    ['RuleType'] = simple_extends(Room.RuleType){
+        [41]= '天胡10倍',
+        [5] = '七对',
+        [19] ="无鬼加倍"
+        
+    },
+    --玩法类型
+    Wanfa_Type = {
+        10, --"不带风",
+        23, --碰碰胡
+        40, --混一色
+        41, --天胡10倍
+        5, --七对
+        24, --清一色
+        27, --十三幺
+        38,  --抢杠胡2倍
+        46, --十八罗汉
+        39,-- 杠上开花2倍
+        52, --海底捞月2倍
+        35,--马跟底分
+    },
+    --鬼牌
+    Guipai_Type = {
+        49, --红中当马
+        51, --红中做鬼
+        8, --白板做鬼
+        50,--无红中多2马
+        19,--无鬼加倍
+
+    },
+
+    --买几个马
+    Mapai_Type = {
+        0, --无马 
+        2, --买2马
+        4, --买4马
+        6, --买6马
+    },
+    --？？有马才胡
+    Hu_Only_Ma = {12},
+    --默认选中 
+    defaltConfig = {
+        --保存值
+        WANFA_KEY = "guangdong_hongzhongwang_wanfa",
+        MAPAI_KEY = "guangdong_hongzhongwang_mapai",
+        GUIPAI_KEY = "guangdong_hongzhongwang_guipai",
+        --玩法
+        wanfa = {0,0,0,0,0,0,0,0,0,0,0,0,0},
+        --鬼牌
+        guipai = {1,0,3,0,0},
+        --马牌
+        mapai = 4,
+    },
+};
+
+
+
+function config:getGameType()
+    return Tools.GAME_TYPE[self.RoomType + 1];
+end 
+
+-- function config:saveGuipaiToFile()
+    
+-- end 
+-- function config:loadFromFile()
+
+-- end 
+
+-- function config:saveToFile(fileType)
+
+-- end 
+
+return config;

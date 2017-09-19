@@ -1,0 +1,295 @@
+local RoundReport = class("RoundReport",  BaseRoundReport)
+
+RoundReport.RuleType = clone(Room.RuleType)
+RoundReport.RuleType[5] = '七对';
+
+RoundReport.huMap = {
+	[5] = 117,
+	[17] = 12,
+	[18] = 12,
+	[19] = 124,
+	[20] = 8,
+	[21] = 122,
+	[22] = 122,
+	[23] = 103,
+	[24] = 106,
+	[25] = 123,
+	[26] = 111,
+	[27] = 115,
+	[30] = 128, 
+	[33] = 127,
+	[40] = 104,
+}
+
+
+local EXHUMSG = clone(RoundReport.HUMSG)
+EXHUMSG[107] = "清碰"
+EXHUMSG[111] = "全风"
+EXHUMSG[117] = "七对"
+
+
+
+
+function RoundReport:ctor()
+	RoundReport.super.ctor(self)
+end
+
+
+function RoundReport:init(roomPlayers, playerSeatIdx, rptMsgTbl, isLast)
+	--马牌
+	self.birdlist = {0, 0, 0, 0, 0, 0}
+	local Node_zhuaniao = gt.seekNodeByName(self.m_csbNode, "Node_zhuaniao")
+	if rptMsgTbl.m_bird_infos and #rptMsgTbl.m_bird_infos > 1 then
+		table.foreach(rptMsgTbl.m_bird_infos, function(i, bird)
+			if bird[1] > -1 then
+				self.birdlist[bird[1] + 1] = self.birdlist[bird[1] + 1] + 1
+			end
+		end)
+	elseif rptMsgTbl.m_bird_infos and #rptMsgTbl.m_bird_infos == 1 then
+		local mjData = rptMsgTbl.m_bird_infos[1][2]
+
+		if mjData[1] > 3 then
+			self.yimaNumber = 10
+		else
+			self.yimaNumber = mjData[2]
+		end
+	end
+	
+	self:setGost(roomPlayers, rptMsgTbl)
+	RoundReport.super.init(self, roomPlayers, playerSeatIdx, rptMsgTbl, isLast)
+	--马牌
+	local Node_zhuaniao = gt.seekNodeByName(self.m_csbNode, "Node_zhuaniao")
+	if rptMsgTbl.m_bird_infos and #rptMsgTbl.m_bird_infos > 0 then
+		local ttf = gt.createTTFLabel("马牌", 30)
+		Node_zhuaniao:addChild(ttf)
+		table.foreach(rptMsgTbl.m_bird_infos, function(i, bird)
+			local color = bird[2][1]
+			local number = bird[2][2]
+			local mjTileName = string.format("p4s%d_%d.png", color, number)
+			local mjTileSpr = cc.Sprite:createWithSpriteFrameName(mjTileName)
+			if bird[1] < 0 then
+				mjTileSpr:setColor(cc.c3b(127,127,127))
+			end	
+
+			if Tools.isGhost(color, number, self.m_gui) then
+				Tools.setMjTilesAngle( 4, mjTileSpr, gt.anglePngPath )
+			end
+			
+			mjTileSpr:setScale(0.7)
+			mjTileSpr:setPosition(cc.p(20 + i * mjTileSpr:getContentSize().width * 0.7, 0))
+			Node_zhuaniao:addChild(mjTileSpr)
+		end)
+	end
+end
+
+function RoundReport:isLost(roundResult)
+	if roundResult == 0 or roundResult == 3 then
+		return true
+	end
+end
+
+function RoundReport:isWin(roundResult)
+	if roundResult == 1 or roundResult == 2 or roundResult == 4 or roundResult == 5 then
+		return true
+	end
+end
+
+function RoundReport:getDetailTxt(seatIdx, rptMsgTbl)
+	local roundResult = rptMsgTbl.m_win[seatIdx]
+	local detailTxt = ""
+	if roundResult == 2 then
+		detailTxt = "接炮 "
+	elseif roundResult == 3 then
+		detailTxt = "点炮 "
+	end
+
+	local haveGSKH = false
+	local roundResult = rptMsgTbl["m_hu" .. seatIdx]
+	for k,v in pairs(roundResult) do 
+		if v == 8 then
+			haveGSKH = true
+		end
+
+		if haveGSKH and v == 7 then
+		elseif EXHUMSG[v] then
+			detailTxt = detailTxt .. " " .. EXHUMSG[v]
+		end
+		self:addWinType(v)
+	end
+
+	if rptMsgTbl.m_mgang[seatIdx] > 0 then
+		detailTxt = detailTxt .. " 明杠x" .. rptMsgTbl.m_mgang[seatIdx]
+	end
+
+	if rptMsgTbl.m_agang[seatIdx] > 0 then
+		detailTxt = detailTxt .. " 暗杠x" .. rptMsgTbl.m_agang[seatIdx]
+	end
+
+	if rptMsgTbl.m_dgang[seatIdx] > 0 then
+		detailTxt = detailTxt .. " 点杠x" .. rptMsgTbl.m_dgang[seatIdx]
+	end
+	if self.birdlist[seatIdx] > 0 then
+		detailTxt = string.format("%s 中马X%d ", detailTxt, self.birdlist[seatIdx])
+	end
+	
+	local ishu = rptMsgTbl.m_win[seatIdx]
+	if ishu == 1 or ishu == 2 or ishu == 4 or ishu == 5 then
+		if self.yimaNumber and self.yimaNumber > 0 then
+			detailTxt = detailTxt .. " 奖马X" .. self.yimaNumber
+		end
+	end	
+
+	return detailTxt
+end
+
+-- 设置胡牌标识
+function RoundReport:setWinSign(seatIdx, rptMsgTbl, playerReportNode, referScale, referPos)
+	local ishu = rptMsgTbl.m_win[seatIdx]
+	if ishu == 1 or ishu == 2 or ishu == 4 or ishu == 5 then
+		if #rptMsgTbl.m_hucards ~= 0 then
+			local mjTileName = string.format("p4s%d_%d.png", rptMsgTbl.m_hucards[1][1], rptMsgTbl.m_hucards[1][2])
+			local mjTileSpr = cc.Sprite:createWithSpriteFrameName(mjTileName)
+			mjTileSpr:setScale(referScale)
+			mjTileSpr:setPosition(referPos.x + 16, referPos.y)
+			playerReportNode:addChild(mjTileSpr)
+
+			local huSpr = cc.Sprite:create("res/sd/images/otherImages/hudejiaobiao1.png")
+			huSpr:setAnchorPoint(cc.p(1, 1))
+			huSpr:setPosition(cc.p(mjTileSpr:getContentSize().width, mjTileSpr:getContentSize().height))
+			mjTileSpr:addChild(huSpr)
+
+			if Tools.isGhost(rptMsgTbl.m_hucards[1][1], rptMsgTbl.m_hucards[1][2], self.m_gui) then
+				Tools.setMjTilesAngle( 4, mjTileSpr, gt.anglePngPath )
+			end
+		end
+		return true
+	end
+	return false
+end
+
+function RoundReport:showFinal(  )
+	local runningScene = display.getRunningScene()
+	if runningScene:getChildren(Room.ZOrder.REPORT) then
+		runningScene:getChildren(Room.ZOrder.REPORT):setVisible(true)
+	end
+end
+
+function RoundReport:haveHuType( _huList, _huType )
+	if not _huList or not _huType then
+		return false
+	end
+
+	return _huList[_huType] or false	
+end
+
+
+
+function RoundReport:addWinType( _type )
+	self.m_huList = self.m_huList or {}
+	if _type == 107 then --清碰
+		self.m_huList[103] = true
+		self.m_huList[106] = true
+	elseif _type == 105 then --混碰 
+		self.m_huList[103] = true
+		self.m_huList[104] = true
+	elseif _type == 132 then 
+		self.m_huList[106] = true
+		self.m_huList[117] = true
+	else
+		self.m_huList[_type] = true
+	end
+end
+
+function RoundReport:showPlayType(roomPlayers, playerSeatIdx, rptMsgTbl)
+	local typeNode = gt.seekNodeByName(self.m_csbNode, "Node_playType")
+
+	if not typeNode then
+		return
+	end
+
+	local ruleDesc = ""
+	local maNum = ""
+	local haveGui = false
+	local qiangGangType, siGostType = 0, 0
+
+	dump(gt.roomPlayData.m_playtype ,'playtype');
+
+	for k,v in pairs(gt.roomPlayData.m_playtype) do
+		if v == 8 or v == 9 or v == 28 then
+			haveGui = true
+		elseif v == 0 or v == 2 or v == 4 or v == 6 then
+			-- maNum = self.RuleType[v]		
+		elseif v == 35 or v == 53 then
+			ruleDesc = ruleDesc .. self.RuleType[v] .. "  "				
+		else
+			if RoundReport.huMap[v] and self:haveHuType(self.m_huList, RoundReport.huMap[v]) then
+				if v == 17 or v == 18 then
+					if qiangGangType > 0 then
+						qiangGangType = qiangGangType > v and v or qiangGangType
+					else
+						qiangGangType = v
+					end
+				elseif v == 21 or v == 22 then
+					siGostType = siGostType < v and v or siGostType
+				else
+					if self.RuleType[v] then
+						ruleDesc = ruleDesc .. self.RuleType[v] .. "  "
+					end
+				end				
+			end
+		end		
+	end
+
+	-- ruleDesc = ruleDesc .. maNum
+	if qiangGangType > 0 then
+		ruleDesc = ruleDesc .. self.RuleType[qiangGangType] .. "  "
+	end
+
+	if siGostType > 0 then
+		ruleDesc = ruleDesc .. self.RuleType[siGostType] .. "  "
+	end
+
+	local player = roomPlayers[playerSeatIdx]
+	local guiCard = player:getGui()
+	-- if haveGui and guiCard then
+	-- 	ruleDesc = ruleDesc .. "鬼牌："
+	-- end
+
+	local descLable = gt.createTTFLabel(ruleDesc, 25)
+	descLable:setAnchorPoint(cc.p(0, 0.5))
+	typeNode:addChild(descLable)
+
+	--添加鬼牌
+	if haveGui then
+		--判断标签的宽度
+		local maxwidth = (#guiCard > 1 and RoundReport.TTF_SG_MAXWIDTH) or RoundReport.TTF_MAXWIDTH
+		if descLable:getContentSize().width > maxwidth then
+			descLable:setWidth(maxwidth)
+			descLable:setLineBreakWithoutSpace(true)
+		end
+
+		local ghostTTF = gt.createTTFLabel("鬼牌:", 25)
+		ghostTTF:setAnchorPoint(cc.p(0, 0.5))
+		ghostTTF:setPosition(cc.p(descLable:getPositionX() + descLable:getContentSize().width +  5, 0))
+		typeNode:addChild(ghostTTF)
+
+		if guiCard and #guiCard > 0 then
+			local lastNode = ghostTTF
+			for k,v in pairs(guiCard) do
+				local farme = string.format("p4s%d_%d.png", v.mjColor, v.mjNumber)
+				local mjTileSpr = cc.Sprite:createWithSpriteFrameName(farme)
+				mjTileSpr:setScale(0.8)
+				mjTileSpr:setAnchorPoint(cc.p(0, 0.5))
+				mjTileSpr:setPosition(cc.p(lastNode:getPositionX() + lastNode:getContentSize().width + 5, 0))
+				Tools.setMjTilesAngle( 4, mjTileSpr, gt.anglePngPath )
+				typeNode:addChild(mjTileSpr)
+				lastNode = mjTileSpr
+			end
+		end
+	elseif descLable:getContentSize().width > RoundReport.TTF_DES_MAX_WIDTH  then
+		descLable:setWidth(RoundReport.TTF_DES_MAX_WIDTH)
+		descLable:setLineBreakWithoutSpace(true)
+	end
+end
+
+return RoundReport

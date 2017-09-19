@@ -1,0 +1,46 @@
+local RcvSyncRoomState = class("RcvSyncRoomState", BaseRcvSyncRoomState)
+
+-- 同步房间状态 35
+function RcvSyncRoomState:ctor()
+	self:registerMsgListener(gt.GC_SYNC_ROOM_STATE, self, self.onRcvSyncRoomState)
+end
+
+function RcvSyncRoomState:onRcvSyncRoomState(msgTbl)
+	if msgTbl.m_msgId == gt.GC_SYNC_ROOM_STATE then
+		if msgTbl.m_number and msgTbl.m_color and msgTbl.m_number > 0 and msgTbl.m_color > 0 then
+			if self.m_scene.m_ghost_type == 28 then
+				self.m_scene:getRoom():setGui(msgTbl, true, true)
+			else
+				self.m_scene:getRoom():setGui(msgTbl, true)
+			end
+		end
+	elseif self.m_scene.m_ghost_type and self.m_scene.m_ghost_type ~= 8 then
+		self.m_scene:getRoom():cleanGui()
+	end
+
+	if msgTbl.m_successive == nil then
+		-- print("断线重连没有收到m_successive MSG")
+	else
+		-- print("断线重连已经收到m_successive MSG :")
+		local lens = #msgTbl.m_successive
+		local players = self.m_scene:getRoom():getPlayers()
+		for i=1,lens do
+			print(msgTbl.m_successive[i])
+			if players[i] and players[i].setSuccessCnt then
+				players[i]:setSuccessCnt(msgTbl.m_successive[i])
+				-- print("断线重连庄次数写入成功.......")
+			end
+		end
+	end
+
+	RcvSyncRoomState.super.onRcvSyncRoomState(self, msgTbl)
+
+	-- 设置鬼牌
+	if msgTbl.m_msgId == gt.GC_SYNC_ROOM_STATE then
+		if msgTbl.m_number and msgTbl.m_color and msgTbl.m_number > 0 and msgTbl.m_color > 0 then
+			self.m_scene:setGhost( msgTbl )
+		end		
+	end
+end
+
+return RcvSyncRoomState

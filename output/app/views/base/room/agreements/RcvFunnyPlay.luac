@@ -1,0 +1,64 @@
+local RcvFunnyPlay = class("RcvFunnyPlay", BaseRoomAgreement)
+
+-- 玩家互动动画播放 115
+function RcvFunnyPlay:ctor()
+	self:registerMsgListener(gt.GC_FUNNY_PLAY, self, self.onRcvFunnyPlay)
+end
+
+RcvFunnyPlay.ActionFile = {
+	{"ani_songhua_1", "ani_songhua_2", "ani_songhua_3"},
+	{"ani_diujidan_0", "ani_diujidan_1", "ani_diujidan_2"},
+}
+
+function RcvFunnyPlay:onRcvFunnyPlay(_msgTbl)	
+	local playType = _msgTbl.m_interactionType + 1
+	if not self.ActionFile[playType] then
+		-- gt.log("error action type")
+		return
+	end
+
+	local room = self.m_scene:getRoom()
+	local mainSeat = room:getMainSeatIdx()
+	local animeIdx = 2
+	local time = 1.5
+
+	local sendIdx = _msgTbl.m_sendPos
+	local sendPlay = room:getPlayer(sendIdx)
+	local sendPos = self:getPosBySeatIdx(sendPlay:getDisplayIdx())
+
+	local toIdx = _msgTbl.m_targetPos
+	local toPlay = room:getPlayer(toIdx)
+	local toPos = nil
+
+	if mainSeat == toIdx then
+		animeIdx = 3
+		toPos = gt.winCenter
+	else
+		toPos = self:getPosBySeatIdx(toPlay:getDisplayIdx())
+	end
+
+	local fileList = {"da/" .. self.ActionFile[playType][1] .. ".csb",  "da/" .. self.ActionFile[playType][animeIdx] .. ".csb"}
+	local actionList = {self.ActionFile[playType][1], self.ActionFile[playType][animeIdx]}
+	local posList = {sendPos, toPos}
+	local time = self:getLength(sendPos, toPos) * 0.0008
+
+
+	self.m_scene:addFunnyAnimation({type = 2, file = fileList, actionname = actionList, pos = posList, time = time})
+end
+
+function RcvFunnyPlay:getLength( _pos1, _pos2 )
+	return math.sqrt( (_pos1.x - _pos2.x) * (_pos1.x - _pos2.x) + (_pos1.y - _pos2.y) * (_pos1.y - _pos2.y))
+end
+
+function RcvFunnyPlay:getPosBySeatIdx( _displayIdx )
+	local nodeRoot = gt.seekNodeByName(self.m_scene, "Node_playerInfo_" .. _displayIdx)
+	if nodeRoot then
+		local headSprit = gt.seekNodeByName(nodeRoot, "Btn_headFrame")
+		local worldPos = nodeRoot:convertToWorldSpace(cc.p(headSprit:getPositionX(), headSprit:getPositionY()))
+		return self.m_scene:convertToNodeSpace(worldPos)
+	end
+	return cc.p(0, 0)
+end
+
+
+return RcvFunnyPlay

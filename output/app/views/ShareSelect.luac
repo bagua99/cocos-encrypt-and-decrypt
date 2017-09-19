@@ -1,0 +1,88 @@
+local ShareSelect = class("ShareSelect", function()
+	return cc.LayerColor:create(cc.c4b(85, 85, 85, 85), gt.winSize.width, gt.winSize.height)
+end)
+
+local gt = cc.exports.gt
+
+function ShareSelect:ctor()
+	-- 注册节点事件
+	self:registerScriptHandler(handler(self, self.onNodeEvent))
+
+	local csbNode = cc.CSLoader:createNode("ShareSelect.csb")
+	csbNode:setPosition(gt.winCenter)
+	self:addChild(csbNode)
+	self.rootNode = csbNode
+
+	if gt.isIOSPlatform() then
+		self.luaBridge = require("cocos/cocos2d/luaoc")
+	elseif gt.isAndroidPlatform() then
+		self.luaBridge = require("cocos/cocos2d/luaj")
+	end
+
+	-- self.description = "广东人都爱玩的麻将游戏，简单好玩，随时随地组局，亲们快快加入吧！猛戳下载！"
+	-- self.description = "广东麻将是一款原汁原味的广东本土麻将，玩法齐全."
+	-- self.title = "【闲来广东麻将】"
+	-- self.url = gt.getLocationString("LTKey_0051")
+	-- self.androidParam = "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V"
+	
+	local btn_haoyou = gt.seekNodeByName(self.rootNode, "Button_haoyou")
+	gt.addBtnPressedListener(btn_haoyou, function()
+		-- if gt.isIOSPlatform() then
+		-- 	local ok = self.luaBridge.callStaticMethod("AppController", "shareURLToWX",
+		-- 		{url = self.url, title = self.title, description = self.description})
+		-- elseif gt.isAndroidPlatform() then
+		-- 	local ok = self.luaBridge.callStaticMethod("org/cocos2dx/lua/AppActivity", "shareURLToWX",
+		-- 		{self.url, self.title, self.description},
+		-- 		self.androidParam)
+		-- end
+		Tools.shareToWX(Tools.SHARE_TO_WX_FRIEND)
+		self:removeFromParent()
+	end)
+
+	-- self.pyqUrl = "http://www.xianlaihy.com/mahjonggd"
+	-- self.pyqUrl = "http://a.app.qq.com/o/simple.jsp?pkgname=com.xianlai.mahjonggd"
+	local btn_pengyou = gt.seekNodeByName(self.rootNode, "Button_pengyou")
+	gt.addBtnPressedListener(btn_pengyou, function()
+		-- if gt.isIOSPlatform() then
+		-- 	local ok = self.luaBridge.callStaticMethod("AppController", "shareURLToWXPYQ",
+		-- 		{url = self.pyqUrl, title = self.title .. self.description, description = ""})
+		-- elseif gt.isAndroidPlatform() then
+		-- 	local ok = self.luaBridge.callStaticMethod("org/cocos2dx/lua/AppActivity", "shareURLToWXPYQ",
+		-- 		{self.pyqUrl, self.title .. self.description, ""},
+		-- 		self.androidParam)
+		-- end
+		Tools.shareToWX(Tools.SHARE_TO_WX_TIMELINE)
+		self:removeFromParent()
+	end)
+end
+
+function ShareSelect:onNodeEvent(eventName)
+	if "enter" == eventName then
+		local listener = cc.EventListenerTouchOneByOne:create()
+		listener:setSwallowTouches(true)
+		listener:registerScriptHandler(handler(self, self.onTouchBegan), cc.Handler.EVENT_TOUCH_BEGAN)
+		listener:registerScriptHandler(handler(self, self.onTouchEnded), cc.Handler.EVENT_TOUCH_ENDED)
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:addEventListenerWithSceneGraphPriority(listener, self)
+	elseif "exit" == eventName then
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:removeEventListenersForTarget(self)
+	end
+end
+
+function ShareSelect:onTouchBegan(touch, event)
+	return true
+end
+
+function ShareSelect:onTouchEnded(touch, event)
+	local bg = gt.seekNodeByName(self.rootNode, "Img_bg")
+	if bg then
+		local point = bg:convertToNodeSpace(touch:getLocation())
+		local rect = cc.rect(0, 0, bg:getContentSize().width, bg:getContentSize().height)
+		if not cc.rectContainsPoint(rect, cc.p(point.x, point.y)) then
+			self:removeFromParent()
+		end
+	end
+end
+
+return ShareSelect

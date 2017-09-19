@@ -1,0 +1,220 @@
+--region app.views.base.hall.EditRoom
+--desc: 常用玩法编辑 EditRoom 
+--endregion 
+-- by:house
+
+local EditRoom = class("EditRoom", function()
+	return cc.Layer:create()
+end)
+
+local infoCell_H = 100
+local infoCell_W = 235
+function EditRoom:ctor()
+	self.m_csbNode = cc.CSLoader:createNode("res/views/base/EditRoom.csb")
+	self.m_csbNode:setPosition(gt.winCenter)
+	self:addChild(self.m_csbNode)
+
+	local btnGroupString = cc.UserDefault:getInstance():getStringForKey("room_btn_group")
+	if btnGroupString and string.len(btnGroupString) > 0 then
+		self.btnGroup = json.decode(cc.UserDefault:getInstance():getStringForKey("room_btn_group")) or {}
+	else
+		self.btnGroup = gt.RoomGroup
+		cc.UserDefault:getInstance():setStringForKey("room_btn_group",json.encode(gt.RoomGroup))
+	end
+	self.tabBtns = {}
+	self.allPlayBtns = {}
+	local freePlay = gt.freePlay or {}
+	self.hashfp = {};
+	for i,v in pairs(freePlay) do
+		self.hashfp[v] = 1
+	end
+	self.freePlay2 = gt.freePlay2 or {}
+	self:initScrollViewTitle()
+	self:updateScrollViewAll()
+	self.scrollViewTitleHasChanged = false
+	
+	local btnExit = gt.seekNodeByName(self.m_csbNode, "Btn_exit")
+	gt.addBtnPressedListener(btnExit,function() 
+		self:removeFromParent()
+		local createRoomLayer = require("app/views/base/hall/CreateRoom"):create()
+		display.getRunningScene():addChild(createRoomLayer,6)
+	end )
+	local btnBack = gt.seekNodeByName(self.m_csbNode, "Btn_back")
+	gt.addBtnPressedListener(btnBack,function() 
+		self:removeFromParent()
+	end )
+end
+
+-- 更新左边常用玩法列表
+function EditRoom:initScrollViewTitle( )
+	local scrollViewTitle = gt.seekNodeByName(self.m_csbNode, "ScrollView_title")
+	self.tabModel = gt.seekNodeByName(scrollViewTitle,'Btn_model');
+	self.scrollViewTitle = scrollViewTitle
+	
+	local infoNum = (#self.btnGroup < 6 and 6) or #self.btnGroup
+	local innerH = infoCell_H * infoNum + 10;
+	self.scrollViewTitle:setInnerContainerSize(cc.size(self.scrollViewTitle:getContentSize().width, innerH))
+	self.pos_model_y = innerH - infoCell_H * 0.5 + 30
+	self.tabModel:setVisible(true)
+	for i = 1,#self.btnGroup do 
+		local tabCell = self:getTabCell(i)
+		self.scrollViewTitle:addChild(tabCell);
+		tabCell:setPositionY(self.pos_model_y - (i - 1) *infoCell_H);
+	end 
+	self.tabModel:setVisible(false);
+	self.tabModel:setEnabled(true);
+end
+
+function EditRoom:getTabCell( index )
+	local tabCell = self.tabModel:clone()
+	self.tabBtns[index] = tabCell
+	local info = self.btnGroup[index]
+	local off = gt.seekNodeByName(tabCell,'Image_off')
+	local prefix = 'images/otherImages/createroom/'
+	off:setContentSize(cc.size(0,0))
+	off:loadTexture(prefix ..info[2])
+
+	local btnRemove = gt.seekNodeByName(tabCell,'Button_remove')
+	gt.addBtnPressedListener(btnRemove,function() 
+		self:removeBtn(info)
+	end )
+	self:handlerBtnArrow(tabCell,info)
+	tabCell:setVisible(true)
+	return tabCell
+end
+
+function EditRoom:updateScrollViewTitle(  )
+	local infoNum = (#self.btnGroup < 6 and 6) or #self.btnGroup
+	local innerH = infoCell_H * infoNum + 10
+	self.scrollViewTitle:setInnerContainerSize(cc.size(self.scrollViewTitle:getContentSize().width, innerH))
+	self.pos_model_y = innerH - infoCell_H * 0.5 + 30
+	for i=1,#self.tabBtns do
+		self.tabBtns[i]:setPositionY(self.pos_model_y - (i - 1) *infoCell_H)
+	end
+end
+
+-- 全部玩法列表
+function EditRoom:updateScrollViewAll(  )
+	local prefix = 'images/otherImages/createroom/'
+	local scrollViewAll = gt.seekNodeByName(self.m_csbNode,"ScrollView_all")
+	local innerSize = scrollViewAll:getInnerContainerSize();
+	local btnModel = gt.seekNodeByName(scrollViewAll,'Btn_model_all');
+	local sz = scrollViewAll:getContentSize();
+	local pos_model_y = btnModel:getPositionY();
+	local pos_model_x = btnModel:getPositionX();
+	local top_offset = innerSize.height - pos_model_y;
+	local infoNum = #gt.RoomGroup
+	for i=1,infoNum do
+		local tabCell = btnModel:clone();
+		local info = gt.RoomGroup[i];
+		local off = gt.seekNodeByName(tabCell,'Image_off');
+		local onImage = gt.seekNodeByName(tabCell,'Image_on');
+		local isInBtnGroup = self:checkInfoInGroup(info)
+		onImage:setVisible(isInBtnGroup)
+		-- tabCell:setEnabled(not isInBtnGroup)
+		off:setContentSize(cc.size(0,0))
+		off:loadTexture(prefix ..info[2])
+		local btnHelp = gt.seekNodeByName(tabCell,"Button_help")
+		gt.addBtnPressedListener(btnHelp,function() 
+			self:showPlayRule(info)
+		end )
+		gt.addBtnPressedListener(tabCell,function() 
+			self:addPlayToBtnGroup(info,tabCell)
+		end )
+		tabCell:setPosition(pos_model_x + ((i - 1) % 4) * infoCell_W, pos_model_y - (math.floor((i - 1) / 4) ) * infoCell_H);
+		scrollViewAll:addChild(tabCell)
+		self.allPlayBtns[i] = tabCell
+		self:handlerBtnArrow(tabCell,info)
+	end
+
+	btnModel:setVisible(false);
+	btnModel:setEnabled(true);
+end
+
+--	右边添加到左边
+function EditRoom:addPlayToBtnGroup( info,tabCell )
+	if self:checkInfoInGroup(info) then
+		return
+	end
+	table.insert(self.btnGroup,info)
+	local tabCellLeft = self:getTabCell(#self.btnGroup)
+	self.scrollViewTitle:addChild(tabCellLeft)
+	self:updateScrollViewTitle()
+	self.scrollViewTitle:jumpToBottom()
+	cc.UserDefault:getInstance():setStringForKey("room_btn_group",json.encode(self.btnGroup))
+	cc.UserDefault:getInstance():flush()
+	self:updateBtnStatus(tabCell,false)
+end
+
+-- 检测是不是在左边常用玩法里面
+function EditRoom:checkInfoInGroup( info )
+	for i,v in ipairs(self.btnGroup) do
+		if v[1] == info[1] then
+			return true
+		end
+	end
+	return false
+end
+
+-- 	显示玩法规则
+function EditRoom:showPlayRule( info )
+	local helpLayer = require("app/views/help/HelpLayer"):create(info[2])
+	display.getRunningScene():addChild(helpLayer,6)
+end
+
+-- @description移除常用玩法按钮
+-- @param btnInfo 按钮信息
+function EditRoom:removeBtn( btnInfo )
+	self.scrollViewTitleHasChanged = true
+	local btnIndex = -1
+	for i,v in ipairs(self.btnGroup) do
+		if v[1] == btnInfo[1] then
+			table.remove(self.btnGroup,i)
+			btnIndex = i
+		end
+	end
+	if self.tabBtns[btnIndex] then
+		local btn = self.tabBtns[btnIndex]
+		table.remove(self.tabBtns,btnIndex)
+		btn:removeFromParent()
+		btn = nil
+	end
+	self:updateScrollViewTitle()
+	for i,v in ipairs(gt.RoomGroup) do
+		if v[1] == btnInfo[1] and self.allPlayBtns[i] then
+			self:updateBtnStatus(self.allPlayBtns[i],true)
+		end
+	end
+	cc.UserDefault:getInstance():setStringForKey("room_btn_group",json.encode(self.btnGroup))
+	cc.UserDefault:getInstance():flush()
+end
+
+function EditRoom:updateBtnStatus( btnCell,enabled )
+	local onImage = gt.seekNodeByName(btnCell,'Image_on')
+	onImage:setVisible(not enabled)
+end
+-- 处理按钮角标
+function EditRoom:handlerBtnArrow( btnCell,info )
+	-- 角标
+	local freeImage = gt.seekNodeByName(btnCell,'Image_free')
+	if(self.hashfp[info[1]] and self.hashfp[info[1]] == 1) then 
+		freeImage:setVisible(true);
+	else
+		freeImage:setVisible(false);
+	end
+	local t = self.freePlay2[info[1]];
+	if(t and gt.isValidTimestamp(t))then  
+		freeImage:setVisible(true);
+	else
+		freeImage:setVisible(false);
+	end
+
+	local newImage = gt.seekNodeByName(btnCell,"Image_new")
+	if(info[4] == 1) then 
+		newImage:setVisible(true);
+	else
+		newImage:setVisible(false);
+	end
+end
+
+return EditRoom

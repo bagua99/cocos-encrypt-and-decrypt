@@ -1,0 +1,299 @@
+--region app.views.jieyang.RoomOptions
+--author: 
+--desc:  揭阳麻将玩法选择界面
+--
+--endregion
+
+local _mod = ...;  --使用的是这种格式  app/views/...
+_mod= string.gsub(_mod,"%/","%.");
+local config = import('.config',_mod); --> 导入这个文件
+
+local Wanfa_Type = config.Wanfa_Type;
+local Guipai_Type = config.Guipai_Type;
+local Mapai_Type = config.Mapai_Type;
+local Hu_Only_Ma = config.Hu_Only_Ma;
+local defaultConfig = config.defaltConfig;
+
+local userDefault = cc.UserDefault:getInstance()
+
+local RoomOptions = class("RoomOptions", BaseRoomOptions)
+
+function RoomOptions:ctor()
+	self.csbNode = cc.CSLoader:createNode("res/views/guangdong/Createjieyang.csb")
+	self:addChild(self.csbNode)
+	self.disColor = cc.c3b(170,170,170)
+	self.super.ctor(self)
+end
+
+
+function RoomOptions:initWanfa()
+	self.playWanfa = defaultConfig.wanfa;
+	local wan = Tools.getValue(defaultConfig.WANFA_KEY)
+	if wan ~= "" then
+		wan = string.split(wan, ",")
+		for i = 1, #wan do
+			self.playWanfa[i] = tonumber(wan[i])
+		end
+	end
+	local function setSelectWanfa(index, check)
+		self.wanfaNodes[index].check:setSelected(check or false)
+		self:refreshCheckOutline(self.wanfaNodes[index].label, check or false)
+		if check then
+			self.playWanfa[index] = index
+		elseif check == false then
+			self.playWanfa[index] = 0
+		end
+	end
+	local function checkBoxWanfa( sender, eventType )
+		if eventType == ccui.CheckBoxEventType.selected then
+			setSelectWanfa(sender.index, true)
+			if(sender.index == 2) then
+				self:forbidSelectWanfa(5); 
+				self:forbidSelectWanfa(6);
+				setSelectWanfa(3,false);
+				setSelectWanfa(1,false);
+			elseif(sender.index == 3) then
+				setSelectWanfa(1,false);
+				setSelectWanfa(2,false);
+				self:allowSelectWanfa(5);  
+				self:allowSelectWanfa(6); 
+				if(self.playWanfa[4]== 4) then 
+					setSelectWanfa(5,true);
+				end 
+			elseif(sender.index == 1)then 
+				setSelectWanfa(2,false);
+				setSelectWanfa(3,false);
+				self:allowSelectWanfa(5);  
+				self:allowSelectWanfa(6); 
+				if(self.playWanfa[4]== 4) then 
+					setSelectWanfa(5,true);
+				end 
+			end 
+			if(sender.index == 4) then 
+				setSelectWanfa(5,true);
+			end
+			self:saveWanfaToFile();
+		elseif eventType == ccui.CheckBoxEventType.unselected then
+			if(sender.index == 2 or  sender.index == 3 or sender.index == 1) then
+				setSelectWanfa(sender.index, true);
+			elseif(sender.index == 5 and self.playWanfa[4]== 4) then
+				setSelectWanfa(sender.index, true);
+			else
+				setSelectWanfa(sender.index, false)
+			end 
+			self:saveWanfaToFile();
+		end
+		dump(self.playWanfa,'playWanfa');
+	end
+	local wanfaNode = gt.seekNodeByName(self.csbNode,'ScrollView_Content');
+	wanfaNode:setSwallowTouches(false);
+
+	self.wanfaNodes = self:getNodes(wanfaNode,'wanfa',#Wanfa_Type)
+	for i, v in ipairs(self.wanfaNodes) do
+		if self.playWanfa[i] == i then
+			setSelectWanfa(i, true)
+			if(i == 2) then 
+				self:forbidSelectWanfa(5);
+				self:forbidSelectWanfa(6);
+			end 
+		else
+			setSelectWanfa(i)
+		end
+		v.check.index = i
+		v.check:addEventListener(checkBoxWanfa)
+		gt.addBtnPressedListener(v.button, function( )
+			if v.check:isSelected() then
+				checkBoxWanfa(v.check, ccui.CheckBoxEventType.unselected)
+			else
+				checkBoxWanfa(v.check, ccui.CheckBoxEventType.selected)
+			end
+		end)
+	end
+end
+
+function RoomOptions:initGuipai()
+	self.playGuipai = userDefault:getIntegerForKey(defaultConfig.GUIPAI_KEY, defaultConfig.guipai)
+	local function setSelectGuipai(index, check)
+		self.guipaiNodes[index].check:setSelected(check or false)
+		self:refreshCheckOutline(self.guipaiNodes[index].label, check or false)
+		if check then
+			self.playGuipai = index
+			userDefault:setIntegerForKey(defaultConfig.GUIPAI_KEY, index)
+		end
+	end
+	local function checkBoxGuipai( sender, eventType )
+		if eventType == ccui.CheckBoxEventType.selected then
+			if self.playGuipai ~= sender.index then
+				setSelectGuipai(self.playGuipai, false)
+				setSelectGuipai(sender.index, true)
+			end
+		elseif eventType == ccui.CheckBoxEventType.unselected then
+			sender:setSelected(true)
+		end
+	end
+
+	local baseNode = gt.seekNodeByName(self.csbNode,'ScrollView_Content');
+	self.guipaiNodes = self:getNodes(baseNode, "guipai", #Guipai_Type);
+
+	for i, v in ipairs(self.guipaiNodes) do		
+		if self.playGuipai == i then
+			setSelectGuipai(i, true)
+		else
+			setSelectGuipai(i)
+		end		
+		v.check.index = i
+		v.check:addEventListener(checkBoxGuipai)
+		-- v.panel:addClickEventListener(function(  )
+		-- 	if v.check:isSelected() then
+		-- 		checkBoxGuipai(v.check, ccui.CheckBoxEventType.unselected)
+		-- 	else
+		-- 		checkBoxGuipai(v.check, ccui.CheckBoxEventType.selected)
+		-- 	end
+		-- end)
+		gt.addBtnPressedListener(v.button, function( )
+			print("button:Guipai");
+			if v.check:isSelected() then
+				checkBoxGuipai(v.check, ccui.CheckBoxEventType.unselected)
+			else
+				checkBoxGuipai(v.check, ccui.CheckBoxEventType.selected)
+			end
+		end)
+	end
+end
+
+function RoomOptions:initMapai()
+	self.playMapai = userDefault:getIntegerForKey(defaultConfig.MAPAI_KEY,defaultConfig.mapai)
+	local function setSelectMapai(index, check)
+		self.mapaiNodes[index].check:setSelected(check or false)
+		self:refreshCheckOutline(self.mapaiNodes[index].label, check or false)
+		if check then
+			self.playMapai = index
+			userDefault:setIntegerForKey(defaultConfig.MAPAI_KEY, index)
+		end
+	end
+	local function checkBoxMapai( sender, eventType )
+		if eventType == ccui.CheckBoxEventType.selected then
+			if sender.index == 1 then
+				self:toWuMa()
+			else
+				self:toYouMa()
+			end
+			if self.playMapai ~= sender.index then
+				setSelectMapai(self.playMapai, false)
+				setSelectMapai(sender.index, true)
+			end
+			-- if sender.index == 2 then 
+			-- 	setSelectMapai(3, true) -- 
+			-- end
+		elseif eventType == ccui.CheckBoxEventType.unselected then
+			sender:setSelected(true)
+		end
+	end
+	local baseNode = gt.seekNodeByName(self.csbNode,'ScrollView_Content');
+	self.mapaiNodes = self:getNodes(baseNode, "mapai", #Mapai_Type)
+
+	for i, v in ipairs(self.mapaiNodes) do		
+		if self.playMapai == i then
+			setSelectMapai(i, true)
+			if i == 1 then
+				self:toWuMa()
+			else 
+				self:toYouMa();
+			end
+		else
+			setSelectMapai(i)
+		end
+		v.check.index = i
+		v.check:addEventListener(checkBoxMapai)
+		gt.addBtnPressedListener(v.button, function( )
+			if not v.check:isSelected() then
+				checkBoxMapai(v.check, ccui.CheckBoxEventType.selected)
+			end
+		end)
+	end
+end
+
+function RoomOptions:forbidSelectWanfa(index)
+	self.wanfaNodes[index].check:setSelected(false);
+	self.wanfaNodes[index].check:setEnabled(false)
+	self:refreshCheckOutline(self.wanfaNodes[index].label, false)
+	self.wanfaNodes[index].label:setTextColor(self.disColor)
+	self.wanfaNodes[index].button:setEnabled(false)
+	self.playWanfa[index] = 0
+end
+
+function RoomOptions:allowSelectWanfa(index)
+	self.wanfaNodes[index].check:setEnabled(true)
+	self:refreshCheckOutline(self.wanfaNodes[index].label, false)
+	self.wanfaNodes[index].button:setEnabled(true)
+end
+
+function RoomOptions:forbidSelectMapai(index)
+	print("forbidSelectGuipai "..index);
+	local node = self.mapaiNodes[index];
+	node.check:setSelected(false);
+	node.check:setEnabled(false)
+	self:refreshCheckOutline(node.label, false)
+	node.label:setTextColor(self.disColor)
+	node.button:setEnabled(false)
+	--self.playGuipai[index] = 0
+end
+
+function RoomOptions:allowSelectMapai(index)
+	local node = self.mapaiNodes[index];
+	node.check:setEnabled(true)
+	self:refreshCheckOutline(node.label, false)
+	node.button:setEnabled(true)
+end
+
+function RoomOptions:toYougui()
+	-- self:allowSelectWanfa(6)
+	-- self:saveWanfaToFile();
+end 
+
+function RoomOptions:toWugui()
+	-- self:forbidSelectWanfa(6)
+	-- self:saveWanfaToFile();
+end 
+function RoomOptions:toYouMa()
+	for i, v in ipairs(Hu_Only_Ma) do
+		self:allowSelectWanfa(v)
+	end
+	self:saveWanfaToFile();
+	-- for i = 3,7 do 
+	-- 	self:allowSelectMapai(i);
+	-- end 
+end
+
+function RoomOptions:toWuMa()
+	for i, v in ipairs(Hu_Only_Ma) do
+		self:forbidSelectWanfa(v)
+	end
+	self:saveWanfaToFile();
+	
+	-- for i = 3,7 do 
+	-- 	self:forbidSelectMapai(i);
+	-- end 
+end
+
+function RoomOptions:getStatu()
+	return config.RoomType;
+end
+
+function RoomOptions:getPlayType()
+	local typeList = {}
+	table.insert(typeList, Mapai_Type[self.playMapai])
+	table.insert(typeList, Guipai_Type[self.playGuipai]) --鬼牌 第一个固定放进去
+	for k, v in pairs(self.playWanfa) do
+		if v ~= 0 then
+			table.insert(typeList, Wanfa_Type[v])
+		end
+	end
+	return typeList
+end
+
+function RoomOptions:saveWanfaToFile()
+	Tools.saveKeyValue(defaultConfig.WANFA_KEY, table.concat(self.playWanfa, ","));
+end 
+
+return RoomOptions

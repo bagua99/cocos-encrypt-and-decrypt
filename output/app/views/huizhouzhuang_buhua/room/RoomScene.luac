@@ -1,0 +1,533 @@
+--region app.views.huizhouzhuang_buhua.room.RoomScene
+--desc: 红中王的房间内Scene
+--endregion 
+
+--加入一个config 尝试一下
+local _mod = ...;
+_mod= string.gsub(_mod,"%/","%.");
+
+print('mod = '.._mod);
+
+local config = import('..config',_mod);
+local RuleType = config.RuleType;
+--dump(RuleType,'RuleType',5);
+
+local RoomScene = class("RoomScene", BaseRoomScene)
+
+function RoomScene:ctor(msgTbl)
+	self.super.ctor(self,msgTbl,config:getGameType());
+	for k,v in pairs(msgTbl.m_playtype) do
+		print("m_playtype = ", v)
+		if v == 8 then --白板鬼
+			self.m_room:setGui({m_color = 5, m_number = 3})
+			self.m_ghost_type = 8
+			-- gt.socketClient:dispatchMessage({m_msgId = 161, m_ghostCard = {m_color = 1, m_numbe = 9}})
+			break
+		elseif v == 51 then --红中鬼
+			self.m_room:setGui({m_color = 5, m_number = 1})
+			self.m_ghost_type = 51
+		-- elseif v == 49 then 
+		-- 	--self.m_room.m_hideRedDragonNode = false;
+		end
+		self.m_room.m_hideRedDragonNode = false;
+	end	
+	gt.anglePngPath = "res/sd/images/otherImages/gui_icon.png"
+	self:initGhost()
+end
+
+-- 玩法设置
+function RoomScene:getRuleDesc( _msgTbl, _splitChar , _type)
+	--print('getRuleDesc: ')
+	--dump(_msgTbl ,'msgTbl',5);
+	print('_type = '.._type);
+	
+	local ruleDesc = ""
+	if _type == RoomScene.RULEDESC_TYPE.ROOM then
+		ruleDesc = Room.TypeName[_msgTbl.m_state + 1]
+	end
+	local qianggangType = nil
+	local minggang = nil
+	for i, v in ipairs(_msgTbl.m_playtype) do
+		if v == 0 then
+			ruleDesc = ruleDesc .. " 无马"
+		elseif v == 17 or v == 18 then
+			if qianggangType then
+				if qianggangType > v then
+					qianggangType = v
+				end
+			else
+				qianggangType = v
+			end
+		elseif v == 30 then
+			minggang = true
+		elseif RuleType[v] then
+			ruleDesc = ruleDesc .. _splitChar .. RuleType[v]
+		end
+	end
+
+	if minggang then
+		ruleDesc = ruleDesc .. _splitChar .. RuleType[30]
+	end
+
+	if qianggangType then
+		if qianggangType == 18 and minggang then
+		else
+			ruleDesc = ruleDesc .. _splitChar .. RuleType[qianggangType]
+		end
+	end
+	
+	print('ruleDesc = '..ruleDesc);
+	return ruleDesc
+end
+function RoomScene:setFlowerAniStartNum(seatIdx,num)
+	print("RoomScene:setFlowerAniStartNum "..tostring(seatIdx) ..' Num:'..tostring(num))
+	self.m_tmpRdNum = self.m_tmpRdNum  or {0,0,0,0};
+	self.m_tmpRdNum[seatIdx] = num;
+end 
+
+--
+function RoomScene:appendFlowerNum(seatIdx,num)
+	num = num or 1;
+	print('appendFlowerNum seatIdx = '.. tostring(seatIdx) ..' '..tostring(num));
+	local roomPlayer = self:getPlayer(seatIdx)
+	if(not roomPlayer ) then
+		return; 
+	end 
+	local uiIndex = roomPlayer:getDisplayIdx();
+	local csbLayer = self:getCsbLayer();
+	local playerInfoNode = gt.seekNodeByName(csbLayer, "Node_playerInfo_" .. uiIndex)
+	local hongzhongNode = gt.seekNodeByName(playerInfoNode,'Node_hongzhong');
+	local hzNumNode= gt.seekNodeByName(hongzhongNode,'Atlas_num');
+	local flowrSpr = gt.seekNodeByName(hongzhongNode,'Spr_Zhuang');
+
+	self.m_tmpRdNum = self.m_tmpRdNum or {0,0,0,0}
+	local flowerNum = self.m_tmpRdNum[seatIdx]-- + 1;
+	flowerNum = flowerNum +num;
+	-- end 
+	--self.m_tmpRdNum[seatIdx] = room:getFlowerNum(seatIdx);
+	print('flowerNum '..tostring(flowerNum));
+	hzNumNode:setString(tostring(flowerNum));
+	self.m_tmpRdNum [seatIdx] = flowerNum;
+end 
+
+function RoomScene:refreshFlowerNum(seatIdx)
+	print('refreshFlowerNum player ['..seatIdx ..'] ' )
+	local roomPlayer = self:getPlayer(seatIdx)
+	if(not roomPlayer ) then
+		return; 
+	end 
+	local room = self:getRoom();
+	local uiIndex = roomPlayer:getDisplayIdx();
+	local csbLayer = self:getCsbLayer();
+	local playerInfoNode = gt.seekNodeByName(csbLayer, "Node_playerInfo_" .. uiIndex)
+	local hongzhongNode = gt.seekNodeByName(playerInfoNode,'Node_hongzhong');
+	local hzNumNode= gt.seekNodeByName(hongzhongNode,'Atlas_num');
+	
+	local flowerNum =  #roomPlayer:getFillupFlowers(); --roomPlayer:getHuizhouFlowerNum(seatIdx) --+ num
+	print('flowerNum '..flowerNum);
+	hzNumNode:setString(tostring(flowerNum));
+	self.m_tmpRdNum = self.m_tmpRdNum  or {0,0,0,0};
+	self.m_tmpRdNum[seatIdx] = 0;
+end 
+
+-- function RoomScene:removeAllRdHideTiles(seatIdx)
+-- 	if(type(self.m_rdHideTiles) == 'table' and type(self.m_rdHideTiles[seatIdx]) == 'table' )  then 
+-- 		for i,v in ipairs(self.m_rdHideTiles[seatIdx]) do 
+-- 			--v:removeSelf();
+-- 		end
+-- 		self.m_rdHideTiles[seatIdx]= {};
+-- 	end 
+-- end
+
+ function RoomScene:stopFillupActions(seatIdx)
+	print("RoomScene:stopFillupActions ");
+
+	local player = self.m_room:getPlayer(seatIdx);
+	if(not player) then --已经添加过了
+		return;
+	end
+	player:clearFillupActionNodes();
+
+	local fillupFunc = player:getFillupImmiFunc();
+	if(fillupFunc ~= nil) then 
+		print("do at fillupFunc Immi");
+		fillupFunc()
+		player:clearFillupImmiFunc();
+	end
+end 
+
+local function onFillupTileAction(tileSpr,posStart,posMid,posEnd,delayTimer,callback)
+	print('local onMJTileSprMoveAction '..tostring(mjTile) ..' '..tostring(posStart)..' '..tostring(posMid)..' '..tostring(posEnd).. ' '..tostring(delayTimer));
+	local spr = tileSpr;
+	local totalTime = 0.05;
+	spr:setPosition(posStart);
+	local delay1 = cc.DelayTime:create(delayTimer);
+	local moveToAc_1 = cc.MoveTo:create(totalTime,posMid);
+	local rotateToAc_1 = cc.ScaleTo:create(totalTime, 1.5)
+	local delay2 = cc.DelayTime:create(0.8)
+	local moveToAc_2 = cc.MoveTo:create(totalTime, posEnd)
+	local rotateToAc_2 = cc.ScaleTo:create(totalTime, 1.0)
+	local callFunction = cc.CallFunc:create(callback);
+	local rmAct = cc.Hide:create()--cc.RemoveSelf:create();
+	spr:runAction(cc.Sequence:create(delay1,
+				cc.Spawn:create(moveToAc_1, rotateToAc_1),
+				delay2,
+				cc.Spawn:create(moveToAc_2, rotateToAc_2),
+				callFunction,
+				rmAct));
+end 
+
+function RoomScene:onFillupFlowerAnimation(seatIdx,fillupCards,index,maxsize,nextFillupFunc)
+	print("RoomScene:onFillupFlowerAnimation ")
+	local player = self.m_room:getPlayer(seatIdx);
+	if(not player) then 
+		return;
+	end 
+	local mjTilesReferPos = player:getTilesReferPos();
+	local posStart = mjTilesReferPos.holdStart;
+	local playerMJTiles = player:getHoldMJTiles();
+	-- local mjColor = fillupCards[1];
+	-- local mjNumber = fillupCards[2];
+	local pos_0 = {};
+	local pos_1 = {};
+	local pos_2 = {};
+
+
+	local fillupNum = #fillupCards
+	local posMid = self:getMJWorldPoint(mjTilesReferPos.showRedDragonTilePos)
+	local pos_2_half_num = math.floor(fillupNum /2)
+	posMid = cc.pSub(posMid, cc.pMul(mjTilesReferPos.showRedDragonSpace, pos_2_half_num))
+
+	for i = 1,fillupNum do 
+		pos_0[i] = mjTilesReferPos.holdStart; --> 默认的位置
+		pos_1[i] = cc.pAdd(posMid, cc.pMul(mjTilesReferPos.showRedDragonSpace, i-1))
+	end
+	
+	
+
+
+
+	local rdHideTiles = {};
+	local inTiles = {};
+	for i,v in ipairs(fillupCards) do 
+		local mjColor =  v[1];
+		local mjNumber = v[2];
+		for i2,v2 in ipairs(playerMJTiles) do 
+			if(v2.mjColor == mjColor and  v2.mjNumber == mjNumber) then --某一个花牌
+				table.insert(rdHideTiles ,v2);
+				pos_0[i] = self:getMJWorldPoint(cc.p(v2.mjTileSpr:getPosition())) --> 取得位置,手牌的话，
+			end 
+		end
+		inTiles[i]= self:addFillupMJTileToPlayer(seatIdx, mjColor, mjNumber)
+		player:addFillupActionNode(inTiles[i].mjTileSpr); 
+	end 
+	-- for i,v in ipairs(playerMJTiles) do
+	-- 	if(v.mjColor == mjColor and  v.mjNumber == mjNumber) then --某一个花牌
+	-- 		table.insert(rdHideTiles ,v);
+	-- 		--player:addFillupHideFiles();
+	-- 	end  
+	-- end
+	for i,v in ipairs(rdHideTiles) do 
+		table.removebyvalue(playerMJTiles,v);
+		v.mjTileSpr:setVisible(false);
+	end
+	self:setRdHideTiles(seatIdx,rdHideTiles);
+
+	--fillupCards
+	-- local function getPosMid()
+	-- 	local posMid = self:getMJWorldPoint(mjTilesReferPos.showRedDragonTilePos)
+	-- 	return posMid; 
+	-- end 
+
+	local function getPosEnd()
+		local posEnd = self:getMJWorldPoint(mjTilesReferPos.flowerStart)
+		print(tostring(seatIdx)..' posEnd '..tostring(posEnd));
+		return posEnd;
+	end 
+
+	--local posMid = getPosMid();
+	local posEnd = getPosEnd();
+	local delayTimer = 0.01;
+	
+	for i,v in ipairs(inTiles) do
+		local delay = 0.05 + (i - 1) * 0.05;
+		onFillupTileAction(v.mjTileSpr,pos_0[i],pos_1[i],posEnd,delay,function()
+			print('onActionEnd '..i )
+			if(i >= maxsize) then
+				self:removeAllRdHideTiles(seatIdx);
+				nextFillupFunc();
+			end
+		end)
+	end
+
+
+end 
+
+function RoomScene:clearFillup()
+	print("huizhouhua:clearFillup");
+	for k,player in pairs(self.m_room:getPlayers()) do
+		player:clearFillupFlowers();
+		player:clearFillupActionNodes();
+		player:clearFillupImmiFunc();
+	end
+	self:setInFillupNum(0);
+	self:setFlowerEndCall(nil);
+end 
+
+function RoomScene:touchPlayerMjTiles(touch)
+	local player = self.m_room:getMainPlayer()
+	if not player then
+		return
+	end
+
+	for idx, mjTile in ipairs(player:getHoldMJTiles()) do
+		if(mjTile.mjColor   ~=6) then --花牌不能出
+			local touchPoint = mjTile.mjTileSpr:convertTouchToNodeSpace(touch)
+			local mjTileSize = mjTile.mjTileSpr:getContentSize()
+			local mjTileRect = cc.rect(0, 0, mjTileSize.width, mjTileSize.height)
+			if cc.rectContainsPoint(mjTileRect, touchPoint) then
+				gt.soundEngine:playEffect("common/audio_card_click")
+				return mjTile, idx
+			end
+		end
+	end
+	return nil
+end
+
+function RoomScene:grayMJTile(mjTile,isGray)
+	print("RoomScene:grayMJTileTouch " ..'')
+	if(mjTile ~= nil and mjTile.mjTileSpr ~= nil) then 
+		local spr = mjTile.mjTileSpr;
+		if(spr ~= nil) then 
+			if(isGray ) then 
+				spr:setOpacity(128)
+			else
+				spr:setOpacity(255)
+			end
+		end
+	end
+end 
+
+
+function RoomScene:isFlowerAnimation()
+	-- self.m_flowerAniStatus = self.m_flowerAniStatus or false;
+	-- return self.m_flowerAniStatus;
+	return self:getInFillupNum() > 0;
+end 
+
+
+function RoomScene:setFlowerEndCall(func)
+	self.m_flowerAniEndCall = func;
+end
+
+
+function RoomScene:feedCard(msgTbl)
+	dump(msgTbl,'RoomScene:feedCard ');
+
+	local buGroups = {
+		msgTbl.m_bu_reddragon0,
+		msgTbl.m_bu_reddragon1,
+		msgTbl.m_bu_reddragon2,
+		msgTbl.m_bu_reddragon3,
+	};
+
+	dump(buGroups,'buGroups');
+
+	local function doFillupFlower(seatIdx,flowerGroup,inflowers,fillCards,callback)
+		local room = self:getRoom()
+		if(seatIdx == room:getMainSeatIdx()) then 
+			self:onFillupFlower_MainPlayer(seatIdx,flowerGroup,inflowers,fillCards,callback);
+		else
+			self:onFillupFlower_OtherPlayer(seatIdx,flowerGroup,inflowers,fillCards,callback);
+		end 
+	end
+
+	local function nextFillup(seatIdx)
+		if(seatIdx > 4) then 
+			print("nextFillup Finished");
+			self:setGhostAnimation(false); --完成补花之后可以操作
+			return;
+		end
+		
+		local player = self:getRoom():getPlayer(seatIdx);
+		if(not player) then 
+			return;
+		end 
+
+		local flowerGroup = buGroups[seatIdx];
+		local fillNum =  #flowerGroup;
+		if(fillNum == 0) then
+			nextFillup(seatIdx + 1)
+		else
+			local inflowers = {};
+			local fillCards = {};
+			local lastGroup = flowerGroup[fillNum];
+			local inNum = #lastGroup[2]
+			local valLast  = lastGroup[2][inNum]; --> 真正的 值
+			local rlColor,rlNumber = valLast[1],valLast[2];
+
+			for i ,v in ipairs(flowerGroup) do
+				local vGroup = v;
+				table.insertto(inflowers,vGroup[1]); --> 
+				if(i <fillNum) then
+					table.insertto(fillCards,vGroup[2]); --> 
+				else 
+					local iiLen = #vGroup[2];
+					for ii,iv in ipairs(vGroup[2]) do 
+						if(isMoFlower) then 
+							if(ii < iiLen) then 
+								table.insert(fillCards,iv);
+							end 
+						else 
+							table.insert(fillCards,iv);
+						end 
+					end
+				end 
+			end
+			dump(inflowers,'inflowers');
+			dump(fillCards,'fillCards');
+			self:setInFillupNum(fillNum);
+			local flowers = player:getFillupFlowers(); --> 
+			self:setFlowerAniStartNum(seatIdx,#flowers)
+			table.insertto(flowers,inflowers);
+			player:setFillupFlowers(flowers);
+			dump(flowers,'flowers');
+			-- player:setFillupImmiFunc(function()
+			-- 	self:refreshFlowerNum(seatIdx) --> 刷新一下好了 --> 刷一下花就行，自己的话，不出完花不让摸牌的
+			-- 	nextFillup(seatIdx + 1);
+			-- end)
+
+			doFillupFlower(seatIdx,flowerGroup,inflowers,fillCards,function()
+				nextFillup(seatIdx + 1)
+			end);
+		end
+	end
+
+	--
+	self:setGhostAnimation(true);
+	nextFillup(1);
+end 
+
+
+function RoomScene:onFillupFlower_MainPlayer(seatIdx,flowerGroups,inflowers,fillCards,callback)
+	print('RcvTurnShowMjTile:onFillupRedDrangon_MainPlayer');
+	--local flowerGroups = msgTbl.m_bu_reddragon_Vect
+	local numGroups = #flowerGroups; 
+	--local seatIdx = msgTbl.m_pos + 1
+	local room = self:getRoom()
+	local player = room:getPlayer(seatIdx)
+	local function isFlower(color)
+		return color == 6;
+	end
+
+	local inFlowerNum = #inflowers;
+	--local curMJ = isFlower(msgTbl.m_color); 
+
+	local function finalOut()
+		print("finalOut");
+		--dump(msgTbl,'msgTbl');
+		-- if( msgTbl.m_color ~= 0 and  msgTbl.m_number ~= 0) then
+		-- 	self:refreshFlowerNum(seatIdx) 
+		-- 	--self:turnShowMjTileDecision(msgTbl)
+		-- 	--player:clearFillupImmiFunc()
+		-- end
+		self:refreshFlowerNum(seatIdx) 
+		self:setInFillupNum(0);
+		-- if(self.m_flowerAniEndCall ~= nil and type(self.m_flowerAniEndCall) == 'function') then 
+		-- 	self.m_flowerAniEndCall();
+		-- 	self:setFlowerEndCall(nil);
+		-- end
+		self:setFlowerEndCall(nil); 
+
+		if(callback ~= nil) then 
+			callback();
+		end 
+	end
+
+	local function fillupFlowers(ctCards)
+		dump(ctCards,'ctCards ')
+		if(ctCards)then
+			if(type(ctCards) == 'table') then 
+				for i,v in ipairs(ctCards) do 
+					local num = #player:getHoldMJTiles()
+					print('holdMJTiles num ='..num )
+					local mjTilesReferPos = player:getTilesReferPos()
+					local mjTilePos = mjTilesReferPos.holdStart
+					mjTilePos = cc.pAdd(mjTilePos, cc.pMul(mjTilesReferPos.holdSpace,num))
+					mjTilePos = cc.pAdd(mjTilePos, cc.p(36, 0))
+					local mahjongNode = self:getMahjongNode()
+					local mjTile = self:addMJTileToSelf(v[1], v[2])
+					mjTile.mjTileSpr:setPosition(mjTilePos)
+				end
+			end
+		end
+		self:sortSelfMjTiles()
+	end 
+
+	local function  onFlowerIncrment(i)
+		print('onFlowerIncrment ' ..tostring(i).. ' Max='..tostring(numGroups));
+		if(i > numGroups) then 
+			finalOut();
+			return;
+		end 
+		local flowerCard = flowerGroups[i][1];
+		local flowerNum = #flowerCard;
+		local fillCards = flowerGroups[i][2];
+
+		self:onFillupFlowerAnimation(seatIdx,flowerCard,i,flowerNum,function()
+			self:appendFlowerNum(seatIdx,flowerNum)
+			fillupFlowers(fillCards);
+			onFlowerIncrment(i+1)
+		end)
+		
+	end 
+	onFlowerIncrment(1);
+end
+
+function RoomScene:onFillupFlower_OtherPlayer(seatIdx,flowerGroups,inflowers,fillCards,callback)
+	print('RcvTurnShowMjTile:onFillupFlower_OtherPlayer');
+
+	local numGroups = #flowerGroups; 
+	local room = self:getRoom()
+	local player = room:getPlayer(seatIdx)
+
+	local inFlowerNum = #inflowers;
+	--最后显示的动画，按原来的逻辑走 
+	local function finalOut()
+		print("onFillupFlower_OtherPlayer: finalOut")
+		--if( msgTbl.m_color ~= 0 and   msgTbl.m_number ~= 0) then 
+		self:refreshFlowerNum(seatIdx);
+		--	self:turnShowMjTile(msgTbl)
+			--player:clearFillupImmiFunc()
+		--end
+		self:setInFillupNum(0);
+		--if(self.m_flowerAniEndCall ~= nil and type(self.m_flowerAniEndCall) == 'function') then 
+			--self.m_flowerAniEndCall();
+		self:setFlowerEndCall(nil);
+		--end 
+
+		if(callback ~= nil) then 
+			callback();
+		end 
+	end
+
+	local function  onFlowerIncrment(i)
+		print('onFlowerIncrment ' ..tostring(i).. ' Max='..tostring(numGroups));
+		if(i > numGroups) then 
+			finalOut();
+			return;
+		end 
+		--local flowerCard = inflowers[i];
+		local flowerCard = flowerGroups[i][1];
+		local flowerNum = #flowerCard;
+		local fillCards = flowerGroups[i][2];
+
+		self:onFillupFlowerAnimation(seatIdx,flowerCard,i,flowerNum,function()
+			self:appendFlowerNum(seatIdx,flowerNum)
+			onFlowerIncrment(i+1)
+		end)
+	end 
+	onFlowerIncrment(1) --补花 
+end
+
+return RoomScene

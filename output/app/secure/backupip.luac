@@ -1,0 +1,34 @@
+
+local backupip = class("backupip")
+
+function backupip:ctor(...)
+	local args = {...}
+	self.succeedCall = args[1]
+	self.failedCall = args[2]
+end
+
+function backupip:request()
+	secure.log("backupip request")
+	self:reset()
+	
+	self.ip = secure.backupip.ip
+	secure.log("backupip response:" .. self.ip)
+	if self.succeedCall then
+		self.succeedCall(self)
+	end
+end
+
+function backupip:getIP()
+	secure.log("backupip getIP:" .. self.ip)
+	return self.ip
+end
+
+function backupip:getName()
+	return "backupip"
+end
+
+function backupip:reset()
+	self.ip = nil
+end
+
+return backupip

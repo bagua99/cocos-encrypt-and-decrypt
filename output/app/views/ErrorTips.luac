@@ -1,0 +1,75 @@
+local gt = cc.exports.gt
+
+
+local FONTSCOLOR = cc.c3b(254,205,255);
+local ErrorTips = class("ErrorTips", function()
+	return gt.createMaskLayer(150)
+end)
+
+function ErrorTips:ctor(str)
+	-- local csbNode = cc.CSLoader:createNode("UpdateSuccess.csb")
+	-- csbNode:setPosition(gt.winCenter)
+	-- self:addChild(csbNode)
+
+	-- self.m_scrollView = gt.seekNodeByName(csbNode, "ScrollView_content")
+	-- gt.seekNodeByName(csbNode, "Sprite_title"):setVisible(false)
+
+	-- -- 关闭按键
+	-- local closeBtn = gt.seekNodeByName(csbNode, "Btn_close")
+
+	local scrollView = ccui.ScrollView:create()
+	scrollView:setDirection(ccui.ScrollViewDir.vertical)
+	-- scrollView:setBackGroundColorType(ccui.LayoutBackGroundColorType.solid)
+	-- scrollView:setBackGroundColor(cc.c3b(0,0,0))
+	-- scrollView:setBackGroundColorOpacity(127)
+	scrollView:setContentSize(cc.size(gt.winSize.width,gt.winSize.height-80))
+	scrollView:setPosition(cc.p(0,40))
+	self:addChild(scrollView)
+
+	self.m_scrollView = scrollView
+
+	--cc.SpriteFrameCache:getInstance():addSpriteFrames("res/sd/images/common_button.plist")
+	local closeBtn = ccui.Button:create("res/sd/images/otherImages/common/anniuzise.png","","",ccui.TextureResType.localType)
+    closeBtn:setTouchEnabled(true)
+    closeBtn:setPosition(cc.p(gt.winCenter.x,40))
+    closeBtn:setTitleText("确  定")
+    closeBtn:setTitleColor(cc.c3b(0,0,0))
+    closeBtn:setTitleFontSize(28)
+    self:addChild(closeBtn)
+
+	gt.addBtnPressedListener(closeBtn, function()
+		self:removeFromParent()
+	end)            
+
+	self:initContent(str)
+
+	local runningScene = cc.Director:getInstance():getRunningScene()
+	if runningScene then
+		runningScene:addChild(self, 9999)
+	end
+end
+
+function ErrorTips:initContent(str)
+	print('ErrorTips: '..str);
+	str = str or ""
+	local scrollVwSize = self.m_scrollView:getContentSize()
+	local contentLabel = gt.createTTFLabel(str, 25)
+	contentLabel:setAnchorPoint(0.5, 1)
+	--contentLabel:setColor(cc.c3b(103,38,0))
+	contentLabel:setColor(FONTSCOLOR)
+	contentLabel:setVerticalAlignment(cc.VERTICAL_TEXT_ALIGNMENT_TOP)
+	contentLabel:setWidth(scrollVwSize.width)
+	local labelSize = contentLabel:getContentSize()
+	if labelSize.height <= scrollVwSize.height then
+		contentLabel:setPosition(scrollVwSize.width/2, scrollVwSize.height)
+		self.m_scrollView:setEnabled(false)
+	else
+		contentLabel:setPosition(scrollVwSize.width/2, labelSize.height)
+		self.m_scrollView:setEnabled(true)
+	end
+	self.m_scrollView:addChild(contentLabel)
+	self.m_scrollView:setInnerContainerSize(labelSize)
+	self.m_scrollView:jumpToBottom()
+end
+
+return ErrorTips

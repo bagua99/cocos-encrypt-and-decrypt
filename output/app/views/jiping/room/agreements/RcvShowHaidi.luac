@@ -1,0 +1,29 @@
+local RcvShowHaidi = class("RcvShowHaidi", BaseRoomAgreement)
+
+function RcvShowHaidi:ctor()
+	self:registerMsgListener(gt.CG_TURN_HAIDI, self, self.showHaidiInLayer)
+end
+
+function RcvShowHaidi:showHaidiInLayer(msgTbl)
+	local room = self.m_scene:getRoom()
+	self.m_scene:setPlayerDecision(true)
+	self.m_scene:setHaveHaiDiPai(true)
+
+	local dipaiNode = self.m_scene:getHaiDiPai()
+	dipaiNode:setVisible( true )
+	local spr = gt.seekNodeByName(dipaiNode, "Sprite_pai")
+	spr:setSpriteFrame(string.format("p4s%d_%d.png", msgTbl.m_color, msgTbl.m_number))
+
+	self.m_scene:stopAllActions()
+	local delayTime = cc.DelayTime:create(1.2)
+	local callFunc = cc.CallFunc:create(function(sender)
+		self.m_scene:setPlayerDecision(false)
+		self.m_scene:setHaveHaiDiPai(false)
+		dipaiNode:setVisible(false)
+	end)
+
+	local seqAction = cc.Sequence:create(delayTime, callFunc)
+	self.m_scene:runAction(seqAction)
+end
+
+return RcvShowHaidi

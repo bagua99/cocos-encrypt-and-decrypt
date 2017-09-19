@@ -1,0 +1,195 @@
+--region app.views.ActivityMsg
+--desc: 活动消息，公告也在这里显示
+--endregion
+
+-- local gt = cc.exports.gt
+local ActivityMsg = class("ActivityMsg", function()
+	return gt.createMaskLayer()
+end)
+
+local FONTSCOLOR = cc.c3b(254,205,255);
+
+ActivityMsg.TYPE_MSG = 1
+ActivityMsg.TYPE_NOTICE = 2
+ActivityMsg.m_msg = nil
+
+function ActivityMsg:ctor()
+	self:registerScriptHandler(handler(self, self.onNodeEvent))
+
+	local csbNode = cc.CSLoader:createNode("ActivityMsg.csb")
+	csbNode:setAnchorPoint(0.5, 0.5)
+	csbNode:setPosition(gt.winCenter)
+	self:addChild(csbNode)
+	self.rootNode = csbNode
+
+	-- 返回按键
+	local backBtn = gt.seekNodeByName(self, "Btn_back")
+	gt.addBtnPressedListener(backBtn, function()
+		self:removeFromParent()
+	end)
+
+	-- 暂无消息 :)
+	local emptyLabel = gt.seekNodeByName(self, "Label_empty")
+	if emptyLabel then
+		emptyLabel:setVisible( false )
+	end
+	self.emptyLabel = emptyLabel
+
+	--初始化界面数据
+	local msgBtn = gt.seekNodeByName(self, "Btn_msg")
+	local noticeBtn = gt.seekNodeByName(self, "Btn_notice")
+
+	self.noticeTitle = gt.seekNodeByName(self,'title_notice');
+	self.messageTitle = gt.seekNodeByName(self,'title_message');
+
+	self.m_data = {}
+	self.m_data[ActivityMsg.TYPE_MSG] = {controller=msgBtn, msg = self.m_msg}
+	self.m_data[ActivityMsg.TYPE_NOTICE] = {controller=noticeBtn, msg = (gt.commonNoticData and string.gsub(gt.commonNoticData.m_strInfo, "/n", "\n")) or ""}
+	
+	--初始化界面
+	gt.addBtnPressedListener(msgBtn, function()
+		self:setShowType(ActivityMsg.TYPE_MSG)
+	end)
+
+	gt.addBtnPressedListener(noticeBtn, function()
+		self:setShowType(ActivityMsg.TYPE_NOTICE)
+	end)
+	
+	self.agreementScrollVw = gt.seekNodeByName(self, "ScrollView_msg")
+	self.ttf = gt.createTTFLabel("", 36)
+	self.ttf:setWidth(self.agreementScrollVw:getContentSize().width - 100)
+	self.ttf:setColor(FONTSCOLOR)
+	self.ttf:setAnchorPoint(cc.p(0.5, 1))
+	self.agreementScrollVw:addChild(self.ttf)
+
+	local readedId = Tools.getValue(gt.ReadedCommonMsgKey) or ""
+	if not gt.commonNoticData or readedId == gt.commonNoticData.m_strId then
+		self:setShowType(ActivityMsg.TYPE_MSG)
+	else
+		self:setShowType(ActivityMsg.TYPE_NOTICE)
+	end
+
+end
+
+function ActivityMsg:onNodeEvent(eventName)
+	if "enter" == eventName then
+		local listener = cc.EventListenerTouchOneByOne:create()
+		listener:setSwallowTouches(true)
+		listener:registerScriptHandler(handler(self, self.onTouchBegan), cc.Handler.EVENT_TOUCH_BEGAN)
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:addEventListenerWithSceneGraphPriority(listener, self)
+
+		if not self.m_msg then
+			self:requestAgreement()
+		end
+	elseif "exit" == eventName then
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:removeEventListenersForTarget(self)
+
+		if self.xhr then
+			self.xhr:unregisterScriptHandler()
+			self.xhr = nil
+		end
+	end
+end
+
+function ActivityMsg:onTouchBegan(touch, event)
+	return true
+end
+
+function ActivityMsg:requestAgreement()
+	local xhr = cc.XMLHttpRequest:new()
+	xhr.responseType = cc.XMLHTTPREQUEST_RESPONSE_STRING
+	xhr:open("GET", "http://update.xlsxmj.com/client/guangdong_message/messagenotice.txt")
+	local function onReadyStateChanged()
+		if xhr.readyState == 4 then
+			if xhr.status == 200 then
+				ActivityMsg.m_msg = xhr.response
+				self.m_data[ActivityMsg.TYPE_MSG].msg = xhr.response
+				if self.m_showType == ActivityMsg.TYPE_MSG then
+					self:setTTF(xhr.response)
+				end
+			else
+				gt.log("xhr.readyState is:" .. xhr.readyState .. " xhr.status is: " .. xhr.status)
+			end
+		else
+			gt.log("xhr.readyState is:" .. xhr.readyState .. " xhr.status is: " .. xhr.status)
+		end
+		xhr:unregisterScriptHandler()
+		self.xhr = nil		
+	end
+	xhr:registerScriptHandler(onReadyStateChanged)
+	xhr:send()
+
+	self.xhr = xhr
+end
+
+function ActivityMsg:setShowType( _type )
+	if self.m_showType == _type then
+		return
+	end
+
+	self.m_showType = _type
+	if _type == ActivityMsg.TYPE_NOTICE and gt.commonNoticData then
+		Tools.saveKeyValue(gt.ReadedCommonMsgKey, gt.commonNoticData.m_strId)
+		local runningScene = display.getRunningScene()
+		if runningScene and runningScene.checkNewMsg then
+			runningScene:checkNewMsg()
+		end
+	end
+
+	--设置按钮样式
+	for k,value in pairs(self.m_data) do
+		local highlight = gt.seekNodeByName(value.controller, "Spr_up")
+		highlight:setVisible(k == _type)
+		local sprTitle = gt.seekNodeByName(value.controller, "Spr_title")
+		sprTitle:setVisible(k ~= _type)
+		local sprTitle_1 = gt.seekNodeByName(value.controller, "Spr_title_1")
+		sprTitle_1:setVisible(k == _type)
+
+	end
+
+	if(_type == ActivityMsg.TYPE_NOTICE) then 
+		if(self.noticeTitle) then 
+			self.noticeTitle:setVisible(true);
+		end 
+		if(self.messageTitle) then 
+			self.messageTitle:setVisible(false);
+		end 
+	else
+		if(self.messageTitle) then 
+			self.messageTitle:setVisible(true);
+		end
+		if(self.noticeTitle) then 
+			self.noticeTitle:setVisible(false);
+		end  
+	end 
+
+	--设置显示信息
+	self:setTTF(self.m_data[_type].msg)
+end
+
+function ActivityMsg:setTTF( _msg )
+	if _msg == nil or _msg == "" then
+		self.emptyLabel:setVisible(true)
+		self.ttf:setVisible(false)
+		return
+	end
+	
+	self.emptyLabel:setVisible(false)
+	self.ttf:setVisible(true)
+
+	self.ttf:setString(_msg)
+	local scrollVwSize = self.agreementScrollVw:getContentSize()
+	local labelSize = self.ttf:getContentSize()
+	if labelSize.height < scrollVwSize.height then
+		self.ttf:setPosition(scrollVwSize.width * 0.5, scrollVwSize.height)
+	else
+		self.ttf:setPosition(scrollVwSize.width * 0.5, labelSize.height)
+	end
+	self.agreementScrollVw:setInnerContainerSize(labelSize)
+end
+
+
+return ActivityMsg
+

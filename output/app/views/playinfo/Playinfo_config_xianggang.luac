@@ -1,0 +1,21 @@
+local PlayinfoConfigXianggang = class("PlayinfoConfigBase", require("app/views/playinfo/Playinfo_config_base"))
+
+function PlayinfoConfigXianggang:ctor(  )
+	self.super.ctor(self)
+end
+
+function PlayinfoConfigXianggang:getShowList( )
+	return {
+           	68 , -- '全冲',
+	70, -- '一番起胡',
+	71, --'二番起胡',
+	72, -- '三番起胡',
+	73, -- '五番起胡',
+	74, -- '五番封顶',
+	75, -- '七番封顶',
+	76, -- '十番封顶',
+	77, -- '十三番封顶',
+	}
+end
+
+return PlayinfoConfigXianggang

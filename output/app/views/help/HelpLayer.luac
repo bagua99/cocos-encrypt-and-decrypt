@@ -1,0 +1,185 @@
+local gt = cc.exports.gt
+local FONTSCOLOR = cc.c3b(254,205,255);
+local Scroll_Width = 950
+
+local infoGroups = {
+	{"info_tuidao","tab_tuidao1.png","tab_tuidao2.png"}, --推倒胡
+	{"info_jieyang","tab_jieyang1.png","tab_jieyang2.png"},--揭阳麻将
+	{"info_meizhou_hongzhongbao","tab_meizhouhongzhongbao1.png","tab_meizhouhongzhongbao2.png"},--梅州红中宝
+	{"info_guangdong_jihu","tab_guangdongjihu1.png","tab_guangdongjihu2.png"}, --广东鸡胡
+	{"info_tuidao_two","tab_two_tuidao1.png","tab_two_tuidao2.png"}, --二人推倒胡
+	{"info_hongzhong","tab_hongzhong1.png","tab_hongzhong2.png"}, --红中
+	{"info_jihu_buhua","tab_jihubuhua1.png","tab_jihubuhua2.png"}, --鸡胡-补花
+	{"info_huizhouzhuang_buhua","tab_huizhouzhuang_buhua_1.png","tab_huizhouzhuang_buhua_2.png"}, --惠州庄-补花
+	{"info_hongzhongwang","tab_hongzhongwang1.png","tab_hongzhongwang2.png"}, --红中王
+	{"info_huizhouzhuang","tab_huizhouzhuang1.png","tab_huizhouzhuang2.png"}, --惠州庄
+	{"info_tuidao_three","tab_three_tuidao1.png","tab_three_tuidao2.png"}, --三人推倒胡
+	{"info_zuopai","tab_zuopai1.png","tab_zuopai2.png"}, --做牌推倒胡
+	{"info_chaoshan","tab_chaoshan1.png","tab_chaoshan2.png"}, --潮汕麻将
+	{"info_yibai","tab_yibai1.png","tab_yibai2.png"}, --一百张
+	{"info_baida","tab_baida1.png","tab_baida2.png"}, --百搭鸡胡
+	{"info_zhuanzhuan","tab_zhuanzhuan1.png","tab_zhuanzhuan2.png"}, --转转麻将
+	{"info_jiping","tab_jiping1.png","tab_jiping2.png"}, --鸡平胡
+}
+
+local infoCell_H = 100;
+
+
+
+local HelpLayer = class("HelpLayer", function()
+	return gt.createMaskLayer()
+end)
+
+function HelpLayer:ctor(btnImage)
+	--cc.SpriteFrameCache:getInstance():addSpriteFrames("res/sd/images/mahjong_tiles.plist", "res/sd/images/mahjong_tiles.pvr.ccz")
+	local csbNode = cc.CSLoader:createNode("HelpScene.csb")
+	csbNode:setAnchorPoint(0.5, 0.5)
+	csbNode:setPosition(gt.winCenter)
+	self:addChild(csbNode)
+
+	self.majiang_type = self:getBtnIndexByBtnImage(btnImage) or cc.UserDefault:getInstance():getStringForKey("majiang_type")
+	self.tabBtns = {}
+
+	local viewContent = gt.seekNodeByName(csbNode, "ScrollView_help_7")
+
+	local scrollViewTitle = gt.seekNodeByName(csbNode, "ScrollView_title")
+	local innerSize = scrollViewTitle:getInnerContainerSize();
+	local sz = scrollViewTitle:getContentSize();
+	
+	local tab_model = gt.seekNodeByName(scrollViewTitle,'Btn_model');
+	tab_model:setSwallowTouches(false)
+	local pos_model_y = tab_model:getPositionY();
+	local top_offset = innerSize.height - pos_model_y;
+	
+
+	local infoNum = #infoGroups;
+	local innerH = infoCell_H * infoNum;
+	pos_model_y = innerH - top_offset;
+	scrollViewTitle:setInnerContainerSize(cc.size(sz.width, innerH))
+	
+	
+	
+
+	local function changeTab(index)
+		viewContent:removeChildByTag(101);
+		for i,v in ipairs(self.tabBtns) do 
+			local on = gt.seekNodeByName(v,'Image_on');
+			local off = gt.seekNodeByName(v,'Image_off');
+			if(i == index) then 
+				on:setVisible(true)
+				off:setVisible(false);
+				local info = infoGroups[i];
+				local content = "app/views/help/" ..info[1];
+				local data = require(content);
+				local label = cc.Label:createWithSystemFont(data, "", 24)
+				--label:setTouchEnabled(true);
+				viewContent:addChild(label,0,101);
+				label:setTextColor(FONTSCOLOR)
+				label:setWidth(Scroll_Width)
+				label:setAnchorPoint(cc.p(0.5, 1))
+				local scrollVwSize = viewContent:getContentSize()
+				local labelSize = label:getContentSize()
+				if labelSize.height < scrollVwSize.height then
+					label:setPosition(scrollVwSize.width * 0.5, scrollVwSize.height)
+				else
+					label:setPosition(scrollVwSize.width * 0.5, labelSize.height)
+				end
+				viewContent:setInnerContainerSize(labelSize)
+				self.majiang_type = tostring(index); --cc.UserDefault:getInstance():getStringForKey("majiang_type")
+				cc.UserDefault:getInstance():setStringForKey("majiang_type",self.majiang_type);
+			else
+				on:setVisible(false)
+				off:setVisible(true);
+			end
+
+		end
+	end 
+
+	local function scrollToTab(index)
+		print("scrollToTab "..tostring(index));	
+		local ePos = 4;  
+		if(index <= 4) then 
+			scrollViewTitle:jumpToTop();
+		else
+			if(index >(infoNum - 4)) then 
+				scrollViewTitle:jumpToBottom();
+			else
+				local perc = (index - 4) / (infoNum -7);
+				local offset = 0
+				print("scrollTo "..perc);
+				scrollViewTitle:jumpToPercentVertical(perc*100 + offset);
+			end 
+		end 
+	end 
+
+	--local tab = tab_model:clone();
+	local function initTabs ()
+	local prefix = 'images/otherImages/createroom/'
+		for i = 1,infoNum do 
+			local tabCell = tab_model:clone();
+			self.tabBtns[i] = tabCell;
+			local info = infoGroups[i];		
+
+			local off = gt.seekNodeByName(tabCell,'Image_off');
+			off:setContentSize(cc.size(0,0))
+			off:loadTexture(prefix ..info[2]);
+
+			local on = gt.seekNodeByName(tabCell,'info_on');
+			on:setContentSize(cc.size(0,0))
+			on:loadTexture(prefix..info[3]);
+
+			gt.addBtnPressedListener(tabCell,function() 
+				changeTab(i);
+			end )
+			scrollViewTitle:addChild(tabCell);
+			tabCell:setPositionY(pos_model_y - (i - 1) *infoCell_H);
+			
+		end 
+		tab_model:setVisible(false);
+		tab_model:setEnabled(true);
+	end 
+	
+
+	--self.tabBtns = {}
+	
+
+    
+    --self:changeTabTo(tonumber(self.majiang_type) or 1)
+
+	-- 返回按键
+	local backBtn = gt.seekNodeByName(self, "Btn_back")
+	gt.addBtnPressedListener(backBtn, function()
+		self:removeFromParent()
+	end)
+
+	initTabs();
+	changeTab(tonumber(self.majiang_type) or 1);
+	scrollToTab(tonumber(self.majiang_type) or 1);
+
+end
+
+
+function HelpLayer:changeTabTo(i)
+	-- if self.m_curTab then
+	-- 	self.tabBtns[self.m_curTab]:setVisible(true)
+	-- 	self.tabBtns[self.m_curTab].spr:setVisible(false)
+	-- 	self.m_scrolls[self.m_curTab]:setVisible(false)
+	-- end
+	-- self.m_curTab = index
+	-- self.tabBtns[self.m_curTab]:setVisible(false)
+	-- self.tabBtns[self.m_curTab].spr:setVisible(true)
+	-- self.m_scrolls[self.m_curTab]:setVisible(true)
+	-- if not self.m_initedScrolls[index] then
+	-- 	self:initScroll(index)
+	-- end
+end
+
+function HelpLayer:getBtnIndexByBtnImage( btnImage )
+	for i,v in ipairs(infoGroups) do
+		if v[2] == btnImage then
+			return i
+		end
+	end
+end
+
+return HelpLayer

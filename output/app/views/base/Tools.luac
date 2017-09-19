@@ -1,0 +1,840 @@
+require("app/DefineConfig")
+local Tools = {}
+
+Tools.BASE_TYPE = {
+	HALL = "hall",
+	ROOM = "room",
+}
+
+Tools.GAME_TYPE = {
+	"zhuanzhuan",
+	"shaoyang",
+	"xueliuzhuanzhuan",
+	"changsha",
+	[gt.RoomType.ROOM_JIPINGHU + 1] = "jiping",
+	[gt.RoomType.ROOM_TUIDAOHU + 1] = "tuidao",
+	[gt.RoomType.ROOM_YIBAI + 1] = "yibai",
+	[gt.RoomType.ROOM_BAIDA + 1] = "baida",
+	[gt.RoomType.ROOM_ZUOPAI + 1] = "zuopai",
+	[gt.RoomType.ROOM_CHAOSHAN +  1]=  "chaoshan",
+	[gt.RoomType.ROOM_TUIDAOHU_THREE +1] = 'tuidao_three',
+	[gt.RoomType.ROOM_HUIZHOUZHUANG+1] = 'huizhouzhuang',
+	[gt.RoomType.ROOM_HONGZHONGWANG+1] = 'hongzhongwang',
+	[gt.RoomType.ROOM_XIANGGANG + 1] = 'xianggang',
+	[gt.RoomType.ROOM_HUIZHOUZHUANG_BUHUA + 1] = 'huizhouzhuang_buhua',
+	[gt.RoomType.ROOM_HONGZHONG + 1] = 'hongzhong',
+	[gt.RoomType.ROOM_JIHU_BUHUA + 1] = 'jihu_buhua',
+	[gt.RoomType.ROOM_TUIDAOHU_TWO + 1] = 'tuidao_two',
+	[gt.RoomType.ROOM_GUANGDONG_JIHU + 1] = 'guangdong_jihu', --广东鸡胡
+	[gt.RoomType.ROOM_MEIZHOU_HONGZHONGBAO + 1] = 'meizhou_hongzhongbao', --梅州红中宝
+	[gt.RoomType.ROOM_JIEYANG + 1] = 'jieyang', --揭阳
+}
+
+-- require协议文件
+-- _file 文件名
+-- _gameType 游戏类型
+-- _baseType 目录类型, room, hall
+function Tools.requireAgreement(_file, _gameType, _baseType)
+	local filePath = "app/views/" .. _gameType .. "/" .. _baseType .. "/agreements/" .. _file
+	if cc.FileUtils:getInstance():isFileExist(filePath .. ".lua")
+		or cc.FileUtils:getInstance():isFileExist(filePath .. ".luac") then
+		return require(filePath):create()
+	else
+		gt.log("Tools.requireAgreement filePath no find = " .. filePath)
+	end
+	return require("app/views/base/" .. _baseType .. "/agreements/" .. _file):create()
+end
+
+-- require room下其他文件
+function Tools.requireFile(_file, _gameType, _baseType)	
+	local filePath = "app/views/" .. _gameType .. "/" .. _baseType .. "/" .. _file
+	if cc.FileUtils:getInstance():isFileExist(filePath .. ".lua")
+		or cc.FileUtils:getInstance():isFileExist(filePath .. ".luac") then
+		print("filePath=="..filePath)
+		print("_file==".._file)
+		print("_gameType==".._gameType)
+		print("_baseType==".._baseType)
+		return require(filePath):create()
+	else
+		gt.log("Tools.requireFile filePath no find = " .. filePath)
+	end
+	return require("app/views/base/" .. _baseType .. "/" .. _file):create()
+end
+
+-- 获取需要load的csb文件
+function Tools.getLoad(_file, _gameType)
+	local path = "view/" .. _gameType .. "/" .. _file
+	if cc.FileUtils:getInstance():isFileExist(path) then
+		return gt.createCSAnimation(_file)
+	end
+	return gt.createCSAnimation("views/base/" .. _file)
+end
+
+-- 获取lua静态调用
+function Tools.getLuaBridge()
+	if gt.isIOSPlatform() then
+		return require("cocos/cocos2d/luaoc")
+	elseif gt.isAndroidPlatform() then
+		return require("cocos/cocos2d/luaj")
+	end
+end
+
+-- 获得无参数静态方法
+function Tools.getStaticMethod(methodName)
+	local luaBridge = Tools.getLuaBridge()
+	local ok = ""
+	local result = ""
+	if gt.isIOSPlatform() then
+		ok, result = luaBridge.callStaticMethod("AppController", methodName)
+	elseif gt.isAndroidPlatform() then
+		ok, result = luaBridge.callStaticMethod("org/cocos2dx/lua/AppActivity", methodName, nil, "()Ljava/lang/String;")
+	end
+	return result
+end
+
+function Tools.getWXShareMethod(description, url, title)
+	local luaBridge = Tools.getLuaBridge()
+	if gt.isIOSPlatform() then
+		local ok = luaBridge.callStaticMethod("AppController", "shareURLToWX",
+			{url = url or gt.getLocationString("LTKey_0051"),
+			title = title or gt.getLocationString("LTKey_0050"),
+			description = description})
+	elseif gt.isAndroidPlatform() then
+		local ok = luaBridge.callStaticMethod("org/cocos2dx/lua/AppActivity", "shareURLToWX",
+			{url or gt.getLocationString("LTKey_0051"),
+			title or gt.getLocationString("LTKey_0050"),
+			description},
+			"(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V")
+	end
+end
+
+-- 创建一个button
+function Tools.createButton(_fileName)
+	local button = ccui.Button:create()
+    button:setTouchEnabled(true)
+    button:loadTextures(_fileName, _fileName, _fileName, ccui.TextureResType.plistType)
+    return button
+end
+
+-- 检测游戏打包版本
+function Tools.checkVersion(_minVersion)
+	if not gt.appVersion then
+		if gt.isIOSPlatform() then
+			gt.appVersion = Tools.getStaticMethod("getVersionName")
+		elseif gt.isAndroidPlatform() then
+			gt.appVersion = Tools.getStaticMethod("getAppVersionName")
+		else
+			return false
+		end
+	end
+	
+	if Tools.getMaxVersion(_minVersion, gt.appVersion) == gt.appVersion then
+		return true
+	end
+
+	return false
+end
+
+function Tools.saveKeyValue(_key, _value)
+	cc.UserDefault:getInstance():setStringForKey(_key, _value)
+end
+
+function Tools.getValue(_key)
+	return cc.UserDefault:getInstance():getStringForKey(_key)
+end
+
+-- 检测名字
+function Tools.checkName(str)
+	local retStr = ""
+	local num = 0
+	local lenInByte = #str
+	local x = 1
+	for i=1,lenInByte do
+		i = x
+	    local curByte = string.byte(str, x)
+	    local byteCount = 1;
+	    if curByte>0 and curByte<=127 then
+	        byteCount = 1
+	    elseif curByte>127 and curByte<240 then
+	        byteCount = 3
+	    elseif curByte>=240 and curByte<=247 then
+	        byteCount = 4
+	    end
+	    local curStr = string.sub(str, i, i+byteCount-1)
+	    retStr = retStr .. curStr
+	    x = x + byteCount
+	    if x > lenInByte then
+	    	return retStr
+	    end
+	    num = num + 1
+	    if num >= 4 then
+	    	return retStr
+	    end
+    end
+    return retStr
+end
+
+--获取某一长度的字符串
+function Tools.getUTF8StrByLenth( _str, _length )
+	if not _str then
+		return _str
+	end
+
+	local _, count = string.gsub(_str, "[^\128-\193]", "")
+
+	if count <= _length then
+		return _str
+	end
+
+	local index = 0
+	local data = ""
+    for uchar in string.gfind(_str, "[%z\1-\127\194-\244][\128-\191]*") do   	
+    	data = data .. uchar
+    	index = index + 1
+
+    	if index == _length then
+    		return data .. "..."
+    	end
+    end
+
+    return data .. "..."
+end
+
+--设置头像纹理
+function Tools.setHeardTexture( _sprite, _headID )
+	if not _sprite then
+		return
+	end
+
+	local headPath = string.format("%shead_img_%d.png", cc.FileUtils:getInstance():getWritablePath(), _headID)
+	if cc.FileUtils:getInstance():isFileExist(headPath) then
+		_sprite:setTexture(headPath)
+	else
+		--_sprite:setSpriteFrame("head_img_male.png")
+		_sprite:setTexture("images/otherImages/headframes/head_img_male.png");
+	end
+end
+
+--设置牌的角标
+function Tools.setMjTilesAngle( _displayIdx, _mjTileSpr, _angle )
+	if not _mjTileSpr then
+		return
+	end
+
+	local angleSpr = nil
+	if cc.FileUtils:getInstance():isFileExist(_angle) then
+		angleSpr = cc.Sprite:create(_angle)
+	else
+		angleSpr = cc.Sprite:createWithSpriteFrameName(_angle)
+	end
+
+	if not angleSpr then
+		return
+	end
+
+	angleSpr:setAnchorPoint(cc.p(1, 1))
+	angleSpr:setScale(0.5)
+	_mjTileSpr:addChild(angleSpr)
+
+	if _displayIdx == 0 then  --自己持有的牌
+		angleSpr:setScale(1)
+		angleSpr:setPosition(cc.p(_mjTileSpr:getContentSize().width, _mjTileSpr:getContentSize().height - 5))
+	elseif _displayIdx == 1 then
+		angleSpr:setRotationSkewX(-90.0)
+		angleSpr:setRotationSkewY(-90.0)
+		angleSpr:setScale(0.35)
+		angleSpr:setPosition(cc.p(0,  _mjTileSpr:getContentSize().height))
+	elseif _displayIdx == 2 then
+		angleSpr:setRotationSkewX(180.0)
+		angleSpr:setRotationSkewY(180.0)
+		angleSpr:setPosition(cc.p(0, 14))
+	elseif _displayIdx == 3 then
+		angleSpr:setRotationSkewX(90.0)
+		angleSpr:setRotationSkewY(90.0)
+		angleSpr:setScale(0.35)
+		angleSpr:setPosition(cc.p(_mjTileSpr:getContentSize().width, 14))
+	elseif _displayIdx == 4 then
+		angleSpr:setPosition(cc.p(_mjTileSpr:getContentSize().width, _mjTileSpr:getContentSize().height))
+	end
+end
+
+function Tools.copyTab(st)
+    local tab = {}
+    for k, v in pairs(st or {}) do
+        if type(v) ~= "table" then
+            tab[k] = v
+        else
+            tab[k] = Tools.copyTab(v)
+        end
+    end
+    return tab
+end
+
+function Tools.getAction(  )
+	if Tools.checkVersion("1.2.0") then
+		return Tools.getStaticMethod("getAction") or ""
+	end
+	return ""
+end
+
+function Tools.cleanAction(  )
+	if Tools.checkVersion("1.2.0") then
+		local luaBridge = Tools.getLuaBridge()
+		if gt.isIOSPlatform() then
+			local ok, ret = luaBridge.callStaticMethod("AppController", "cleanAction")
+		elseif gt.isAndroidPlatform() then
+			local ok, ret = luaBridge.callStaticMethod("org/cocos2dx/lua/AppActivity", "cleanAction",nil, "()V")
+		end
+	end
+end
+
+function Tools.encodeURL(str)
+    str = string.gsub(str, "([^%w%.%- ])", function(c) return string.format("%%%02X", string.byte(c)) end)
+    return string.gsub(str, " ", "+")
+end
+
+function Tools.getMaxVersion( _newversion, _oldversion )
+	if _oldversion == _newversion then
+		return _newversion
+	end
+	local newList = string.split(_newversion, ".")
+	local oldList = string.split(_oldversion, ".")
+	local maxLen = (#newList > #oldList and #newList )or #oldList
+	for i=1,maxLen do
+		if not oldList[i] then
+			return _newversion
+		elseif not newList[i] then
+			return _oldversion
+		else
+			if oldList[i] ~= newList[i] then
+				return (tonumber(oldList[i]) > tonumber(newList[i]) and _oldversion) or _newversion
+			end
+		end
+	end
+
+	return _newversion
+end
+
+function Tools.getLocationStr()
+	if Tools.checkVersion("1.2.0") then
+		if gt.isIOSPlatform() then
+			local luaBridge = require("cocos/cocos2d/luaoc")
+			local ok, ret = luaBridge.callStaticMethod("AppController", "getLocationStr")
+			return ret
+		elseif gt.isAndroidPlatform() then
+			local luaBridge = require("cocos/cocos2d/luaj")
+			local ok, ret = luaBridge.callStaticMethod("org/cocos2dx/lua/AppActivity", "getLocationStr", nil, "()Ljava/lang/String;")
+			return ret
+		else
+			return ""
+		end
+	else
+		return ""
+	end
+end
+
+-- start --
+--------------------------------
+-- @class function
+-- @description 根据两点的经纬度计算距离
+-- @param 纬度1，经度1，纬度2，经度2
+-- @return 距离
+-- end --
+local EARTH_RADIUS = 6378137
+local sin = math.sin
+local asin = math.asin
+local cos = math.cos
+local acos = math.acos
+local sqrt = math.sqrt
+local round = math.round
+local angle2radian = math.angle2radian
+function Tools.getDistanceInReal(lati1, longi1, lati2, longi2)
+	local radLati1 = angle2radian(lati1)
+	local radLati2 = angle2radian(lati2)
+	local deltaLati = radLati1 - radLati2
+	local deltaLongi = angle2radian(longi1 - longi2)
+	local distance = 2*asin(sqrt((sin(deltaLati/2))^2 + cos(radLati1)*cos(radLati2)*(sin(deltaLongi/2))^2))
+	distance = distance * EARTH_RADIUS
+	return round(distance)
+end
+
+-- start --
+--------------------------------
+-- @class function
+-- @description 根据两点的经纬度字符串计算距离
+-- @param 字符串中经纬度以","分割
+-- @return 距离
+-- end --
+function Tools.getDistanceByStrs(str1, str2)
+	local tab = string.split(str1, ",")
+	local lati1, longi1 = tonumber(tab[1]), tonumber(tab[2])
+	tab = string.split(str2, ",")
+	local lati2, longi2 = tonumber(tab[1]), tonumber(tab[2])
+	return Tools.getDistanceInReal(lati1, longi1, lati2, longi2)
+end
+
+--判断是否是鬼牌
+function Tools.isGhost( _ourColor, _ourNumber, _gostCard )
+	if not _ourColor or not _ourNumber or not _gostCard then
+		return false
+	end
+
+	if #_gostCard > 0 then
+		for k,card in pairs(_gostCard) do
+			if card.mjColor == _ourColor and card.mjNumber == _ourNumber then
+				return true
+			end
+		end
+	else
+		if _gostCard.mjColor == _ourColor and _gostCard.mjNumber == _ourNumber then
+			return true
+		end
+	end
+
+	return false
+end
+
+--计算鬼牌
+function Tools.fixGhost( _mjColor, _mjNumber )
+	if not _mjColor or not _mjNumber then
+		return
+	end
+
+	local MAXNUMBER = {9, 9, 9, 4, 3, 8}
+	if not MAXNUMBER[_mjColor] then
+		return
+	end
+
+	local ghostColor = _mjColor
+	local ghostNumber = _mjNumber
+
+	if ghostNumber == MAXNUMBER[ghostColor] then
+		if ghostColor == 4 then
+			ghostColor = 5
+		elseif ghostColor == 5 then
+			ghostColor = 4
+		end
+		ghostNumber = 1 
+	else
+		ghostNumber = ghostNumber + 1
+	end
+
+	return ghostColor, ghostNumber
+end
+
+function Tools.getGhostTableByOne( _tileColor,  _tileNumber, _fix)
+	if _tileColor < 1 or _tileNumber < 1 then
+		print("getGhostTableByOne error _tileColor = ", _tileColor, " _tileNumber = ", _tileNumber)
+		return
+	end
+
+	if _fix then
+		_tileColor, _tileNumber = Tools.fixGhost(_tileColor, _tileNumber) 
+	end
+	return {mjColor = _tileColor, mjNumber = _tileNumber}
+end
+
+--获取鬼牌数据
+function Tools.getGhostTable( _msgTable, _fix, _isDouble )
+	if not _msgTable then
+		return {}
+	end 
+
+	local ghostTable = {}
+	if _msgTable.m_ghostCard then
+		if _msgTable.m_ghostCard[1] and type(_msgTable.m_ghostCard[1]) == "number" then
+			table.insert(ghostTable, Tools.getGhostTableByOne(_msgTable.m_ghostCard[1], _msgTable.m_ghostCard[2], _fix))
+		else
+			for k,v in pairs(_msgTable.m_ghostCard) do
+				local ghost = nil
+				if v.m_color and v.m_number then
+					ghost = Tools.getGhostTableByOne(v.m_color, v.m_number, _fix)
+				elseif #v == 2 then
+					ghost = Tools.getGhostTableByOne(v[1], v[2], _fix)
+				end
+				if ghost then
+					table.insert(ghostTable, ghost)
+				end
+			end
+		end
+	elseif _msgTable.m_color and _msgTable.m_number then
+		local data = Tools.getGhostTableByOne(_msgTable.m_color, _msgTable.m_number, _fix)
+		if data then
+			table.insert(ghostTable, data)
+			if _isDouble then
+				table.insert(ghostTable, Tools.getGhostTableByOne(data.mjColor, data.mjNumber, _fix))
+			end
+		end
+	end
+
+	return ghostTable
+end
+
+--将秒数转化为时分秒
+function Tools.getTime( _time )
+	h = math.floor(_time / (60 * 60))
+	m = math.floor((_time%(60*60))/60)
+	s = _time % 60
+
+	return h .. ":" .. (m < 10 and '0' .. m or m) .. ":" .. (s < 10 and '0' .. s or s)
+end
+
+--创建一个枚举
+function Tools.creatEnumTable( _enumTable, _index )
+	local enumtbl = {}
+	local enumIndex = _index or 0
+	for i,v in ipairs(_enumTable) do
+		enumtbl[v] = enumIndex + i
+	end
+	return enumtbl
+end
+
+--打开一个url
+function Tools.openUrl( _url )
+	if not _url or _url == "" then
+		return
+	end
+
+	local luaBridge = Tools.getLuaBridge()
+	if gt.isIOSPlatform() then
+		local okJump = luaBridge.callStaticMethod("AppController", "openWebURL",
+			{webURL = _url})
+	elseif gt.isAndroidPlatform() then
+		local okJump = luaBridge.callStaticMethod("org/cocos2dx/lua/AppActivity", "openWebURL",
+			{_url}, "(Ljava/lang/String;)V")
+	end	
+end
+
+function Tools.isSelectPlayWF(_wfType)
+	if gt.roomPlayData and gt.roomPlayData.m_playtype then
+		local dt_lens = #gt.roomPlayData.m_playtype
+		for i=1,dt_lens do
+			if _wfType == gt.roomPlayData.m_playtype[i] then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+
+-- 获取一个配置文件
+function Tools.getGameConfig( _gameType )
+	local filePath = "app/views/playinfo/Playinfo_config_" .. (Room.Type[_gameType] or "base")
+	if cc.FileUtils:getInstance():isFileExist(filePath .. ".lua")
+		or cc.FileUtils:getInstance():isFileExist(filePath .. ".luac") then
+		return require(filePath):create()
+	else
+		gt.log("Tools.requireAgreement filePath no find = " .. filePath)
+	end
+	return nil
+end
+
+function Tools.isWXAppInstalled()
+	local luaBridge = Tools.getLuaBridge()
+	if gt.isIOSPlatform() then
+		local ok, ret = luaBridge.callStaticMethod("AppController", "isWXAppInstalled")
+		return ret
+	elseif gt.isAndroidPlatform() then
+		local ok, ret = luaBridge.callStaticMethod("org/cocos2dx/lua/AppActivity", "isWXAppInstalled", nil, "()Z")
+		return ret
+	end	
+	return false
+end
+
+--打开微信
+function Tools.openWX()
+	local ret = Tools.checkVersion("3.0.0")
+	if(not ret) then
+		gt.log("当前版本不支持直接打开微信");
+		return;
+	end
+	
+	if(Tools.isWXAppInstalled()) then 
+		if gt.isIOSPlatform() then
+			Tools.openUrl("weixin://"); --看看能打开微信么
+		elseif(gt.isAndroidPlatform()) then 
+			local luaBridge = Tools.getLuaBridge()		
+			local ok, ret = luaBridge.callStaticMethod("org/cocos2dx/lua/AppActivity", "startNewApp", 
+					{"com.tencent.mm"},"(Ljava/lang/String;)Z");
+			-- gt.log("ok ".. tostring(ok));
+			-- gt.log("ret "..tostring(ret));
+		end
+	else
+		gt.log("没有安装微信，无法打开")
+	end 
+end 
+
+--	分享  
+--	shareType：1、朋友圈  2、微信好有
+Tools.SHARE_TO_WX_TIMELINE = 1
+Tools.SHARE_TO_WX_FRIEND = 2
+function Tools.shareToWX( shareType )
+	local luaBridge = Tools.getLuaBridge()
+	local pyqUrl = gt.getLocationString("LTKey_0051")
+	local title = "【闲来广东麻将】"
+	local description = "广东麻将是一款原汁原味的广东本土麻将，玩法齐全."
+	local androidParam = "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V"
+	local shareNative = "shareURLToWXPYQ"
+	shareType = shareType or Tools.SHARE_TO_WX_TIMELINE
+	if shareType == Tools.SHARE_TO_WX_TIMELINE then
+		shareNative = "shareURLToWXPYQ"
+	else
+		shareNative = "shareURLToWX"
+	end
+	if gt.isIOSPlatform() then
+		local ok = luaBridge.callStaticMethod("AppController", shareNative,
+			{url = pyqUrl, title = title .. description, description = ""})
+	elseif gt.isAndroidPlatform() then
+		local ok = luaBridge.callStaticMethod("org/cocos2dx/lua/AppActivity", shareNative,
+			{ pyqUrl, title .. description, ""},
+			androidParam)
+	end
+end
+-- 分享结果返回
+-- errorCode: 0：成功、-1：普通错误类型 、-2：用户点击取消并返回、-3：发送失败、-4：授权失败、-5：微信不支持、
+function Tools.shareCallBack( errorCode )
+	errorCode = tonumber(errorCode)
+	if errorCode == 0 then
+		gt.dispatchEvent(gt.EventType.SHARE_SUCCESS)
+	end
+end
+--	注册分享结果监听
+function Tools:registerShareScriptHandler( )
+	local ret = Tools.checkVersion("3.0.0")
+	if(not ret) then
+		gt.log("当前版本不支持分享回调");
+		return;
+	end
+	local luaBridge = Tools.getLuaBridge()
+	if gt.isIOSPlatform() then
+		local ok = luaBridge.callStaticMethod("AppController", "registerShareScriptHandler",
+			{scriptHandler = Tools.shareCallBack })
+	else
+		local ok = luaBridge.callStaticMethod("org/cocos2dx/lua/AppActivity", "registerShareScriptHandler", {Tools.shareCallBack}, "(I)V")
+	end
+end
+
+Tools:registerShareScriptHandler( )
+
+
+function Tools.infoMJ(mjColor,mjNumber)
+	--print('mjColor: '..tostring(mjColor));
+	local colorT = {
+		[1] = '万',
+		[2] = '饼',
+		[3] = '条',
+		[4] = '花牌: ',
+	}
+
+	local type5 = {
+		[1] = '红中',
+		[2] = '发财',
+		[3] = '白板',
+	};
+	local type6 = {
+		[1] = '春',
+		[2] = '夏',
+		[3] = '秋',
+		[4] = '冬',
+		[5] = '梅',
+		[6] = '兰',
+		[7] = '竹',
+		[8] = '菊',
+	}
+
+	if(mjColor == nil or mjNumber == nil) then 
+		return "unkown ";
+	end 
+
+	if(mjColor < 5) then 
+		local infoColor = colorT[mjColor] or ' unknown '.. tostring(mjColor);
+		return tostring(mjNumber) ..infoColor; 
+	elseif(mjColor ==5) then 
+		return tostring(type5[mjNumber]);
+	elseif(mjColor==6) then 
+		return tostring(type6[mjNumber]);
+	else
+		return 'unknown  '..tostring(mjColor)..':'..tostring(mjNumber)
+	end  
+end
+
+function Tools.logGame(...)
+	if(gt.isGameLogEnable) then 
+		print(...);
+	end 
+end
+
+
+---------------			网易客服系统  奇鱼    ------  
+function Tools.initQiYuLabel()
+	if Tools.qiyuLabel == nil then
+		local jsonArr = {}
+		jsonArr[#jsonArr+1] = {key="uid",label="uid"}
+		jsonArr[#jsonArr+1] = {key="unionid",label="unionid"}
+		jsonArr[#jsonArr+1] = {key="ip",label="ip"}
+		jsonArr[#jsonArr+1] = {key="source",label="咨询入口"}
+		jsonArr[#jsonArr+1] = {key="resVersion",label="资源版本"}
+		jsonArr[#jsonArr+1] = {key="totalPlayNum",label="游戏局数"}
+		jsonArr[#jsonArr+1] = {key="isOldPlayer",label="是否老玩家"}
+		jsonArr[#jsonArr+1] = {key="histroyLog",label="登录流程"}
+		jsonArr[#jsonArr+1] = {key="LoginServerIP",label="服务器IP"}
+		jsonArr[#jsonArr+1] = {key="LoginServerIPName",label="登录策略"}
+		jsonArr[#jsonArr+1] = {key="remoteVersionUrl",label="主versionUrl"}
+		jsonArr[#jsonArr+1] = {key="secondVersionUrl",label="副versionUrl"}
+		jsonArr[#jsonArr+1] = {key="backupRemoteVersionUrl",label="Ftp versionUrl"}
+		jsonArr[#jsonArr+1] = {key="isUseBackup",label="尝试过副地址"}
+		jsonArr[#jsonArr+1] = {key="isUseBackupCDN",label="尝试过ftp地址"}
+		jsonArr[#jsonArr+1] = {key="updateLog",label="更新日志"}
+
+		require "json"
+		Tools.qiyuLabel = json.encode(jsonArr)
+	end 
+
+	return Tools.qiyuLabel
+end
+
+function Tools.hasQiYu()
+	--检查版本 3.0.0 才有客服系统
+	local res = Tools.checkVersion("3.0.0")
+	print("Tools.hasQiYu  gt.appVersion",gt.appVersion,res)
+	return res
+end
+
+function Tools.hasQiYuNoti()
+	--检查版本 3.0.0 才有客服系统推送
+	local res = Tools.checkVersion("3.0.0")
+	return res
+end
+
+
+
+function Tools.registerQiyuMessageHandler(handler)
+	if Tools.hasQiYuNoti() == false then 
+		return 
+	end 
+
+	local ok = false
+	if(gt.isAndroidPlatform()) then
+		local luaj = require("cocos/cocos2d/luaj")
+		ok = luaj.callStaticMethod("org/cocos2dx/lua/AppActivity", "registerQiyuMessageHandler", {handler}, "(I)V")
+	else
+		local luaoc = require("cocos/cocos2d/luaoc")
+		ok= luaoc.callStaticMethod("AppController", "registerQiYuUnreadHandler",{scriptHandler = handler})
+	end 
+end
+
+function Tools.removeQiyuMessageHandler()
+	if Tools.hasQiYuNoti() == false then 
+		return 
+	end 
+
+	local ok = false
+	if(gt.isAndroidPlatform()) then
+		local luaj = require("cocos/cocos2d/luaj")
+		ok = luaj.callStaticMethod("org/cocos2dx/lua/AppActivity", "removeQiyuMessageHandler", nil, "()V")
+	else
+		local luaoc = require("cocos/cocos2d/luaoc")
+		ok= luaoc.callStaticMethod("AppController", "unregisterQiYuUnreadHandler",nil)
+	end 
+end
+
+function Tools.getQiyuUnreadMessage()
+	if Tools.hasQiYuNoti() == false then 
+		return 0
+	end 
+
+	local ok = false
+	local count = 0
+	if(gt.isAndroidPlatform()) then
+		local luaj = require("cocos/cocos2d/luaj")
+		ok,count = luaj.callStaticMethod("org/cocos2dx/lua/AppActivity", "getQiyuUnreadCount", nil, "()I")
+	else
+		local luaoc = require("cocos/cocos2d/luaoc")
+		ok,count = luaoc.callStaticMethod("AppController", "getQiyuUnreadCount",nil)
+	end
+
+	if ok == false then 
+		count = 0
+	end  
+
+	return count
+end
+
+
+
+--打开客服系统
+function Tools.openQiYu(param) 
+
+	if Tools.hasQiYu() == false then 
+		return false
+	end 
+	
+	local paramObj = {}
+
+	if param then 
+		for k,v in pairs(param) do
+			paramObj[k] = v
+		end
+	end 
+
+	paramObj.labelsArr = Tools.initQiYuLabel()
+
+	local ok = false
+	if(gt.isAndroidPlatform()) then
+		local luaj = require("cocos/cocos2d/luaj")
+		require "json"
+
+		local nickname = ""
+		if paramObj.nickname ~= nil then 
+			nickname = paramObj.nickname
+			paramObj.nickname = nil
+		end 
+		local jsonParam = json.encode(paramObj)
+		ok = luaj.callStaticMethod("org/cocos2dx/lua/AppActivity", "openQiYu", {jsonParam,nickname}, "(Ljava/lang/String;Ljava/lang/String;)V")
+	elseif(gt.isIOSPlatform()) then
+		--ios版本暂停音乐
+		if gt.soundEngine then
+			gt.soundEngine:pauseAllSound()
+		end
+
+		--添加退出七鱼的监听
+
+		if Tools.backHandler == nil then 
+			Tools.backHandler  = function ()
+				if gt.soundEngine then
+					gt.soundEngine:resumeAllSound()
+				end
+			end
+
+			local eventDispatcher = cc.Director:getInstance():getEventDispatcher()
+			local customListenerBg = cc.EventListenerCustom:create("BACK_FROM_QIYU_EVENT",
+									Tools.backHandler)
+			eventDispatcher:addEventListenerWithFixedPriority(customListenerBg, 1)
+		end 
+
+
+		local luaoc = require("cocos/cocos2d/luaoc")
+		ok = luaoc.callStaticMethod("AppController", "openQiYu",paramObj)
+	end
+	return ok
+end
+
+function Tools.logoutQiYu() 
+
+	if Tools.hasQiYu() == false then 
+		return false
+	end 
+
+	local ok = false
+	if(gt.isAndroidPlatform()) then
+		local luaj = require("cocos/cocos2d/luaj")
+		ok = luaj.callStaticMethod("org/cocos2dx/lua/AppActivity", "logoutQiYu", nil, "()V")
+	elseif(gt.isIOSPlatform()) then
+		local luaoc = require("cocos/cocos2d/luaoc")
+		ok = luaoc.callStaticMethod("AppController", "logoutQiYu",nil)
+	end
+	return ok
+end
+
+return Tools

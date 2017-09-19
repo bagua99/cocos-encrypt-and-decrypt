@@ -1,0 +1,22 @@
+local PlayinfoConfigYiBai = class("PlayinfoConfigBase", require("app/views/playinfo/Playinfo_config_base"))
+
+function PlayinfoConfigYiBai:ctor(  )
+	PlayinfoConfigYiBai.super.ctor(self)
+	self.ruleType[0].desc = "无马"
+	self.ruleType[5].desc = "七对4倍"
+	self.ruleType[40].desc = "混一色2倍"
+end
+
+function PlayinfoConfigYiBai:getShowList( )
+	return {
+		18, 17, 20, 19, 21, 
+		22, 23, 24, 25, 26, 
+		27, 30, 31, 33, 35,
+		40, 5,
+		7, 8, 9,
+		0, 2, 4, 6,
+		53
+	}
+end
+
+return PlayinfoConfigYiBai

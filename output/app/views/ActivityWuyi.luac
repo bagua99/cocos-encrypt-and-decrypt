@@ -1,0 +1,401 @@
+--author liubing
+--desc: 五一活动
+--date: 2017-04-19
+
+local gt = gt;
+local log= gt.log
+
+-- local function value_check(values,ifv,orv)
+-- 	return (values == ifv) and orv or values;
+-- end
+local function default_value_check(values, defaultVal)
+	return (values == nil) and defaultVal or values;
+end 
+
+local function messageBox(text,okFunc,yesno)
+	yesno = default_value_check(yesno,true); --value_check(yesno,nil,true);
+	require("app/views/NoticeTips"):create(gt.getLocationString("LTKey_0007"),
+		text, okFunc, nil, yesno)
+end
+
+-- local  reward_map = {
+-- 	[32] = 'wuyi_touxiang_tx1.csb',
+-- 	[33] = 'wuyi_touxiang_tx2.csb',
+-- };
+
+local uiMap = {
+	20170429,
+	20170430,
+	20170501,
+	20170502,
+	20170503,
+}
+
+local ActivityWuyi = class("ActivityWuyi", function()
+	return cc.LayerColor:create(cc.c4b(85, 85, 85, 85), gt.winSize.width, gt.winSize.height)
+end)
+
+function ActivityWuyi:ctor(msgTbl)
+	-- 注册节点事件
+	--self:registerScriptHandler(handler(self, self.onNodeEvent))
+
+	local csbNode = cc.CSLoader:createNode("ActivityWuyi.csb")
+	csbNode:setPosition(gt.winCenter)
+	self:addChild(csbNode)
+	self.rootNode = csbNode
+
+	-- 关闭按钮
+	local closeBtn = gt.seekNodeByName(csbNode, "Btn_Close")
+	if closeBtn then 
+		closeBtn:setVisible(false);
+	end
+
+	
+	gt.addBtnPressedListener(closeBtn, function()
+		--self:removeFromParent()
+		self:destroy();
+	end)
+
+	local uiRoot0 = gt.seekNodeByName(csbNode,'Panel_root_0');
+	if(uiRoot0) then 
+		uiRoot0:addClickEventListener(function(sender)
+			print("uiRoot0:Clicked");
+			--self:removeFromParent()
+			self:destroy();
+		end)
+	end
+
+	local uiRoot1 = gt.seekNodeByName(csbNode,'Panel_root_1');
+	if(uiRoot1) then 
+		uiRoot1:addClickEventListener(function(sender)
+			print("uiRoot1:Clicked");
+			uiRoot0:show();
+			self:updateSignUI();
+			uiRoot1:removeChildByTag(1000);
+			uiRoot1:hide();
+			uiRoot1:stopAllActions();
+			if(self.m_reward and (#self.m_reward > 0) ) then
+				messageBox(gt.getLocationString("LTKey_0067"))
+			end
+		end)
+	end
+
+	local uiGrids = {};
+	for i = 1,5 do 
+		local uiSign = gt.seekNodeByName(uiRoot0,'Panel_grid_'..tostring(i));
+		if(uiSign) then
+			uiSign:setTag(uiMap[i]);
+			uiGrids[uiMap[i]] = uiSign;
+			local btnSign = gt.seekNodeByName(uiSign,'Button_sign');
+			btnSign:setEnabled(false);
+			gt.addBtnPressedListener(btnSign,function() 
+				local msgToSend = {}
+				msgToSend.m_msgId  = gt.CG_SIGNIN_REQ
+				msgToSend.m_vdates = {
+					{
+						uiMap[i];
+						0, --签到
+					}
+				}
+				gt.socketClient:sendMessage(msgToSend)
+				self.lastSign = uiMap[i];
+				gt.showLoadingTips(gt.getLocationString("LTKey_0065"))
+			end)
+
+			local btnSingBu = gt.seekNodeByName(uiSign,'Button_sign_bu');
+			btnSingBu:setEnabled(false);
+			gt.addBtnPressedListener(btnSingBu,function()
+				messageBox(gt.getLocationString("LTKey_0066"),function()
+					local msgToSend = {}
+					msgToSend.m_msgId  = gt.CG_SIGNIN_REQ
+					msgToSend.m_vdates = {
+						{
+							uiMap[i];
+							1, --补签
+						}
+					}
+					gt.socketClient:sendMessage(msgToSend)
+					gt.showLoadingTips(gt.getLocationString("LTKey_0065"))
+				end,false)
+			end)
+		end
+		local uiLightNode = gt.seekNodeByName(self.rootNode,'Image_circle_fg_'..tostring(i))
+		if(uiLightNode) then 
+			uiLightNode:hide();
+		end 
+	end
+	self.uiGrids = uiGrids;
+	dump(self.uiGrids ,'uiGrids');
+	self:updateSignUI();
+	gt.socketClient:registerMsgListener(gt.GC_SIGNIN_RES, self, self.onRcvSignResponse)
+	--gt.socketClient:registerMsgListener(gt.GC_SIGNIN_INFO_RES, self, self.onRcvAllSignInfoResponse);
+	--gt.socketClient:registerMsgListener(gt.GC_GAIN_NEW_HEADICON,self,self.onRcvGainHeadIcon);	
+
+	gt.CommonEvent:addEventListener("ACTIVITY_WUYI_UPDATE",handler(self,self.updateSignUI))
+end 
+function ActivityWuyi:onNodeEvent(eventName)
+	if "enter" == eventName then
+		-- local listener = cc.EventListenerTouchOneByOne:create()
+		-- listener:setSwallowTouches(true)
+		-- listener:registerScriptHandler(handler(self, self.onTouchBegan), cc.Handler.EVENT_TOUCH_BEGAN)
+		-- listener:registerScriptHandler(handler(self, self.onTouchEnded), cc.Handler.EVENT_TOUCH_ENDED)
+		-- local eventDispatcher = self:getEventDispatcher()
+		-- eventDispatcher:addEventListenerWithSceneGraphPriority(listener, self)
+	elseif "exit" == eventName then
+		-- local eventDispatcher = self:getEventDispatcher()
+		-- eventDispatcher:removeEventListenersForTarget(self)
+	end
+end
+
+function ActivityWuyi:destroy()
+	print("ActivityWuyi:destroy");
+	gt.CommonEvent:removeEventListenersByEvent("ACTIVITY_WUYI_UPDATE");
+	gt.socketClient:unregisterMsgListener(gt.GC_SIGNIN_RES)
+	--gt.socketClient:unregisterMsgListener(gt.GC_SIGNIN_RES)
+	--gt.socketClient:unRegisterMsgListener(gt.GC_SIGNIN_INFO_RES);
+	--gt.socketClient:unRegisterMsgListener(gt.GC_GAIN_NEW_HEADICON);
+	self:removeFromParent();
+
+end 
+
+
+-- function ActivityWuyi:onTouchBegan(touch, event)
+-- 	print("ActivityWuyi:onTouchBegan");
+
+-- 	return true
+-- end
+
+-- function ActivityWuyi:onTouchEnded(touch, event)
+-- 	print("ActivityWuyi:onTouchEnded");
+-- 	local bg = gt.seekNodeByName(self.rootNode, "Panel_root")
+-- 	if bg then
+-- 		local point = bg:convertToNodeSpace(touch:getLocation())
+-- 		local rect = cc.rect(0, 0, bg:getContentSize().width, bg:getContentSize().height)
+-- 		if not cc.rectContainsPoint(rect, cc.p(point.x, point.y)) then
+-- 			self:removeFromParent()
+-- 		end
+-- 	end
+-- end
+
+-- function ActivityWuyi:onRcvGainHeadIcon(msgTbl)
+
+-- end 
+
+function ActivityWuyi:onRcvSignResponse(msgTbl)
+	print("ActivityWuyi:onRcvSignResponse");
+	gt.removeLoadingTips();
+	local status = msgTbl.m_errorCode;
+	if(status == 0) then
+		--签到成功，更新消息
+		local vDates = msgTbl.m_vdates;
+		local signData = gt.m_SignInInfo;
+		for _,v in ipairs(vDates) do
+			for _, vv in ipairs(signData) do
+				if(v == vv[1]) then
+					vv[2] = 1; --> 标记所有的已经签到的数据
+				end 
+			end 
+		end 
+		--更新签到信
+		self.m_reward =  msgTbl.m_vrewardIDs;
+		self:notifySign(true,self.m_reward);
+	else
+		if(status == 1) then 
+			messageBox(gt.getLocationString("LTKey_0068"))	
+		elseif (status == 2) then 
+			messageBox(gt.getLocationString("LTKey_0069"))	
+		elseif (status == 3) then 
+			messageBox(gt.getLocationString("LTKey_0066"),function()
+					local msgToSend = {}
+					msgToSend.m_msgId  = gt.CG_SIGNIN_REQ
+					msgToSend.m_vdates = {
+						{
+							self.lastSign,
+							1, --补签
+						}
+					}
+					gt.socketClient:sendMessage(msgToSend)
+					gt.showLoadingTips(gt.getLocationString("LTKey_0065"))
+				end,false)
+		elseif (status == 4) then 
+			messageBox(gt.getLocationString("LTKey_0070"));
+		end
+	end 
+end 
+
+function ActivityWuyi:updateSignUI()
+	--self.grid = {};
+	local uiGrids = self.uiGrids;
+	--初始化签到阶段
+	local uiProgress = gt.seekNodeByName(self.rootNode,'LoadingBar_sign');
+	uiProgress:setPercent(0);
+		--激活
+	local function lightGrid(nodeGrid)
+		if(nodeGrid == nil) then 
+			return;
+		end 
+		local uiFrame = gt.seekNodeByName(nodeGrid,'Image_frame');
+		uiFrame:show():loadTexture("images/otherImages/activity_wuyi/gr_frame_pink.png");
+
+		local button = gt.seekNodeByName(nodeGrid,'Button_sign_bu');
+		button:hide();
+
+		local button = gt.seekNodeByName(nodeGrid,'Button_sign');
+		button:show()
+		button:setEnabled(true);
+		button:stopAllActions();
+		gt.buttonScaleEffect(button,0.85,1.0);
+
+		local uiLock = gt.seekNodeByName(nodeGrid,'Image_lock');
+		uiLock:show();
+
+		local uiSign  =  gt.seekNodeByName(nodeGrid,'Image_sign');
+		uiSign:hide();
+
+	end
+
+	--漏掉 
+	local function slipGrid(nodeGrid)
+		if(nodeGrid == nil) then 
+			return;
+		end 
+		local uiFrame = gt.seekNodeByName(nodeGrid,'Image_frame');
+		uiFrame:show():loadTexture("images/otherImages/activity_wuyi/gr_frame_pink.png");
+
+		local button = gt.seekNodeByName(nodeGrid,'Button_sign');
+		button:hide();
+
+		local button = gt.seekNodeByName(nodeGrid,'Button_sign_bu');
+		button:show();
+		button:setEnabled(true);
+		button:stopAllActions();
+		gt.buttonScaleEffect(button,0.85,1.0);
+
+		local uiLock = gt.seekNodeByName(nodeGrid,'Image_lock');
+		uiLock:show();
+
+		local uiSign  =  gt.seekNodeByName(nodeGrid,'Image_sign');
+		uiSign:hide();
+	end
+
+	--签完
+	local function signGrid(nodeGrid)
+		if(nodeGrid == nil) then 
+			return;
+		end 
+		local uiFrame = gt.seekNodeByName(nodeGrid,'Image_frame');
+		uiFrame:show():loadTexture("images/otherImages/activity_wuyi/gr_frame_green.png");
+		local button = gt.seekNodeByName(nodeGrid,'Button_sign');
+		button:hide();
+		button:stopAllActions();
+
+		local button_bu = gt.seekNodeByName(nodeGrid,'Button_sign_bu');
+		button_bu:hide();
+		button:stopAllActions();
+
+		local uiSign  =  gt.seekNodeByName(nodeGrid,'Image_sign');
+		uiSign:show();
+
+		local uiLock = gt.seekNodeByName(nodeGrid,'Image_lock');
+		uiLock:hide();
+	end 
+
+	local signDays = 0;
+	local signData = gt.m_SignInInfo;
+	dump(signData,'gt.m_SignInInfo');
+
+	for _, v in ipairs(signData) do
+		local key = v[1];
+		local nodeGrid = uiGrids[key];
+		if(v[2] == 1) then --1 已签到
+		signDays = signDays + 1;
+			signGrid(nodeGrid);
+		elseif(v[2] == 2) then --可以签到
+			lightGrid(nodeGrid);
+		elseif(v[2] == 3) then --可以补签
+			slipGrid(nodeGrid);
+		end  
+	end 
+	uiProgress:setPercent(100 * 0.25 * (signDays - 1));
+	for i = 1,signDays do 
+		local uiLightNode = gt.seekNodeByName(self.rootNode,'Image_circle_fg_'..tostring(i))
+		if(uiLightNode) then 
+			uiLightNode:show();
+		end
+	end 
+
+	--更新特效
+	--if(signDays >= 3) then 
+		print('add UI Head Tx wuyi_touxiang_tx1');
+		local uiNode = gt.seekNodeByName(self.rootNode,'Sprite_reward_1');
+		uiNode:removeChildByTag(1000);
+		local beginAnimateNode, beginAnimate = gt.createCSAnimation("res/da/wuyi_touxiang_tx1.csb")
+		beginAnimateNode:setTag(1000);
+		uiNode:addChild(beginAnimateNode,1024);
+		local uiSize = uiNode:getContentSize()
+		beginAnimateNode:setPosition(ccp(uiSize.width/2,uiSize.height/2 + 10));
+		beginAnimateNode:setScale(0.6);
+		beginAnimate:play("GD_cat_tx_TX", true);
+
+		local placeHolder = gt.seekNodeByName(uiNode,'Image_reward');
+		if(placeHolder) then
+			placeHolder:hide();
+		end 
+	--end 
+	--if(signDays >= 5) then 
+		print('add UI Head Tx wuyi_touxiang_tx1');
+		local uiNode = gt.seekNodeByName(self.rootNode,'Sprite_reward_2');
+		uiNode:removeChildByTag(1000);
+
+		local beginAnimateNode, beginAnimate = gt.createCSAnimation("res/da/wuyi_touxiang_tx2.csb")
+		beginAnimateNode:setTag(1000);
+		uiNode:addChild(beginAnimateNode,1024);
+		local uiSize = uiNode:getContentSize()
+		--local szWidth = beginAnimate:getSize().width;
+		beginAnimateNode:setPosition(ccp(uiSize.width/2,uiSize.height/2 + 10));
+		beginAnimateNode:setScale(0.6);
+		beginAnimate:play("GD_cs_tx_TX", true);
+		local placeHolder = gt.seekNodeByName(uiNode,'Image_reward');
+		if(placeHolder) then
+			placeHolder:hide();
+		end 
+	--end
+
+
+end 
+
+function ActivityWuyi:notifySign(status,reward)
+	print("ActivityWuyinotify:notifySign");
+	status = default_value_check(status,true); --value_check(status,nil,true);
+	if(status) then 
+		local uiRoot0 = gt.seekNodeByName(self.rootNode,'Panel_root_0');
+		local uiRoot1 = gt.seekNodeByName(self.rootNode,'Panel_root_1');
+		uiRoot1:show();
+		uiRoot0:hide();
+		local beginAnimateNode, beginAnimate = gt.createCSAnimation("res/da/wuyi_tx.csb")
+				beginAnimateNode:setPosition(gt.winCenter)
+				beginAnimateNode:setTag(1000);
+				uiRoot1:addChild(beginAnimateNode,1024);
+				beginAnimate:play("wuyi_tx", false);
+			-- --动画结束回调
+		local duration = gt.getAnimationDuration(beginAnimate)
+		local block = cc.CallFunc:create( function(sender)  
+			uiRoot0:show();
+			self:updateSignUI();
+			uiRoot1:removeChildByTag(1000);
+			uiRoot1:hide();
+			if(reward and (#reward > 0) ) then
+				messageBox(gt.getLocationString("LTKey_0067"))
+			end
+		end)    
+		uiRoot1:runAction(cc.Sequence:create(cc.DelayTime:create(duration), block))
+	end 
+end
+
+-- function ActivityWuyi:onRcvAllSignInfoResponse(msgTbl)
+-- 	print("ActivityWuyi:onRcvAllSignInfoResponse");
+-- 	gt.m_SignInInfo = msgTbl.m_SignInInfo;
+-- 	self:updateSignUI();
+-- end 
+
+return ActivityWuyi;

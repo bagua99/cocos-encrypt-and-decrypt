@@ -1,0 +1,182 @@
+
+local gt = cc.exports.gt
+
+local NoticeTipsForFangKa = class("NoticeTipsForFangKa", function()
+	return cc.LayerColor:create(cc.c4b(85, 85, 85, 85), gt.winSize.width, gt.winSize.height)
+end)
+
+-- fangkaInfoFlag 如果此参数为true则说明是购买房卡提示，需要进行特殊处理
+function NoticeTipsForFangKa:ctor(titleText, tipsText, okFunc, cancelFunc, singleBtn)
+	self:setName("NoticeTipsForFangKa")
+	self:registerScriptHandler(handler(self, self.onNodeEvent))
+	local csbNode = cc.CSLoader:createNode("NoticeTipsForFangKa.csb")
+	csbNode:setPosition(gt.winCenter)
+	self:addChild(csbNode)
+	self.rootNode = csbNode
+
+	local weixinStr = self:getDaiLiNumber()
+	if titleText then
+		local titleLabel = gt.seekNodeByName(csbNode, "Label_title")
+		titleLabel:setString(titleText)
+	end
+	local showStrLabel1 = gt.seekNodeByName(csbNode, "Label_Show1")
+	showStrLabel1:setString(self:getDaiLiNumber())
+
+	local showStrLabel2 = gt.seekNodeByName(csbNode, "Label_Show2")
+	showStrLabel2:setString(self:getDaiLiNumber())
+
+	local showStrLabel3 = gt.seekNodeByName(csbNode, "Label_Show3")
+	showStrLabel3:setString("xlgdmj6")
+
+	if tipsText then
+		local strTab = string.split(tipsText, ",")
+		
+		-- if strTab[1] then			
+		-- 	showStrLabel1:setString(strTab[1])
+		-- end
+		
+		-- if strTab[2] then			
+		-- 	showStrLabel2:setString(strTab[2])
+		-- end
+		-- if strTab[3] then
+		-- 	showStrLabel3:setString(strTab[3])
+		-- end
+	end
+
+	local okBtn = gt.seekNodeByName(csbNode, "Btn_ok")
+	gt.addBtnPressedListener(okBtn, function()
+		self:removeFromParent()
+		if okFunc then
+			okFunc()
+		end
+	end)
+
+	local cancelBtn = gt.seekNodeByName(csbNode, "Btn_cancel")
+	gt.addBtnPressedListener(cancelBtn, function()
+		self:removeFromParent()
+		if cancelFunc then
+			cancelFunc()
+		end
+	end)
+	
+	local btnCopy1 = gt.seekNodeByName(csbNode,"Button_Copy_1")
+	gt.addBtnPressedListener(btnCopy1,function()
+		if(showStrLabel1) then 
+			local content = showStrLabel1:getString();
+			gt.copyStr(content);
+			Tools.openWX()
+		end
+	end)
+	local btnCopy2 = gt.seekNodeByName(csbNode,"Button_Copy_2")
+	gt.addBtnPressedListener(btnCopy2,function()
+		if(showStrLabel2) then 
+			local content = showStrLabel2:getString();
+			gt.copyStr(content);
+			Tools.openWX()
+		end
+	end)
+	local btnCopy3 = gt.seekNodeByName(csbNode,"Button_Copy_3")
+	gt.addBtnPressedListener(btnCopy3,function()
+		if(showStrLabel3) then 
+			local content = showStrLabel3:getString();
+			gt.copyStr(content);
+			Tools.openWX()
+		end
+	end)
+
+	if singleBtn then
+		okBtn:setPositionX(0)
+		cancelBtn:setVisible(false)
+	end
+
+	local runningScene = cc.Director:getInstance():getRunningScene()
+	if runningScene then
+		runningScene:addChild(self, gt.CommonZOrder.NOTICE_TIPS)
+	end
+end
+
+-- local DAILILIST = {
+-- 	-- "xianlai0688",
+-- 	-- "xianlai0086",
+-- 	-- "xianlai9633",
+-- 	-- "xianlai266",
+-- 	-- "gdmj518",
+-- 	-- "gdmj1888",
+-- 	-- 'gdmj08',
+-- 	-- 'fjmj016',
+-- 	-- 'gxmj016',
+-- 	-- 'shmj147',
+-- 	-- 'mzmj006',
+-- 	-- 'gdmj808',
+-- 	-- 'gdmj555',
+
+-- 	-- 'gdmj12',
+-- 	-- 'gdmj09',
+-- 	-- 'gdmj120',
+-- 	-- 'gdmj14',
+-- 	-- 'gdmj000',
+-- 	-- 'gzmj55',
+-- 	-- 'gdmj44',
+-- 	'gdmj143',
+-- 	'gdmj44',
+-- 	'gzmj55',
+-- 	'gdmj000',
+-- 	'gdmj14',
+-- 	'gdmj120',
+-- 	'gdmj09',
+-- 	'gdmj12',
+-- 	'gdmj868',
+-- 	'gdmj998',
+-- 	'gdmj818',
+-- 	'gdmj369',
+-- 	'gdmj336',
+-- 	'gdmj008',
+-- 	'gdmj018',
+-- }
+
+local CARD_BUY_DAILI = "card_buy_daili2"
+
+
+function NoticeTipsForFangKa:getDaiLiNumber( ... )
+
+	-- local buyNumber =  tonumber(Tools.getValue(CARD_BUY_DAILI))
+
+	-- if not buyNumber or buyNumber == "" or not DAILILIST[buyNumber] then
+	-- 	gt.setRandomSeed()
+	-- 	buyNumber = gt.getRangeRandom(1, #DAILILIST)
+	-- 	Tools.saveKeyValue(CARD_BUY_DAILI, tostring(buyNumber))
+	-- end
+
+	-- return DAILILIST[buyNumber] or DAILILIST[1]
+	return gt.getDaiLiNumRandom()
+end
+function NoticeTipsForFangKa:onNodeEvent(eventName)
+	if "enter" == eventName then
+		local listener = cc.EventListenerTouchOneByOne:create()
+		listener:setSwallowTouches(true)
+		listener:registerScriptHandler(handler(self, self.onTouchBegan), cc.Handler.EVENT_TOUCH_BEGAN)
+		listener:registerScriptHandler(handler(self, self.onTouchEnded), cc.Handler.EVENT_TOUCH_ENDED)
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:addEventListenerWithSceneGraphPriority(listener, self)
+	elseif "exit" == eventName then
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:removeEventListenersForTarget(self)
+	end
+end
+
+function NoticeTipsForFangKa:onTouchBegan(touch, event)
+	return true
+end
+
+function NoticeTipsForFangKa:onTouchEnded(touch, event)
+	local bg = gt.seekNodeByName(self.rootNode, "Img_bg")
+	if bg then
+		local point = bg:convertToNodeSpace(touch:getLocation())
+		local rect = cc.rect(0, 0, bg:getContentSize().width, bg:getContentSize().height)
+		if not cc.rectContainsPoint(rect, cc.p(point.x, point.y)) then
+			self:removeFromParent()
+		end
+	end
+end
+return NoticeTipsForFangKa
+

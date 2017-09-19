@@ -1,0 +1,14 @@
+local RcvPlayerMsg = class("RcvPlayerMsg", BaseRoomAgreement)
+
+-- 接收玩家自己信息 12
+function RcvPlayerMsg:ctor()
+	self:registerMsgListener(gt.GC_LOGIN_SERVER, self, self.onRcvPlayerMsg)
+end
+
+function RcvPlayerMsg:onRcvPlayerMsg(msgTbl)
+	if msgTbl.m_state == 0 then --已退出房间
+		self.m_scene:backMainSceneEvt()
+	end
+end
+
+return RcvPlayerMsg

@@ -1,0 +1,109 @@
+local _mod = ...;
+_mod= string.gsub(_mod,"%/","%.");
+
+print('mod = '.._mod);
+
+local config = import('..config',_mod);
+local RuleType = config.RuleType;
+
+local RoomScene = class("RoomScene", BaseRoomScene)
+
+function RoomScene:ctor(msgTbl)
+	self.super.ctor(self,msgTbl,config:getGameType());
+	--RoomScene.super.ctor(self, msgTbl, Tools.GAME_TYPE[gt.RoomType.ROOM_JIEYANG + 1])
+	--设置鬼牌
+	dump(msgTbl.m_playtype,'msgTbl.m_playtype');
+	for k,v in pairs(msgTbl.m_playtype) do
+		if v == 8 then --白板鬼
+			self.m_room:setGui({m_color = 5, m_number = 3})
+			self.m_ghost_type = 8
+			-- gt.socketClient:dispatchMessage({m_msgId = 161, m_ghostCard = {m_color = 1, m_numbe = 9}})
+			break
+		elseif v == 51 then --红中鬼
+			self.m_room:setGui({m_color = 5, m_number = 1})
+			self.m_ghost_type = 51
+			break;
+		elseif v == 9 then -- 翻牌鬼
+			self.m_ghost_type = 9
+			-- self:setGhostAnimation(true)
+			break
+		-- elseif v == 28 then --双鬼
+		-- 	self.m_ghost_type = 28
+		-- 	break
+		-- elseif v == 10 then
+		-- 	self.m_isFeng = false
+		end
+	end	
+	--print("self.m_ghost_type "..self.m_ghost_type);
+	gt.anglePngPath = "res/sd/images/otherImages/gui_icon.png"
+	self:initGhost()
+end
+
+
+
+function RoomScene:initCatchHorse()
+	print("RoomScene:initCatchHorse")
+	local playType = gt.roomPlayData.m_playtype
+	local hasCatchHorse = false;
+	for _,v in ipairs(playType) do 
+		if(v == 42) then 
+			hasCatchHorse = true
+			break;
+		end 
+	end 
+	if(not hasCatchHorse) then 
+		return;
+	end 
+
+	for i = 1, Room.PlayerTotal do
+		local playerNode = gt.seekNodeByName(self:getCsbLayer(), "Node_playerInfo_" .. i)
+		local mapai = gt.seekNodeByName(playerNode,'Spr_mapai');
+		if(mapai) then
+			mapai:setVisible(true);
+			mapai:setSpriteFrame("tdbgs_4.png")
+			mapai:removeAllChildren();
+		end
+	end
+
+	--self:setGhostAnimation(true);
+	local animationTimer = 1.0;
+	print('self.m_startinitHorse'..tostring(self.m_startinitHorse));
+	if(not self.m_startinitHorse) then 
+		animationTimer = 0;
+	end
+
+	for i = 1, Room.PlayerTotal do
+		local playerNode = gt.seekNodeByName(self:getCsbLayer(), "Node_playerInfo_" .. i)
+		local mapai = gt.seekNodeByName(playerNode,'Spr_mapai');
+		if(mapai) then
+			mapai:setOpacity(0);
+			mapai:fadeTo({opacity = 255,time = animationTimer})
+		end 
+	end 
+	-- performWithDelay(self,function()
+	-- 	--self:setGhostAnimation(false);
+	-- end,animationTimer)
+
+	self.m_startinitHorse = false;
+end 
+
+
+-- 玩法设置
+function RoomScene:getRuleDesc( _msgTbl, _splitChar , _type)
+	local ruleDesc = ""
+	if _type == RoomScene.RULEDESC_TYPE.ROOM then
+		ruleDesc = Room.TypeName[_msgTbl.m_state + 1]
+	end
+	for i, v in ipairs(_msgTbl.m_playtype) do
+		if v == 0 then
+			ruleDesc = ruleDesc .. _splitChar .. "无马"
+		elseif RuleType[v] then
+			ruleDesc = ruleDesc .. _splitChar .. RuleType[v]
+		end
+	end
+
+	print("ruleDesc ".. ruleDesc);
+	return ruleDesc
+end
+
+return RoomScene

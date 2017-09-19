@@ -1,0 +1,638 @@
+
+local gt = cc.exports.gt
+
+local MAX_FRAME = 33  -- 最大的头像 
+local MAX_PER_LINE = 4;
+local MAX_FREE_ID = 20;
+
+require("app/views/HeadFrameName")
+
+--特效的 
+local EFFECT_ICONS = gt.EFFECT_ICONS
+--{
+-- 	[32] = {'res/da/wuyi_touxiang_tx1.csb','GD_cat_tx_TX'},
+-- 	[33] = {'res/da/wuyi_touxiang_tx2.csb','GD_cs_tx_TX'}
+-- }
+
+--先放在最前面
+local FRONT_ICONS = {
+	32,
+	33,
+};
+
+--头像分类
+local HeadType_ALL = {
+	32,33,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
+}
+local HeadType_HOLIDAY = {
+	1,11,32,33
+}
+local HeadType_ACTIVITY = {
+	--暂无
+}
+local HeadType_SPECIFICITY = {
+	21,22,23,24,25,26,27,28,29,30,31
+}
+
+local temp_frame_HeadType = {}
+local scrollView = nil
+local frame1,frame2,frame3 = nil
+
+local PlayerInfoTips = class("PlayerInfoTips", function()
+	return cc.LayerColor:create(cc.c4b(85, 85, 85, 85), gt.winSize.width, gt.winSize.height)
+end)
+
+local csbNode = nil
+
+function PlayerInfoTips:ctor(playerData)
+	-- 注册节点事件
+	self:registerScriptHandler(handler(self, self.onNodeEvent))
+
+	csbNode = cc.CSLoader:createNode("PlayerInfoTips.csb")
+	csbNode:setPosition(gt.winCenter)
+	self:addChild(csbNode)
+	self.rootNode = csbNode;
+
+	local btnClose = gt.seekNodeByName(csbNode,'Btn_close');
+	gt.addBtnPressedListener(btnClose,function(sender)
+		self:removeFromParent()
+	end)
+
+	local btnUseHeadFrame = gt.seekNodeByName(csbNode,'Button_useframe');
+	gt.addBtnPressedListener(btnUseHeadFrame,function()
+		gt.showLoadingTips(gt.getLocationString("LTKey_0063"))
+		self:useHeadFrame()
+	end)
+	self.btnUseHeadFrame = btnUseHeadFrame;
+	-- 头像
+	local headSpr = gt.seekNodeByName(csbNode, "Spr_head")
+	Tools.setHeardTexture( headSpr, playerData.m_uid or playerData.uid)
+
+	local sprHeadframe = gt.seekNodeByName(csbNode,'Sprite_headframe');
+	-- if(sprHeadframe) then 
+	-- 	--Sprite_headframe:setTexture(headPath)
+	local headIndex = gt.playerData.curHeadIcon + 1;
+	-- 	local str = string.format("res/sd/images/otherImages/headframes/%03d.png",headIndex)
+	-- 	sprHeadframe:setTexture(str);
+	-- end 
+	gt.addHeadFrames_Sprite(sprHeadframe,headIndex);
+
+
+	-- 性别
+	local sexSpr = gt.seekNodeByName(csbNode, "Spr_sex")
+	-- 默认男
+	local sexFrameName = "images/otherImages/common/nan.png"
+	if playerData.m_sex == 2 or playerData.sex == 2 then
+		-- 女
+		sexFrameName = "images/otherImages/common/nv.png"
+	end
+	--sexSpr:setSpriteFrame(sexFrameName .. ".png")
+	sexSpr:setTexture(sexFrameName);
+
+	-- 昵称
+	local nicknameLabel = gt.seekNodeByName(csbNode, "Label_nickname")
+	local nickname = playerData.m_name or playerData.nickname
+	nickname = string.gsub(nickname, " ", "")
+	nicknameLabel:setString(nickname)
+	
+	-- ID
+	local uidLabel = gt.seekNodeByName(csbNode, "Label_uid")
+	uidLabel:setString("ID: " .. (playerData.m_uid or playerData.uid))
+
+	-- ip
+	local ipLabel = gt.seekNodeByName(csbNode, "Label_ip")
+	ipLabel:setString("IP: " .. (playerData.m_ip or playerData.ip ))
+
+	--	手机号绑定
+	local isPhoneBindLabel = gt.seekNodeByName(csbNode, "Label_phone_text")
+	local phoneLabel = gt.seekNodeByName(csbNode,"Label_phone_num")
+	local phoneNum = playerData.m_phone or playerData.phone 
+	if string.len(phoneNum) > 0 then
+		isPhoneBindLabel:setString("已绑定手机号")
+		phoneLabel:setString(phoneNum)
+	else
+		isPhoneBindLabel:setString("未绑定手机号")
+		phoneLabel:setString("")
+	end
+	--相框名字和说明
+	self.frameName = gt.seekNodeByName(csbNode,"Text_name")
+	self.frameDis = gt.seekNodeByName(csbNode,"Text_dis")
+	self:getTheNameForHead(gt.playerData.curHeadIcon)
+	--头像框部分：
+	local listView_Type = gt.seekNodeByName(csbNode, "ListView_types")
+	local btn_model = gt.seekNodeByName(listView_Type,'Btn_model');
+
+	self.tabBtns = {}
+	listView_Type:removeItem(0)
+	local infoHeadType = {
+		{"HeadType_ALL","pic_all_text1.png","pic_all_text2.png"},         --所有头像
+		{"HeadType_HOLIDAY","pic_holiday_text1.png","pic_holiday_text2.png"},	  --节日头像
+		{"HeadType_ACTIVITY","pic_activity_text1.png","pic_activity_text2.png"},    --活动头像
+		{"HeadType_SPECIFICITY","pic_specificity_text1.png","pic_specificity_text2.png"} --专属头像
+	}
+	print("#infoHeadType=="..#infoHeadType)
+	local prefix = 'images/otherImages/headframes/'
+	local function hideTheHightPic()
+		for i=1,#infoHeadType do
+			local imag_On = gt.seekNodeByName(self.tabBtns[i],"Image_on")
+			imag_On:setVisible(false)
+		end
+	end 
+	for i=1,#infoHeadType do
+		local button = btn_model:clone()
+		self.tabBtns[i] = button
+		local imag_On = gt.seekNodeByName(button,"Image_on")
+		if i > 1 then
+			imag_On:setVisible(false)
+		end
+		local info_On = gt.seekNodeByName(button,"info_on")
+		info_On:loadTexture(prefix ..infoHeadType[i][3]);
+
+		local imag_Off = gt.seekNodeByName(button,"Image_off")
+		imag_Off:loadTexture(prefix ..infoHeadType[i][2]);
+		gt.addBtnPressedListener(button,function()
+			--更换头像列表
+			if (self.curHeadType ~= i) then
+				hideTheHightPic()
+				imag_On:setVisible(true)
+				self:createHeadFramesList(i)
+				self.curHeadType = i
+
+				if (self.btnUseHeadFrame:isVisible()) then
+					self.btnUseHeadFrame:setVisible(false)
+				end
+			end
+		end)
+		listView_Type:pushBackCustomItem(button)
+	end
+
+	scrollView = gt.seekNodeByName(csbNode,'ScrollView_frames');
+	scrollView:setSwallowTouches(true);
+
+	-- self.sz = scrollView:getInnerContainerSize();
+	
+
+	-- local frame1 = gt.seekNodeByName(csbNode,'Image_head_1');
+	-- frame1:setVisible(false);
+	-- local frame2 = gt.seekNodeByName(csbNode,'Image_head_2');
+	-- frame2:setVisible(false);
+	-- local frame3 = gt.seekNodeByName(csbNode,'Image_head_3');
+	-- frame3:setVisible(false);
+
+	-- local framePos = cc.p(frame1:getPosition());
+	-- self.basePos = cc.p(framePos.x,self.sz.height - framePos.y);
+	-- self.offsetX = frame2:getPositionX() - frame1:getPositionX();
+	-- self.offsetY = frame3:getPositionY() - frame1:getPositionY();
+
+	--创建头像框列表
+	self.curHeadType = 1
+	self:createHeadFramesList(1)
+	
+--[[
+	local scrollView = gt.seekNodeByName(csbNode,'ScrollView_frames');
+	scrollView:setSwallowTouches(true);
+
+	self.lockedFrameArray = {};
+	self.frameArray = {};
+	self.frameSelected = gt.playerData.curHeadIcon;
+	local gainFrameArray = gt.playerData.gainHeadIcons;
+
+	for i = 1,MAX_FRAME do
+		if(i <= MAX_FREE_ID) then 
+			self.lockedFrameArray[i] = false
+		else
+			self.lockedFrameArray[i] = true
+		end 
+	end
+	for i,v in ipairs(gainFrameArray) do 
+		self.lockedFrameArray[v+1] = false;
+	end 
+
+	local sz = scrollView:getInnerContainerSize();
+	local frame1 = gt.seekNodeByName(csbNode,'Image_head_1');
+	frame1:setVisible(false);
+	local frame2 = gt.seekNodeByName(csbNode,'Image_head_2');
+	frame2:setVisible(false);
+	local frame3 = gt.seekNodeByName(csbNode,'Image_head_3');
+	frame3:setVisible(false);
+
+	local framePos = cc.p(frame1:getPosition());
+	local basePos = cc.p(framePos.x,sz.height - framePos.y);
+	local offsetX = frame2:getPositionX() - frame1:getPositionX();
+	local offsetY = frame3:getPositionY() - frame1:getPositionY();
+	local line = math.ceil(MAX_FRAME /MAX_PER_LINE);
+	local h = math.abs(offsetY * (line + 0.1));
+	basePos.y  = h - basePos.y;
+	scrollView:setInnerContainerSize(cc.size(sz.width, h))
+	--uiIndex  从0 开始
+	--iconIndex 从 1 开始 
+	local function addFrame(uiIndex,iconIndex,offset)
+		offset = offset or 0;
+		print("==addFrame "..uiIndex ..' '..iconIndex ..' ' ..tostring(offset));
+
+		local uiIdxFix = (uiIndex + offset)
+		local x = uiIdxFix%MAX_PER_LINE;
+		local y = math.floor(uiIdxFix/MAX_PER_LINE);
+		local frame = frame2:clone():addTo(scrollView);
+		frame:setVisible(true);
+		frame:setPosition(basePos.x + offsetX* x ,basePos.y+offsetY* y); 
+		-- --scrollView:addChild(frame);
+		-- if(EFFECT_ICONS[iconIndex]) then --是特效的
+		-- 	local info = EFFECT_ICONS[iconIndex];
+		-- 	local beginAnimateNode, beginAnimate = gt.createCSAnimation(info[1]);
+		-- 	beginAnimateNode:setTag(1000);
+		-- 	frame:addChild(beginAnimateNode,1024);
+		-- 	local uiSize = frame:getContentSize();
+		-- 	beginAnimateNode:setPosition(ccp(uiSize.width/2,uiSize.height/2 ));
+		-- 	beginAnimate:play(info[2], true);
+		-- 	frame:loadTexture("images/otherImages/headframes/place_holder.png");
+		-- else
+		-- 	local file = string.format( "res/sd/images/otherImages/headframes/%03d.png",iconIndex);
+		-- 	frame:loadTexture(file);
+		-- end 
+		gt.addHeadFrames_Image(frame,iconIndex);
+
+		local imageSelect = gt.seekNodeByName(frame,'Image_selected');
+		imageSelect:setVisible(false);
+		local imageLocked = gt.seekNodeByName(frame,'Image_locked');
+		imageLocked:setVisible(self.lockedFrameArray[iconIndex]);
+		local textInfo = gt.seekNodeByName(frame,'Text_info');
+		textInfo:setVisible(false);
+		frame:addClickEventListener(function(sender)
+			self:selectHeadFrame(iconIndex);
+		end)
+		--self.frameArray[#self.frameArray+1] = frame;		
+		self.frameArray[iconIndex] = frame;		
+	end 
+
+	--local frontKeys = {};
+	-- for _,v in ipairs(FRONT_ICONS) do
+	-- 	if(self.lockedFrameArray[v] == false) then --没有锁定
+	-- 		frontKeys[#frontKeys + 1] = v;
+	-- 	end  
+	-- end 
+
+	local offset = #FRONT_ICONS;
+	for i = 1,offset do 
+		addFrame(i-1,FRONT_ICONS[i]);
+	end 
+
+	local function isFrameAdd(key)
+		for _,v in ipairs(FRONT_ICONS) do
+			if(v == key) then 
+				return true;
+			end 
+		end 
+		return false;
+	end 
+
+	local i =  1;
+	while i <= MAX_FRAME  do
+		if not (isFrameAdd(i)) then 
+			addFrame(table.nums(self.frameArray),i);
+		end
+		i = i + 1;
+	end
+
+	-- --节日限定
+	-- local offset = #HeadType_HOLIDAY
+	-- for i=1,offset do
+	-- 	addFrame(i-1,HeadType_HOLIDAY[i])
+	-- end
+
+	-- local function isFrameAdd(key)
+	-- 	for _,v in ipairs(FRONT_ICONS) do
+	-- 		if(v == key) then 
+	-- 			return true;
+	-- 		end 
+	-- 	end 
+	-- 	return false;
+	-- end 
+
+	-- local i =  1;
+	-- while i <= #HeadType_HOLIDAY  do
+	-- 	if not (isFrameAdd(i)) then 
+	-- 		addFrame(table.nums(self.frameArray),i);
+	-- 	end
+	-- 	i = i + 1;
+	-- end
+
+
+
+
+
+	
+	-- for i = 1, MAX_FRAME do 
+	-- 	-- local index = (i - 1);
+	-- 	-- local x = index%MAX_PER_LINE;
+	-- 	-- local y = math.floor(index/4);
+	-- 	-- local frame = frame2:clone();
+	-- 	-- scrollView:addChild(frame);
+	-- 	-- frame:setVisible(true);
+	-- 	-- local file = string.format( "res/sd/images/otherImages/headframes/%03d.png",i);
+	-- 	-- frame:loadTexture(file);
+	-- 	-- frame:setPosition(basePos.x + offsetX* x ,basePos.y+offsetY* y); 
+	-- 	-- local imageSelect = gt.seekNodeByName(frame,'Image_selected');
+	-- 	-- imageSelect:setVisible(false);
+	-- 	-- local imageLocked = gt.seekNodeByName(frame,'Image_locked');
+	-- 	-- imageLocked:setVisible(self.lockedFrameArray[i]);
+	-- 	-- local textInfo = gt.seekNodeByName(frame,'Text_info');
+	-- 	-- textInfo:setVisible(false);
+	-- 	-- frame:addClickEventListener(function(sender)
+	-- 	-- 	self:selectHeadFrame(i);
+	-- 	-- end)
+	-- 	-- self.frameArray[#self.frameArray+1] = frame;
+	-- 	if not (isFrameAdd(i)) then 
+	-- 		addFrame(i-1,i,offset);
+	-- 	end 
+	-- end
+	self:setHeadFrameUsed(self.frameSelected);
+]]	
+	gt.socketClient:registerMsgListener(gt.GC_MODIFY_HEAD_RRAME,self,self.onRcvModifyHeadFrame)
+end
+
+function PlayerInfoTips:getTheNameForHead(headId)
+	for i=1,#gt.headFrameName do
+		if (headId + 1 == tonumber(gt.headFrameName[i].id)) then
+			self.frameName:setString(gt.headFrameName[i].name)
+			self.frameDis:setString(gt.headFrameName[i].dis)
+		end
+	end
+end
+
+function PlayerInfoTips:createHeadFramesList(listView_index)
+
+	-- scrollView = gt.seekNodeByName(csbNode,'ScrollView_frames');
+	-- scrollView:setSwallowTouches(true);
+	if(scrollView) and #temp_frame_HeadType > 0 then
+		for i=0,#temp_frame_HeadType do
+			if (scrollView:getChildByTag(100+i)) then
+				scrollView:getChildByTag(100+i):removeFromParent()
+			end
+		end
+	end
+	scrollView:setScrollBarColor(cc.c3b(176,159,178))
+	scrollView:setScrollBarOpacity(255)
+	scrollView:setScrollBarAutoHideEnabled(false)
+	scrollView:jumpToTop()
+	local max_frame_Type = MAX_FRAME
+	local initSZHeiht = 628
+	temp_frame_HeadType = {}
+	if(listView_index == 1) then
+		max_frame_Type = #HeadType_ALL
+		temp_frame_HeadType = HeadType_ALL
+	elseif (listView_index == 2) then
+		max_frame_Type = #HeadType_HOLIDAY
+		temp_frame_HeadType = HeadType_HOLIDAY
+		initSZHeiht = 500
+	elseif (listView_index == 3) then
+		max_frame_Type = #HeadType_ACTIVITY
+		temp_frame_HeadType = HeadType_ACTIVITY
+	elseif (listView_index == 4) then
+		max_frame_Type = #HeadType_SPECIFICITY
+		temp_frame_HeadType = HeadType_SPECIFICITY
+	end
+
+	
+	
+
+	self.lockedFrameArray = {};
+	self.frameArray = {};
+	self.frameSelected = gt.playerData.curHeadIcon;
+	local gainFrameArray = gt.playerData.gainHeadIcons;
+	-- dump(temp_frame_HeadType,"temp_frame_HeadType==")
+	for i = 1,max_frame_Type do
+		if(temp_frame_HeadType[i] <= MAX_FREE_ID) then 
+			self.lockedFrameArray[i] = false
+		else
+			self.lockedFrameArray[i] = true
+		end 
+		for j,v in ipairs(gainFrameArray) do 
+			if (v+1 == temp_frame_HeadType[i]) then
+				self.lockedFrameArray[i] = false
+			end
+		end
+	end
+	-- dump(self.lockedFrameArray,"self.lockedFrameArray==")
+	-- for i,v in ipairs(gainFrameArray) do 
+	-- 	self.lockedFrameArray[v+1] = false;
+	-- end 
+
+	local sz = scrollView:getInnerContainerSize();
+	sz.height = initSZHeiht
+
+	local frame1 = gt.seekNodeByName(csbNode,'Image_head_1');
+	frame1:setVisible(false);
+	local frame2 = gt.seekNodeByName(csbNode,'Image_head_2');
+	frame2:setVisible(false);
+	local frame3 = gt.seekNodeByName(csbNode,'Image_head_3');
+	frame3:setVisible(false);
+
+	local framePos = cc.p(frame1:getPosition());
+	local basePos = cc.p(framePos.x,sz.height - framePos.y);
+	local offsetX = frame2:getPositionX() - frame1:getPositionX();
+	local offsetY = frame3:getPositionY() - frame1:getPositionY();
+	local line = math.ceil(max_frame_Type /MAX_PER_LINE);
+	local h = math.abs(offsetY * (line + 0.1));
+	basePos.y  = h - basePos.y;
+	-- print("scrollView高度=="..h.."=====line=="..line)
+	-- print("basePos.y==="..basePos.y)
+	-- print("offsetX==="..offsetX)
+	-- print("offsetY==="..offsetY)
+	-- print("sz.width==="..sz.width)
+	-- print("sz.height==="..sz.height)
+	scrollView:setInnerContainerSize(cc.size(sz.width, h))
+	--uiIndex  从0 开始
+	--iconIndex 从 1 开始 
+	local function addFrame(uiIndex,iconIndex,offset)
+		offset = offset or 0;
+		-- print("==addFrame "..uiIndex ..' '..iconIndex ..' ' ..tostring(offset));
+
+		local uiIdxFix = (uiIndex + offset)
+		local x = uiIdxFix%MAX_PER_LINE;
+		local y = math.floor(uiIdxFix/MAX_PER_LINE);
+		local frame = frame2:clone():addTo(scrollView);
+		frame:setTag(uiIndex + 100)
+		frame:setVisible(true);
+		frame:setPosition(basePos.x + offsetX* x ,basePos.y+offsetY* y); 
+		
+		gt.addHeadFrames_Image(frame,iconIndex);
+
+		local imageSelect = gt.seekNodeByName(frame,'Image_selected');
+		imageSelect:setVisible(false);
+		local imageLocked = gt.seekNodeByName(frame,'Image_locked');
+		imageLocked:setVisible(self.lockedFrameArray[uiIndex+1]);
+		local textInfo = gt.seekNodeByName(frame,'Text_info');
+		textInfo:setVisible(false);
+		frame:addClickEventListener(function(sender)
+			self:selectHeadFrame(uiIndex+1);
+		end)		
+		self.frameArray[uiIndex+1] = frame;		
+	end 
+	local i =  1;
+	while i <= max_frame_Type  do
+		addFrame(table.nums(self.frameArray),temp_frame_HeadType[i]);
+		i = i + 1;
+	end
+	self:setHeadFrameUsed(self.frameSelected);
+end
+
+function PlayerInfoTips:onNodeEvent(eventName)
+	if "enter" == eventName then
+		print("")
+		local listener = cc.EventListenerTouchOneByOne:create()
+		listener:setSwallowTouches(true)
+		listener:registerScriptHandler(handler(self, self.onTouchBegan), cc.Handler.EVENT_TOUCH_BEGAN)
+		listener:registerScriptHandler(handler(self, self.onTouchEnded), cc.Handler.EVENT_TOUCH_ENDED)
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:addEventListenerWithSceneGraphPriority(listener, self)
+
+	elseif "exit" == eventName then
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:removeEventListenersForTarget(self)
+	end
+end
+
+function PlayerInfoTips:onTouchBegan(touch, event)
+	return true
+end
+
+function PlayerInfoTips:onTouchEnded(touch, event)
+	--self:removeFromParent()
+end
+
+function PlayerInfoTips:initHeadFrames(offset)
+	print("initHeadFrames");
+	
+	
+end
+
+function PlayerInfoTips:onRcvModifyHeadFrame(msgTbl)
+	print("PlayerInfoTips:onRcvModifyHeadFrame");
+	--dump(msgTbl)
+	gt.removeLoadingTips();
+	local errorCode = msgTbl.m_errorCode;
+	if(errorCode == 0) then 
+		local headIndex = msgTbl.m_headIconId;
+		self:setHeadFrameUsed(headIndex);
+		gt.CommonEvent:dispatchEvent{
+			name = 'EVENT_MAIN_SCENE_UPDATE_HEAD_FRAME',
+			msgTbl = msgTbl,
+		};
+    elseif(errorCode == 1) then --INVALID VALUE 无效值
+		require("app/views/NoticeTips"):create("提示", "无效的值，请重新选择头像框", nil, nil, true) 
+    elseif(errorCode == 2) then --already used 已经在使用了
+		require("app/views/NoticeTips"):create("提示", "当前头像框已经在使用", nil, nil, true) 
+    elseif(errorCode == 3) then --NOTGAIN 没有获得
+		require("app/views/NoticeTips"):create("提示", "当前头像框尚未解锁", nil, nil, true) 
+    end 
+
+end 
+
+function PlayerInfoTips:isFrameLocked(frameKey)
+	return self.lockedFrameArray[frameKey] ;
+end 
+
+function PlayerInfoTips:selectHeadFrame(frameKey)
+
+	-- local frameIdx = self.frameSelected +1
+	-- print("frameIdx "..frameIdx);
+
+	for i,v in ipairs(self.frameArray) do
+		local imageSelect = gt.seekNodeByName(v,'Image_selected');
+		imageSelect:setVisible(i == frameKey);
+		-- if(i == frameKey) then
+		-- 	imageSelect:setVisible(true);
+		-- else
+		-- 	imageSelect:setVisible(false);
+		-- end
+	end   
+
+	-- if(frameIdx ~= frameKey) then
+		self.frameSelected = temp_frame_HeadType[frameKey] - 1;
+	-- end
+	print("gt.playerData.curHeadIcon "..gt.playerData.curHeadIcon);
+	print("self.frameSelected "..self.frameSelected);
+	if(gt.playerData.curHeadIcon == self.frameSelected) then 
+		self.btnUseHeadFrame:setVisible(false);
+		local sprHeadframe = gt.seekNodeByName(self.rootNode,'Sprite_headframe');
+		-- if(sprHeadframe) then 
+		-- 	local headIndex = frameKey;
+		-- 	local str = string.format("res/sd/images/otherImages/headframes/%03d.png",headIndex)
+		-- 	sprHeadframe:setTexture(str);
+		-- end
+		gt.addHeadFrames_Sprite(sprHeadframe,temp_frame_HeadType[frameKey]);
+	else
+		self.btnUseHeadFrame:setVisible(true);
+	end 
+
+	if(self:isFrameLocked(frameKey))then 
+		-- return;
+		self.btnUseHeadFrame:setVisible(false);
+	end
+
+	self:getTheNameForHead(self.frameSelected)
+
+end
+
+function PlayerInfoTips:lockHeadFrame(frameKey,isLock)
+	--
+	--islock = (islock == nil) and true or islock;
+	if(islock == nil) then
+		islock = true;
+	end
+
+	local v = self.frameArray[frameKey]
+	if(v) then 
+		local imageLocked = gt.seekNodeByName(v,'Image_locked');
+		imageLocked:setVisible(isLock);
+		self.lockedFrameArray[frameKey] = isLock; 
+	end
+end 
+
+function PlayerInfoTips:showUseInfo(frameKey,isUse)
+	if(isUse == nil) then --default 
+		isUse = true;
+	end
+	-- local v = self.frameArray[frameKey]
+	-- if(v) then 
+	-- 	local textInfo = gt.seekNodeByName(v,'Text_info');
+	-- 	textInfo:setVisible(isUse);
+	-- 	--self.lockedFrameArray[frameKey] = isLock; 
+	-- end
+	for i,v in ipairs(self.frameArray) do
+		local textInfo = gt.seekNodeByName(v,'Text_info');
+		if(i == frameKey) then 	
+			textInfo:setVisible(isUse);
+		else
+			textInfo:setVisible(false);
+		end
+	end 
+end 
+
+function PlayerInfoTips:setHeadFrameUsed(frameKey)
+	gt.playerData.curHeadIcon = frameKey;
+	local displayIndex = frameKey + 1;
+	for i=1,#temp_frame_HeadType do
+		if (temp_frame_HeadType[i]==displayIndex) then
+			self:lockHeadFrame(i,false); --解锁
+			self:selectHeadFrame(i);
+			self:showUseInfo(i);
+		end
+	end
+end 
+
+
+function PlayerInfoTips:useHeadFrame()
+	local msgToSend = {}
+	msgToSend.m_msgId = gt.CG_MODIFY_HEAD_FRAME;
+	local headIconId = self.frameSelected;
+	if(headIconId < 0) then 
+		headIconId = 0;
+	end
+	msgToSend.m_headIconId = headIconId;
+	gt.socketClient:sendMessage(msgToSend)
+end 
+return PlayerInfoTips
+
+

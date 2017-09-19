@@ -1,0 +1,208 @@
+local PhoneBindLayer = class("PhoneBindLayer", function()
+	return cc.LayerColor:create(cc.c4b(85, 85, 85, 85), gt.winSize.width, gt.winSize.height)
+end)
+
+local gt = cc.exports.gt
+
+function PhoneBindLayer:ctor(callBack)
+	-- 注册节点事件
+	self:registerScriptHandler(handler(self, self.onNodeEvent))
+
+	local csbNode = cc.CSLoader:createNode("PhoneBindLayer.csb")
+	csbNode:setPosition(gt.winCenter)
+	self:addChild(csbNode)
+	self.rootNode = csbNode
+	self.closeBtn = gt.seekNodeByName(self.rootNode, "closeBtn")
+	gt.addBtnPressedListener(self.closeBtn, function()
+		self:closeHandler()
+	end)
+	self.phonePanel = gt.seekNodeByName(self.rootNode, "Panel_phone")
+	self.codePanel = gt.seekNodeByName(self.rootNode, "Panel_code")
+	local phoneEditBox = ccui.EditBox:create(cc.size(300,40),"请输入11位手机号")
+	phoneEditBox:setPlaceHolder("请输入11位手机号")
+	phoneEditBox:setPosition(350,268)
+	phoneEditBox:setFontSize(34)
+	phoneEditBox:setFontColor(cc.c3b(130,108,129))
+	phoneEditBox:setPlaceholderFontSize(34)
+	phoneEditBox:setPlaceholderFontColor(cc.c3b(130,108,129))
+	phoneEditBox:setInputMode(cc.EDITBOX_INPUT_MODE_PHONENUMBER)
+	phoneEditBox:setMaxLength(11)
+	self.phonePanel:addChild(phoneEditBox)
+	self.phoneEditBox = phoneEditBox
+
+	--	获取验证码
+	local btnGetCode = gt.seekNodeByName(self.phonePanel,"Button_get_code")
+	gt.addBtnPressedListener(btnGetCode, function()
+		self:getCodeFromServer()
+	end)
+
+	gt.socketClient:registerMsgListener(gt.GC_SECURITY_CODE,self,self.onRcvCode);
+	gt.socketClient:registerMsgListener(gt.GC_PHONE_BIND,self,self.onRcvPhoneBind);
+	self.callBack = callBack
+end
+
+--	向服务器请求验证码
+function PhoneBindLayer:getCodeFromServer(  )
+	if self.phoneEditBox and string.len(self.phoneEditBox:getText()) ~= 11 then
+		require("app/views/NoticeTips"):create("提示", "请输入11位正确手机号", nil, nil, true)
+		return
+	end
+	-- 	先请求一下活动数据
+	local msgToSend = {}
+	msgToSend.m_msgId  = gt.CG_SECURITY_CODE
+	msgToSend.m_seed = gt.loginSeed
+	msgToSend.m_id = gt.playerData.uid
+	msgToSend.m_phone = self.phoneEditBox:getText()
+	self.phoneNum = self.phoneEditBox:getText()
+	local catStr = tostring(gt.loginSeed)
+	msgToSend.m_md5 = cc.UtilityExtension:generateMD5(catStr, string.len(catStr))
+	gt.socketClient:sendMessage(msgToSend)
+end
+
+-- 服务器返回验证码
+function PhoneBindLayer:onRcvCode( msgTbl )
+	local res = msgTbl.m_result
+	local str = ""
+	if res == 0 then
+		str = "验证码已成功发送至".. self.phoneNum .. "号码！\n请注意查收"
+		if not self.codePanel:isVisible() then
+			self:showCodePanel()
+		end
+	elseif res == 1 then
+		str = "验证码发送失败"
+	elseif res == 2 then
+		str = "该手机号已经绑定过"
+	elseif res == 3 then
+		str = "已在其它账户绑定过"
+	else 
+		str = "验证码发送失败"
+	end
+	require("app/views/NoticeTips"):create("提示", str, nil, nil, true)
+end
+
+function PhoneBindLayer:closeHandler(  )
+	if self.scheduleHandler then
+		gt.scheduler:unscheduleScriptEntry(self.scheduleHandler)
+	end
+	gt.socketClient:unregisterMsgListener(gt.GC_SECURITY_CODE)
+	gt.socketClient:unregisterMsgListener(gt.GC_PHONE_BIND)
+	self:removeFromParent()
+end
+
+--	服务器返回手机绑定结果
+function PhoneBindLayer:onRcvPhoneBind( msgTbl )
+	local res = msgTbl.m_result
+	local str = ""
+	if res == 0 then
+		require("app/views/NoticeTips"):create("提示", "绑定成功，恭喜您获得两张房卡！", function (  )
+			gt.playerData.phone = self.phoneNum
+			if self.callBack then
+				self.callBack()
+			end
+			self:closeHandler()
+		end, nil, true)
+		return
+	elseif res == 1 then
+		str = "验证码错误，绑定失败"
+	elseif res == 2 then
+		str = "已绑定过手机号"
+	elseif res == 3 then
+		str = "手机号码已被他人绑定"
+	end
+	require("app/views/NoticeTips"):create("提示",str , nil, nil, true)
+end
+
+--	显示验证码界面
+function PhoneBindLayer:showCodePanel(  )
+	self.phonePanel:setVisible(false)
+	self.codePanel:setVisible(true)
+	self.timeSec = 60
+	self.timeCoolText = gt.seekNodeByName(self.codePanel,"Text_timecool")
+	self.timeCoolText:setString(self.timeSec.."s")
+	self.btnResend = gt.seekNodeByName(self.codePanel,"Button_resend")
+	self.btnResend:setVisible(false)
+
+	gt.addBtnPressedListener(self.btnResend, function()
+		if self.timeSec == 0 then
+			self.timeSec = 60
+			self.btnResend:setVisible(false)
+			self.timeCoolText:setVisible(true)
+			self.timeCoolText:setString(self.timeSec.."s")
+			self.scheduleHandler = gt.scheduler:scheduleScriptFunc(handler(self, self.updateTime), 1, false)
+			self:getCodeFromServer()
+		else
+			require("app/views/NoticeTips"):create("提示", "请"..self.timeSec .."秒后重新获取验证码", nil, nil, true)
+		end
+	end)
+	local btnBind = gt.seekNodeByName(self.codePanel,"Button_bind")
+	gt.addBtnPressedListener(btnBind, function()
+		self:c2gPhoneBind()
+	end)
+	self.scheduleHandler = gt.scheduler:scheduleScriptFunc(handler(self, self.updateTime), 1, false)
+end
+
+--	给服务器发送手机绑定的消息
+function PhoneBindLayer:c2gPhoneBind(  )
+	local codeTextField = gt.seekNodeByName(self.codePanel,"TextField_code")
+	local codeStr = codeTextField:getString()
+	if string.len(codeStr) < 1 then
+		require("app/views/NoticeTips"):create("提示", "请输入验证码", nil, nil, true)
+		return
+	end
+	local msgToSend = {}
+	msgToSend.m_msgId  = gt.CG_PHONE_BIND
+	msgToSend.m_seed = gt.loginSeed
+	msgToSend.m_id = gt.playerData.uid
+	msgToSend.m_phone = self.phoneNum
+	local catStr = tostring(gt.loginSeed)
+	msgToSend.m_md5 = cc.UtilityExtension:generateMD5(catStr, string.len(catStr))
+	msgToSend.m_code = codeStr
+	gt.socketClient:sendMessage(msgToSend)
+end
+
+
+function PhoneBindLayer:updateTime( )
+	self.timeSec = self.timeSec - 1
+	self.timeCoolText:setString(self.timeSec.."s")
+	if self.timeSec == 0 then
+		self.timeCoolText:setVisible(false)
+		self.btnResend:setVisible(true)
+		if self.scheduleHandler then
+			gt.scheduler:unscheduleScriptEntry(self.scheduleHandler)
+			self.scheduleHandler = nil
+		end
+	end
+end
+
+
+function PhoneBindLayer:onNodeEvent(eventName)
+	if "enter" == eventName then
+		local listener = cc.EventListenerTouchOneByOne:create()
+		listener:setSwallowTouches(true)
+		listener:registerScriptHandler(handler(self, self.onTouchBegan), cc.Handler.EVENT_TOUCH_BEGAN)
+		listener:registerScriptHandler(handler(self, self.onTouchEnded), cc.Handler.EVENT_TOUCH_ENDED)
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:addEventListenerWithSceneGraphPriority(listener, self)
+	elseif "exit" == eventName then
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:removeEventListenersForTarget(self)
+	end
+end
+
+function PhoneBindLayer:onTouchBegan(touch, event)
+	return true
+end
+
+function PhoneBindLayer:onTouchEnded(touch, event)
+	local bg = gt.seekNodeByName(self.rootNode, "Img_bg")
+	if bg then
+		local point = bg:convertToNodeSpace(touch:getLocation())
+		local rect = cc.rect(0, 0, bg:getContentSize().width, bg:getContentSize().height)
+		if not cc.rectContainsPoint(rect, cc.p(point.x, point.y)) then
+			-- self:removeFromParent()
+		end
+	end
+end
+
+
+return PhoneBindLayer

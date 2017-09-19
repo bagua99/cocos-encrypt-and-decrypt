@@ -1,0 +1,73 @@
+local RoomOptions = class("RoomOptions", function()
+	return cc.Node:create()
+	--return cc.Layer:create()
+end)
+
+local userDefault = cc.UserDefault:getInstance()
+
+local COLOR_SELECT = cc.c4b(254,205,255,255);--c.c4b(255, 0, 0, 255)
+local COLOR_OUTLINE =cc.c4b(254,205,255,255); --cc.c4b(255, 183, 0, 255)
+
+function RoomOptions:ctor()
+	--self.oriColor = cc.c3b(102, 38, 0)
+	self.oriColor = cc.c3b(254,205,255);
+
+	self:initSelect()
+end
+
+function RoomOptions:initSelect()
+	self:initWanfa()
+	self:initGuipai()
+	self:initMapai()
+	self:initKexuan()
+end
+
+function RoomOptions:initWanfa()
+end
+
+function RoomOptions:initGuipai()
+end
+
+function RoomOptions:initMapai()
+end
+
+function RoomOptions:initKexuan()
+end
+
+function RoomOptions:getStatu()
+	return gt.RoomType.ROOM_TUIDAOHU
+end
+
+function RoomOptions:getPlayType()
+	return {}
+end
+
+function RoomOptions:getNodes(parent, name, count)
+	local node = parent:getChildByName("Node_" .. name)
+	local ret = {}
+	for i = 1, count do
+		ret[i] = {}
+		local curNode = node:getChildByName("Node_".. name .. "_" .. i)
+		ret[i].check = curNode:getChildByName("ChkBox_show")
+		ret[i].label = curNode:getChildByName("Label_name")
+		ret[i].panel = curNode:getChildByName("Panel_touch")
+		ret[i].button = curNode:getChildByName("Button_touch")
+	end
+	return ret
+end
+
+function RoomOptions:refreshCheckOutline( _label, _type )
+	if not _label then
+		return 
+	end
+
+	if _type then
+		_label:setTextColor(COLOR_SELECT)
+		--gt.setTTFLabelStroke(_label, COLOR_OUTLINE)
+	else
+		_label:setTextColor(self.oriColor)
+		--gt.setTTFLabelStroke(_label, cc.c4b(255, 183, 0, 0))
+	end
+end
+
+return RoomOptions

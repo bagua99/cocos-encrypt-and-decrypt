@@ -1,0 +1,493 @@
+-- RoundReport 
+-- app.views.room.RoundReport 
+-- this is BaseRoundReport in _G.
+-- reload after hot update
+--
+
+local gt = cc.exports.gt
+
+local RoundReport = class("RoundReport", function()
+	return cc.Layer:create()
+end)
+
+RoundReport.HUMSG = {
+	[1] = "小胡",
+	[7] = "自摸胡",
+	[8] = "杠上开花",
+	[9] = "杠上炮",
+	[10] = "海底捞月",
+	[11] = "海底炮",
+	[12] = "抢杠胡",
+	[13] = "起手四个赖子",
+	[14] = "门清",
+	[15] = "三元刻+1",
+	[16] = "三元刻+2",
+	[17] = "风圈+1",
+	[18] = "风位+1",
+	[43] = "节节高",
+	[101] = "鸡胡",
+	[102] = "平胡",
+	[103] = "碰碰胡",
+	[104] = "混一色",
+	[105] = "混碰",
+	[106] = "清一色",
+	[107] = "清碰",
+	[108] = "混幺九",
+	[109] = "小三元",
+	[110] = "小四喜",
+	[111] = "字一色",
+	[112] = "清幺九",
+	[113] = "大三元",
+	[114] = "大四喜",
+	[115] = "十三幺",
+	[116] = "豪华七对",
+	[117] = "七小对",
+	[118] = "人胡",
+	[119] = "地胡",
+	[120] = "天胡",
+	[121] = "九莲宝灯",
+	[122] = "四鬼胡",
+	[123] = "幺九",
+	[124] = "无鬼加倍",
+	[125] = "花单吊",
+	[126] = "花吊花",
+	[127] = "跟庄",
+	[128] = "抢明杠胡",
+	[129] = "双豪华",
+	[130] = "三豪华",
+	[131] = "十八罗汉",
+	[132] = "清七对",
+	[133] = '清一色 豪华',   --清一色,豪华，注意需要额外处理 
+	[134] = '清一色 双豪华', --清一色,双豪华
+	[135] = '清一色 三豪华', --清一色，三豪华
+	[136] = '十二张落地',
+	[137] = '自摸门清',
+	[138] = '庄家胡牌',
+	[139] = '七花胡牌',
+	[140] = '八花胡牌',
+	[141] = '门清 清幺九 碰碰胡',
+	[142] = '门清 清碰',
+	[143] = '门清 混幺九',
+	[144] = '门清 清一色',
+	[145] = '门清 混碰',
+	[146] = "无红中",
+	[147] = '混一色七对',
+	[148] = '小幺',
+	[151] = '清十八罗汉',
+}
+
+
+RoundReport.TTF_MAXWIDTH = 1020
+RoundReport.TTF_SG_MAXWIDTH = 1050
+RoundReport.TTF_DES_MAX_WIDTH = 1020
+
+function RoundReport:ctor()
+	-- 注册节点事件
+	self:registerScriptHandler(handler(self, self.onNodeEvent))
+end
+
+--添加一个调用文件的借口
+
+function RoundReport:getCSBNodeFile()
+	return "RoundReport.csb";
+end 
+
+function RoundReport:init(roomPlayers, playerSeatIdx, rptMsgTbl, isLast)
+	--log("RoundReport:init");
+	local function loadCSBNode()
+		--local csbNode = cc.CSLoader:createNode("RoundReport.csb")
+		local path = self:getCSBNodeFile();
+		gt.log("getCSBNodeFile() = "..path)
+		self.m_csbNode = cc.CSLoader:createNode(path)
+		-- csbNode:setAnchorPoint(0.5, 0.5)
+		-- csbNode:setPosition(gt.winCenter)
+		-- self:addChild(csbNode)
+		:addTo(self)
+		:align(cc.p(0.5,0.5),gt.winCenter)
+		return self.m_csbNode
+	end 
+	
+	local csbNode  =loadCSBNode();
+
+	-- 结束标题
+	local reportTitleNode = gt.seekNodeByName(csbNode, "Node_reportTitle")
+	for _, reportTitleSpr in ipairs(reportTitleNode:getChildren()) do
+		reportTitleSpr:setVisible(false)
+	end
+	if rptMsgTbl.m_result == 2 then
+		-- 流局
+		local reportTitleSpr = gt.seekNodeByName(reportTitleNode, "Spr_liujuTitle")
+		reportTitleSpr:setVisible(true)
+
+		gt.soundEngine:playEffect("common/audio_liuju")
+	else
+		local roundResult = rptMsgTbl.m_win[playerSeatIdx]
+		if self:isLost(roundResult) then
+			-- 输了(没胡或者点炮)
+			local reportTitleSpr = gt.seekNodeByName(reportTitleNode, "Spr_loseTitle")
+			reportTitleSpr:setVisible(true)
+
+			gt.soundEngine:playEffect("common/audio_lose")
+
+		elseif self:isWin(roundResult) then
+			-- 赢了(自摸胡或者接炮)
+			local reportTitleSpr = gt.seekNodeByName(reportTitleNode, "Spr_winTitle")
+			reportTitleSpr:setVisible(true)
+
+			gt.soundEngine:playEffect("common/audio_win")
+		end
+	end
+	-- 具体信息
+	for seatIdx, roomPlayer in ipairs(roomPlayers) do
+
+		print("roomPlayer:getsuccesscnt :"..roomPlayer:getSuccessCnt())
+		local playerReportNode = gt.seekNodeByName(csbNode, "Node_playerReport_" .. seatIdx)
+		if(playerReportNode ~= nil) then
+			local playerReportSpr = gt.seekNodeByName(playerReportNode,"Sprite_diban")
+			if(playerReportSpr) then 
+			-- 昵称
+			--local playerReportSpr = gt.seekNodeByName(playerReportNode,"Sprite_diban")
+			local nicknameLabel = gt.seekNodeByName(playerReportNode, "Label_nickname")
+			nicknameLabel:setString(Tools.getUTF8StrByLenth(roomPlayer:getName(), 6) or "")
+			-- 详细结果
+			local detailLabel = gt.seekNodeByName(playerReportNode, "Label_detail")
+			local detailTxt = self:getDetailTxt(seatIdx, rptMsgTbl,roomPlayer)
+			-- 设置显示
+			detailLabel:setString(detailTxt)
+
+			-- X番
+			local regionScoreLabel = gt.seekNodeByName(playerReportNode, "Label_regionScore")
+			self:setRegionScoreLabel(regionScoreLabel, (rptMsgTbl.m_fanShu and rptMsgTbl.m_fanShu[seatIdx]) or math.abs(rptMsgTbl.m_score[seatIdx]))
+
+			-- 积分
+			local scoreLabel = gt.seekNodeByName(playerReportNode, "Label_score")
+			scoreLabel:setString(tostring(rptMsgTbl.m_score[seatIdx]))
+			-- 更新积分
+			-- roomPlayer:setScore(roomPlayer:getScore() + rptMsgTbl.m_score[seatIdx])
+			-- roomPlayer:getScoreLabel():setString(tostring(roomPlayer:getScore()))
+
+			-- 庄家标识
+			local bankerSignSpr = gt.seekNodeByName(playerReportNode, "Spr_bankerSign")
+			bankerSignSpr:setVisible(false)
+
+			--隐藏
+			-- gt.seekNodeByName(csbNode, "label_jiejiegao"):setVisible(false)
+
+			if roomPlayer:getBanker() then
+				bankerSignSpr:setVisible(true)
+			end
+
+			-- 持有麻将信息
+			local mjTileReferSpr = gt.seekNodeByName(playerReportNode, "Spr_mjTileRefer")
+			mjTileReferSpr:setVisible(false)
+			local referScale = mjTileReferSpr:getScale()
+			local referPos = cc.p(mjTileReferSpr:getPosition())
+			local mjTileSize = mjTileReferSpr:getContentSize()
+			local referSpace = cc.p(mjTileSize.width * referScale, 0)
+
+			-- 暗杠
+			for _, darkBar in ipairs(roomPlayer:getDarkBars()) do
+				for i = 1, 4 do
+					local mjTileName = string.format("p4s%d_%d.png", darkBar.mjColor, darkBar.mjNumber)
+					if i <= 3 then
+						-- 前三张牌显示背面
+						mjTileName = "tdbgs_4.png"
+					end
+					local mjTileSpr = cc.Sprite:createWithSpriteFrameName(mjTileName)
+					mjTileSpr:setScale(referScale)
+					mjTileSpr:setPosition(referPos)
+					playerReportSpr:addChild(mjTileSpr)
+					referPos = cc.pAdd(referPos, referSpace)
+					
+					if Tools.isGhost(darkBar.mjColor, darkBar.mjNumber, roomPlayer.m_gui) then
+						Tools.setMjTilesAngle( 4, mjTileSpr, gt.anglePngPath )
+					end
+				end
+				referPos.x = referPos.x + 16
+			end
+			-- 明杠
+			for _, brightBar in ipairs(roomPlayer:getBrightBars()) do
+				for i = 1, 4 do
+					local mjTileName = string.format("p4s%d_%d.png", brightBar.mjColor, brightBar.mjNumber)
+					local mjTileSpr = cc.Sprite:createWithSpriteFrameName(mjTileName)
+					mjTileSpr:setScale(referScale)
+					mjTileSpr:setPosition(referPos)
+					playerReportSpr:addChild(mjTileSpr)
+					referPos = cc.pAdd(referPos, referSpace)
+
+					if Tools.isGhost(brightBar.mjColor, brightBar.mjNumber, roomPlayer.m_gui) then
+						Tools.setMjTilesAngle( 4, mjTileSpr, gt.anglePngPath )
+					end
+				end
+				referPos.x = referPos.x + 16
+			end
+			-- 明补
+			for _, brightBar in ipairs(roomPlayer:getBrightBus()) do
+				for i = 1, 4 do
+					local mjTileName = string.format("p4s%d_%d.png", brightBar.mjColor, brightBar.mjNumber)
+					local mjTileSpr = cc.Sprite:createWithSpriteFrameName(mjTileName)
+					mjTileSpr:setScale(referScale)
+					mjTileSpr:setPosition(referPos)
+					playerReportSpr:addChild(mjTileSpr)
+					referPos = cc.pAdd(referPos, referSpace)
+
+					if Tools.isGhost(brightBar.mjColor, brightBar.mjNumber, roomPlayer.m_gui) then
+						Tools.setMjTilesAngle( 4, mjTileSpr, gt.anglePngPath )
+					end
+				end
+				referPos.x = referPos.x + 16
+			end
+			-- 碰
+			for _, pung in ipairs(roomPlayer:getPungs()) do
+				for i = 1, 3 do
+					local mjTileName = string.format("p4s%d_%d.png", pung.mjColor, pung.mjNumber)
+					local mjTileSpr = cc.Sprite:createWithSpriteFrameName(mjTileName)
+					mjTileSpr:setScale(referScale)
+					mjTileSpr:setPosition(referPos)
+					playerReportSpr:addChild(mjTileSpr)
+					referPos = cc.pAdd(referPos, referSpace)
+
+					if Tools.isGhost(pung.mjColor, pung.mjNumber, roomPlayer.m_gui) then
+						Tools.setMjTilesAngle( 4, mjTileSpr, gt.anglePngPath )
+					end
+				end
+				referPos.x = referPos.x + 16
+			end
+
+			--吃牌
+			for _, eat in ipairs(roomPlayer:getEatMJTiles()) do
+				for i = 1, 3 do
+					local mjTileName = string.format("p4s%d_%d.png", eat[i][3], eat[i][1])
+					local mjTileSpr = cc.Sprite:createWithSpriteFrameName(mjTileName)
+					mjTileSpr:setScale(referScale)
+					mjTileSpr:setPosition(referPos)
+					playerReportSpr:addChild(mjTileSpr)
+					referPos = cc.pAdd(referPos, referSpace)
+
+					if Tools.isGhost(eat[i][3], eat[i][1], roomPlayer.m_gui) then
+						Tools.setMjTilesAngle( 4, mjTileSpr, gt.anglePngPath )
+					end
+				end
+				referPos.x = referPos.x + 16
+			end
+
+			-- 持有牌
+			table.sort(rptMsgTbl["array" .. (seatIdx - 1)], function(a, b)
+				if a[1] ~= b[1] then
+					return a[1]%6 < b[1]%6
+				else
+					return a[2] < b[2]
+				end
+			end)
+			for _, v in ipairs(rptMsgTbl["array" .. (seatIdx - 1)]) do
+				local mjTileName = string.format("p4s%d_%d.png", v[1], v[2])
+				local mjTileSpr = cc.Sprite:createWithSpriteFrameName(mjTileName)
+				mjTileSpr:setScale(referScale)
+				mjTileSpr:setPosition(referPos)
+				playerReportSpr:addChild(mjTileSpr)
+				referPos = cc.pAdd(referPos, referSpace)
+
+				if Tools.isGhost(v[1], v[2], roomPlayer.m_gui) then
+					Tools.setMjTilesAngle( 4, mjTileSpr, gt.anglePngPath )
+				end
+			end
+
+			-- 胡标识
+			local winSignSpr = gt.seekNodeByName(playerReportNode, "Spr_winSign")
+			winSignSpr:setVisible(false)
+			if self:setWinSign(seatIdx, rptMsgTbl, playerReportSpr, referScale, referPos) then
+				-- 胡标识
+				winSignSpr:setVisible(true)
+				nicknameLabel:setTextColor(cc.WHITE)
+			end
+			end
+		end 
+	end
+
+	-- 开始下一局
+	local startGameBtn = gt.seekNodeByName(csbNode, "Btn_startGame")
+	gt.addBtnPressedListener(startGameBtn, function()
+		
+		self:removeFromParent()
+
+		local msgToSend = {}
+		msgToSend.m_msgId = gt.CG_READY
+		msgToSend.m_pos = playerSeatIdx - 1
+		gt.socketClient:sendMessage(msgToSend)
+	end)
+	-- 结束界面
+	local endGameBtn = gt.seekNodeByName(csbNode, "Btn_endGame")
+	gt.addBtnPressedListener(endGameBtn, function()
+		self:removeFromParent()
+	end)
+
+	if isLast==0 then
+		-- 不是最后一局
+		startGameBtn:setVisible(true)
+		endGameBtn:setVisible(false)
+	elseif isLast==1 then
+		-- 最后一局
+		startGameBtn:setVisible(false)
+		endGameBtn:setVisible(true)
+	end
+
+	-- 关闭按钮
+	local closeBtn = gt.seekNodeByName(csbNode, "Btn_close")
+	closeBtn:setVisible(false)
+	gt.addBtnPressedListener(closeBtn, function()
+		self:removeFromParent()
+	end)
+
+	self:showPlayType(roomPlayers, playerSeatIdx, rptMsgTbl)
+end
+
+function RoundReport:isLost(roundResult)
+	if roundResult == 0 or roundResult == 3 or roundResult == 6 then
+		return true
+	end
+end
+
+function RoundReport:isWin(roundResult)
+	if roundResult == 1 or roundResult == 2 or roundResult == 4 or roundResult == 5 then
+		return true
+	end
+end
+
+function RoundReport:getDetailTxt(seatIdx, rptMsgTbl)
+	-- 起手胡
+	local showStrStart = ""
+	if rptMsgTbl.m_startHu[seatIdx] == 0 then
+    	showStrStart = ""
+	elseif rptMsgTbl.m_startHu[seatIdx] == 1 then
+		showStrStart = "缺一色 "
+	elseif rptMsgTbl.m_startHu[seatIdx] == 2 then
+		showStrStart = "板板胡 "
+	elseif rptMsgTbl.m_startHu[seatIdx] == 3 then
+		showStrStart = "四喜 "
+	elseif rptMsgTbl.m_startHu[seatIdx] == 4 then
+		showStrStart = "六六顺 "
+	end
+
+	local strHuType = ""
+	local roundResult = rptMsgTbl["m_hu" .. seatIdx]
+	local resultTab = {}
+	for i = 1, #roundResult do
+		if roundResult[i] == 1 then
+			strHuType = "小胡 "
+		elseif roundResult[i] == 2 then
+			strHuType = "豪华七小对 "
+		elseif roundResult[i] == 3 then
+			strHuType = "七小对 "
+		elseif roundResult[i] == 4 then
+			strHuType = "清一色 "
+		elseif roundResult[i] == 5 then
+			strHuType = "将将胡 "
+		elseif roundResult[i] == 6 then
+			strHuType = "碰碰胡 "
+		elseif roundResult[i] == 7 then
+			strHuType = "全求人 "
+		elseif roundResult[i] == 8 then
+			strHuType = "杠上开花 "
+		elseif roundResult[i] == 9 then
+			strHuType = "杠上炮 "
+		elseif roundResult[i] == 10 then
+			strHuType = "海底捞月 "
+		elseif roundResult[i] == 11 then
+			strHuType = "海底炮 "
+		elseif roundResult[i] == 12 then
+			strHuType = "抢杠胡 "
+		end
+		table.insert(resultTab, strHuType)
+	end
+
+	strHuType = ""
+	for i,v in ipairs(resultTab) do
+		strHuType = strHuType .. v
+	end
+
+	-- 结果
+	local roundResult = rptMsgTbl.m_win[seatIdx]
+	local showStr = ""
+	if roundResult == 1 then
+		showStr = "自摸胡 "
+	elseif roundResult == 2 then
+		showStr = "接炮 "
+	elseif roundResult == 3 then
+		showStr = "点炮 "
+	elseif roundResult == 4 then
+		showStr = "大胡自摸 "
+	elseif roundResult == 5 then
+		showStr = "大胡接炮 "
+	elseif roundResult == 6 then
+		showStr = "大胡点炮 "
+	end
+
+	-- 总显示
+	return showStrStart .. strHuType .. showStr
+end
+
+-- 设置翻数
+function RoundReport:setRegionScoreLabel(_label, _score)
+	_label:setVisible(false)
+end
+
+-- 设置胡牌标识
+function RoundReport:setWinSign(seatIdx, rptMsgTbl, playerReportSpr, referScale, referPos)
+	local ishu = rptMsgTbl.m_win[seatIdx]
+	print("hu card " ,ishu)
+	if ishu == 1 or ishu == 2 or ishu == 4 or ishu == 5 then
+		--长沙
+		for i = 1, #rptMsgTbl.m_hucards do
+			local mjTileName = string.format("p4s%d_%d.png", rptMsgTbl.m_hucards[i][1], rptMsgTbl.m_hucards[i][2])
+			local mjTileSpr = cc.Sprite:createWithSpriteFrameName(mjTileName)
+			mjTileSpr:setScale(referScale)
+			if i == 1 then
+				mjTileSpr:setPosition(referPos.x + 16, referPos.y)
+			elseif i == 2 then
+				mjTileSpr:setPosition(referPos.x + 16 * 4, referPos.y)
+			end
+			playerReportSpr:addChild(mjTileSpr)
+
+			local huSpr = cc.Sprite:create("res/sd/images/otherImages/hudejiaobiao1.png")
+			huSpr:setAnchorPoint(cc.p(1, 1))
+			huSpr:setPosition(cc.p(mjTileSpr:getContentSize().width, mjTileSpr:getContentSize().height))
+			mjTileSpr:addChild(huSpr)
+		end
+		return true
+	end
+	return false
+end
+
+function RoundReport:onNodeEvent(eventName)
+	if "enter" == eventName then
+		local listener = cc.EventListenerTouchOneByOne:create()
+		listener:setSwallowTouches(true)
+		listener:registerScriptHandler(handler(self, self.onTouchBegan), cc.Handler.EVENT_TOUCH_BEGAN)
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:addEventListenerWithSceneGraphPriority(listener, self)
+	elseif "exit" == eventName then
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:removeEventListenersForTarget(self)
+	end
+end
+
+function RoundReport:onTouchBegan(touch, event)
+	return true
+end
+
+function RoundReport:showPlayType(roomPlayers, playerSeatIdx, rptMsgTbl)
+	-- body
+end
+
+function RoundReport:setGost( roomPlayers, rptMsgTbl )
+	local ghostTable = Tools.getGhostTable(rptMsgTbl)
+	if ghostTable and #ghostTable > 0 then
+		for k,player in pairs(roomPlayers) do 
+			player.m_gui = ghostTable
+		end
+		self.m_gui = ghostTable
+	end
+end
+
+return RoundReport
+

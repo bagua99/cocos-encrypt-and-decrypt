@@ -1,0 +1,172 @@
+--region app.views.base.hall.RoomSelect
+--desc: 房间选择 BaseRoomSelect 
+--endregion 
+
+-- local USE_NEW_UI = true;
+
+local RoomSelect = class("RoomSelect", function()
+	return cc.Layer:create()
+end)
+
+-- local COLOR_SELECT = cc.c4b(255, 0, 0, 255)
+-- local COLOR_OUTLINE = cc.c4b(255, 183, 0, 255)
+local COLOR_SELECT = cc.c4b(254,205,255,255);--c.c4b(255, 0, 0, 255)
+local COLOR_OUTLINE =cc.c4b(254,205,255,255); --cc.c4b(255, 183, 0, 255)
+
+function RoomSelect:ctor(_type)
+	-- self.m_use_new_ui = USE_NEW_UI;
+	self.m_gameType = _type
+	self.m_csbNode = cc.CSLoader:createNode("res/views/" .. _type .. "/GameRule.csb")
+	self:addChild(self.m_csbNode)
+
+	self:initRoundSelect()
+end
+
+function RoomSelect:getSendRound()
+	local ChkBox_8 = gt.seekNodeByName(self.m_csbNode, "ChkBox_8")
+	if ChkBox_8:isSelected() then
+		return 2
+	end
+	return 3
+end
+
+-- 局数选择
+-- ui上的选中8局还是16局
+function RoomSelect:initRoundSelect()
+	local ChkBox_8 = gt.seekNodeByName(self.m_csbNode, "ChkBox_8")
+	local Label_8 = gt.seekNodeByName(self.m_csbNode, "Label_round_1")
+	local Label_card_8 = gt.seekNodeByName(self.m_csbNode, "Label_round_card_1")
+	local ChkBox_16 = gt.seekNodeByName(self.m_csbNode, "ChkBox_16")
+	local Label_16 = gt.seekNodeByName(self.m_csbNode, "Label_round_2")
+	local Label_card_16 = gt.seekNodeByName(self.m_csbNode, "Label_round_card_2")
+
+	if not self.oriColor then
+		self.oriColor = Label_8:getTextColor()
+	end
+
+	if gt.isInReview then
+		local Node_16 = gt.seekNodeByName(self.m_csbNode, "Node_roundType_2")
+		Node_16:setVisible(false)
+	end
+
+	local function checkRound(sender, eventType)
+		if eventType == ccui.CheckBoxEventType.selected then
+			sender:setSelected(true)
+			if sender:getName() == "ChkBox_8" then
+				ChkBox_16:setSelected(false)
+				self:refreshCheckOutline(Label_8, true)
+				-- self:refreshCheckOutline(Label_card_8, true)
+				self:refreshCheckOutline(Label_16, false)
+				-- self:refreshCheckOutline(Label_card_16, false)
+				Tools.saveKeyValue(self.m_gameType .. "roundSelect", "8")
+			elseif sender:getName() == "ChkBox_16" then
+				ChkBox_8:setSelected(false)
+				self:refreshCheckOutline(Label_8, false)
+				-- self:refreshCheckOutline(Label_card_8, false)
+				self:refreshCheckOutline(Label_16, true)
+				-- self:refreshCheckOutline(Label_card_16, true)
+				Tools.saveKeyValue(self.m_gameType .. "roundSelect", "16")
+			end
+		elseif eventType == ccui.CheckBoxEventType.unselected then
+			sender:setSelected(true)
+		end
+	end
+
+	ChkBox_8:addEventListener(checkRound)
+	ChkBox_16:addEventListener(checkRound)
+
+	local roundSelect = Tools.getValue(self.m_gameType .. "roundSelect")
+	if roundSelect ~= "" then
+		checkRound(
+			gt.seekNodeByName(self.m_csbNode, "ChkBox_" .. roundSelect),
+			ccui.CheckBoxEventType.selected)
+	else
+		checkRound(
+			gt.seekNodeByName(self.m_csbNode, "ChkBox_8"),
+			ccui.CheckBoxEventType.selected)
+	end
+
+	local panel_8 = gt.seekNodeByName(self.m_csbNode, "Panel_round_1")
+	panel_8:addClickEventListener(function( ... )
+		checkRound(ChkBox_8, ccui.CheckBoxEventType.selected)
+	end)
+
+	local panel_16 = gt.seekNodeByName(self.m_csbNode, "Panel_round_2")
+	panel_16:addClickEventListener(function( ... )
+		checkRound(ChkBox_16, ccui.CheckBoxEventType.selected)
+	end)
+
+	local nodeAntiCheat = gt.seekNodeByName(self.m_csbNode,'Node_anti_cheat');
+	local antiCheatCheckbox = gt.seekNodeByName(nodeAntiCheat,'ChkBox_show');
+	local antiCheattext = gt.seekNodeByName(nodeAntiCheat,'Label_name');
+	local antiPanel = gt.seekNodeByName(nodeAntiCheat,'Panel_touch');
+
+	-- 1是开启，0 是关闭
+	local function checkAntiCheat(sender, eventType)
+		if eventType == ccui.CheckBoxEventType.selected then
+			print("antiCheat true")
+			sender:setSelected(true)
+			gt.antiCheat = 1;
+			self:refreshCheckOutline(antiCheattext, true)
+		elseif eventType == ccui.CheckBoxEventType.unselected then
+			print("antiCheat false")
+			sender:setSelected(false)
+			gt.antiCheat = 0;
+			self:refreshCheckOutline(antiCheattext,false)
+		end
+		cc.UserDefault:getInstance():setIntegerForKey("antiCheat", gt.antiCheat);
+	end
+
+	antiCheatCheckbox:addEventListener(checkAntiCheat)
+	antiPanel:addClickEventListener(function(  )
+		if antiCheatCheckbox:isSelected() then
+			checkAntiCheat(antiCheatCheckbox, ccui.CheckBoxEventType.unselected)
+		else
+			checkAntiCheat(antiCheatCheckbox, ccui.CheckBoxEventType.selected)
+		end
+	end)
+
+	local antiCheatInfo = gt.seekNodeByName(self.m_csbNode,'Image_anticheat');
+	antiCheatInfo:setVisible(false);
+	
+	local buttonAntiCheat = gt.seekNodeByName(self.m_csbNode,'Button_anti_cheat_info');
+	gt.addBtnPressedListener(buttonAntiCheat,function()
+		--print("buttonAntiCheat_info");
+		if(antiCheatInfo) then 
+			local isVisible = antiCheatInfo:isVisible();
+			antiCheatInfo:setVisible(not isVisible);
+		end 
+	end)
+
+	--local antiCheatValue = cc.UserDefault:getInstance():getIntegerForKey("antiCheat", 0);
+	antiCheatCheckbox:setSelected(gt.antiCheat == 1);
+
+
+end
+
+function RoomSelect:sendCreateRoom()
+
+end
+
+function RoomSelect:hideAniCheatTips()
+	print("RoomSelect:hideAniCheatTips");
+	local antiCheatInfo = gt.seekNodeByName(self.m_csbNode,'Image_anticheat');
+	antiCheatInfo:setVisible(false);
+
+end 
+
+function RoomSelect:refreshCheckOutline( _label, _type )
+	if not _label then
+		return 
+	end
+
+	if _type then
+		_label:setTextColor(COLOR_SELECT)
+		--gt.setTTFLabelStroke(_label, COLOR_OUTLINE)
+	else
+		_label:setTextColor(self.oriColor)
+		--gt.setTTFLabelStroke(_label, cc.c4b(255, 183, 0, 0))
+	end
+end
+
+return RoomSelect

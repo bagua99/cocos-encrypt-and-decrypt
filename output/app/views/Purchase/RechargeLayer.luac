@@ -1,0 +1,336 @@
+--
+-- Author: liu yang
+-- Date: 2017-02-08 15:36:34
+--
+local gt = cc.exports.gt
+local RechargeConfig = gt.RechargeConfig
+
+--local DAILILIST = {
+	-- "xianlai0688",
+	-- "xianlai0086",
+	-- "xianlai9633",
+	-- "xianlai266",
+	-- "gdmj518",
+	-- "gdmj1888",
+	-- 'xianlaigd06',
+	-- 'xianlaigd07',
+	-- 'gdmj08',
+	-- 'fjmj016',
+	-- 'gxmj016',
+	-- 'shmj147',
+	-- 'mzmj006',
+	-- 'gdmj808',
+	-- 'gdmj555',
+	-- 'gdmj12',
+	-- 'gdmj09',
+	-- 'gdmj120',
+	-- 'gdmj14',
+	-- 'gdmj000',
+	-- 'gzmj55',
+	-- 'gdmj44',
+
+	-- 'gdmj143',
+	-- 'gdmj44',
+	-- 'gzmj55',
+	-- 'gdmj000',
+	-- 'gdmj14',
+	-- 'gdmj120',
+	-- 'gdmj09',
+	-- 'gdmj12',
+	-- 'gdmj868',
+	-- 'gdmj998',
+	-- 'gdmj818',
+	-- 'gdmj369',
+	-- 'gdmj336',
+	-- 'gdmj008',
+	-- 'gdmj018',
+--}
+
+
+
+local CARD_BUY_DAILI = "card_buy_daili2"
+
+local RechargeLayer = class("RechargeLayer", function()
+	return gt.createMaskLayer()
+end)
+
+function RechargeLayer:ctor()
+	self.itemCount = 3
+	self.itemsLimitState = {}
+
+	
+	self:checkItemLimitState()
+end
+
+function RechargeLayer:getDaiLiNumber( ... )
+	-- local buyNumber =  tonumber(Tools.getValue(CARD_BUY_DAILI))
+	-- if not buyNumber or buyNumber == "" or not DAILILIST[buyNumber] then
+	-- 	gt.setRandomSeed()
+	-- 	buyNumber = gt.getRangeRandom(1, #DAILILIST)
+	-- 	Tools.saveKeyValue(CARD_BUY_DAILI, tostring(buyNumber))
+	-- end
+	-- return DAILILIST[buyNumber] or DAILILIST[1]
+	return gt.getDaiLiNumber(CARD_BUY_DAILI)
+end
+
+function RechargeLayer:initDaili()
+	self.shopTips = gt.seekNodeByName(self.rootNode, "shopTips")
+	self.shopTipsBtn = gt.seekNodeByName(self.rootNode, "copyBtn")
+	self.shopTips1 = gt.seekNodeByName(self.rootNode,"shopTips_0");
+	self.shopTips1Btn = gt.seekNodeByName(self.rootNode, "copyBtn_0");
+
+	if(gt.isInReview) then 
+		self.shopTips:setString('小提示：成功购买后房卡直接充值到游戏中');
+		self.shopTipsBtn:setVisible(false)
+		self.shopTips1:setVisible(false);
+		self.shopTips1Btn:setVisible(false);
+		-- self.shopTips:setAnchorPoint(ccp(0.5,0.5));
+		-- self.shopTips:setPosition(ccp(504,405));
+		self.shopTips:setFontSize(38);
+
+	else
+		-- self.shopTips:setAnchorPoint(ccp(0,0.5));
+		-- self.shopTips:setPosition(ccp(564,405));--原位置：ccp(564,405)
+		-- self.shopTipsBtn:setPosition(ccp(680,405))
+		self.shopTips:setFontSize(26);
+		local dailiNum1 = tostring(gt.getDaiLiNumRandom())
+		self.shopTips:setString('		代理招募: '..dailiNum1);
+		self.shopTipsBtn:setVisible(true)
+		gt.addBtnPressedListener(self.shopTipsBtn, function ( )
+			local luaBridge = Tools.getLuaBridge()
+			if gt.isIOSPlatform() then
+				local ok = luaBridge.callStaticMethod("AppController", "copyStr", {copystr = dailiNum1})
+			elseif gt.isAndroidPlatform() then
+				local ok = luaBridge.callStaticMethod("org/cocos2dx/lua/AppActivity", "copyStr", {dailiNum1}, "(Ljava/lang/String;)V")
+			end
+			gt.floatText("复制成功")
+		end)
+		--IOS暂时去掉微信公众号
+		-- self.shopTips1:setVisible(false);
+		-- self.shopTips1Btn:setVisible(false);
+		-- 	显示两个微信推广
+		local dailiNum = tostring(gt.getDaiLiNumRandom())
+		self.shopTips1:setString("代理咨询: "..dailiNum);
+		-- self.shopTips1:setPositionX(150)
+		-- self.shopTips1Btn:setPositionX(480)
+		gt.addBtnPressedListener(self.shopTips1Btn, function ( )
+			local luaBridge = Tools.getLuaBridge()
+			if gt.isIOSPlatform() then
+				local ok = luaBridge.callStaticMethod("AppController", "copyStr", {copystr = dailiNum})
+			elseif gt.isAndroidPlatform() then
+				local ok = luaBridge.callStaticMethod("org/cocos2dx/lua/AppActivity", "copyStr", {dailiNum}, "(Ljava/lang/String;)V")
+			end
+			gt.floatText("复制成功")
+		end)
+		
+	end 
+end 
+--检测商品限购状态
+function RechargeLayer:checkItemLimitState()
+	if not self.xhr then
+        self.xhr = cc.XMLHttpRequest:new()
+        -- mt.xhr:retain()
+        self.xhr.timeout = 10 -- 设置超时时间
+    end
+
+    local productIdList = RechargeConfig[1]["AppStore"] .. ":" .. RechargeConfig[2]["AppStore"] .. ":" .. RechargeConfig[3]["AppStore"]
+	local checkUrl = string.format("%s?serverCode=%s&userId=%s&productNumbers=%s&payWay=%s", gt.checkLimitUrl, gt.serverCode, gt.playerData.uid, productIdList, gt.sdkBridge.payWay)
+    self.xhr.responseType = cc.XMLHTTPREQUEST_RESPONSE_JSON
+    self.xhr:open("POST", checkUrl)
+    self.xhr:registerScriptHandler(handler(self, self.initLayer))
+    self.xhr:send()
+
+    self.scheduleHandler = gt.scheduler:scheduleScriptFunc(handler(self, self.update), 3, false)
+
+end
+
+function RechargeLayer:update(delay)
+	if self.scheduleHandler then
+		gt.scheduler:unscheduleScriptEntry(self.scheduleHandler)
+		self.scheduleHandler = nil
+	end
+	if self.xhr then
+		self.xhr:unregisterScriptHandler()
+		self.xhr = nil
+	end
+	require("app/views/NoticeTips"):create("提示",	"获取商品列表失败，请重试", function()
+		self:closeLayer()
+		end, nil, true)
+end
+
+function RechargeLayer:initLayer()
+	gt.log("--------init layer:")
+	if self.scheduleHandler then
+		gt.scheduler:unscheduleScriptEntry(self.scheduleHandler)
+		self.scheduleHandler = nil
+	end
+
+	-- self.xhr:unregisterScriptHandler()
+	if self.xhr.readyState == 4 and (self.xhr.status >= 200 and self.xhr.status < 207) then
+		require("json")
+		local response = json.decode(self.xhr.response)
+		dump(response, "----验证结果")
+		if response.code == 0 then
+			dump(response.data, "---------require succeed")
+			local data = response.data
+			for j = 1, self.itemCount do
+				local tmpPId = RechargeConfig[j]["AppStore"]
+				if data[tmpPId] then
+					gt.log("--------state, index:" .. data[tmpPId] .. "," .. j)
+					self.itemsLimitState[j] = data[tmpPId]
+				end
+			end
+
+			self:checkRequestComplete()
+		elseif response.code == "-1" then
+			self:checkItemLimitState()
+		end
+		
+	elseif self.xhr.readyState == 1 and self.xhr.status == 0 then
+		require("app/views/NoticeTips"):create("提示",	"获取商品列表失败，请重试", function()
+			self:closeLayer()
+		end, nil, true)
+		-- self:checkItemLimitState()
+	end
+end
+
+--检测请求是否完成
+function RechargeLayer:checkRequestComplete()
+	local checkComplete = true
+	for i = 1, self.itemCount do
+		if not self.itemsLimitState[i] then
+			checkComplete = false
+			break
+		end
+	end
+
+	gt.log("-------checkRequestComplete:" .. tostring(checkComplete))
+	if checkComplete then
+		if not self.isInitComplete then
+			self.rootNode = gt.createCSNode("RechargeShop.csb")
+			self.rootNode:setAnchorPoint(0.5,0.5)
+			self.rootNode:setPosition(gt.winCenter)
+			self:addChild(self.rootNode)
+
+			self.curSelItem = 1
+
+			self.isInitComplete = true
+
+			self:initBaseInfo()
+
+			self:registerButtonsEvent()
+		end
+		
+		self:selectItem(self.curSelItem)
+
+		
+	end
+end
+
+function RechargeLayer:initBaseInfo()
+	self.itemList = {}
+	for i = 1, self.itemCount do
+		local tmpItem = gt.seekNodeByName(self.rootNode, "item" .. i)
+		local tmpItemTitle = tmpItem:getChildByName("item" .. i .. "Title")
+		local tmpItemCost = tmpItem:getChildByName("item" .. i .. "Cost")
+		local tmpItemSel = tmpItem:getChildByName("item" .. i .. "Sel")
+		local tmpItemLimit = gt.seekNodeByName(tmpItem, "item" .. i .. "Limited")
+
+
+		local tmpItemConfig = RechargeConfig[i]
+
+		tmpItemSel:setVisible(false)
+		tmpItemLimit:setVisible(false)
+		tmpItemTitle:setString(tmpItemConfig["Title"])
+		tmpItemCost:setString(tmpItemConfig["CostValue"])
+
+		local tmpItemInfo = {}
+		tmpItemInfo.SelIcon = tmpItemSel
+		tmpItemInfo.limitIcon = tmpItemLimit
+		self.itemList[i] = tmpItemInfo
+
+		gt.addTouchEventListener(tmpItem, function()
+			self:selectItem(i)
+		end, nil, 0)
+	end
+	self:initDaili();
+end
+
+function RechargeLayer:registerButtonsEvent()
+	self.closeBtn = gt.seekNodeByName(self.rootNode, "closeBtn")
+	gt.addBtnPressedListener(self.closeBtn, function()
+		self:closeLayer()
+	end)
+
+	self.buyBtn = gt.seekNodeByName(self.rootNode, "buyBtn")
+	gt.addBtnPressedListener(self.buyBtn, function()
+		self:buy()
+	end)
+end
+
+function RechargeLayer:selectItem(index)
+	self.curSelItem = index
+	for i = 1, self.itemCount do
+		local tmpItem = self.itemList[i]
+		if self.itemsLimitState[i] == "purchasable" then
+			tmpItem.limitIcon:setVisible(false)
+		else
+			tmpItem.limitIcon:setVisible(true)
+		end 
+
+		if tmpItem and i == self.curSelItem then
+			tmpItem.SelIcon:setVisible(true)
+			if self.itemsLimitState[i] == "purchasable" then
+				self:enableBuyBtn()
+			else
+				self:disableBuyBtn()
+			end
+		else
+			tmpItem.SelIcon:setVisible(false)
+		end
+	end
+
+	local curItemConfig = RechargeConfig[self.curSelItem]
+	local itemDes = gt.seekNodeByName(self.rootNode, "itemDes")
+	itemDes:setString("房卡不足请充值,"..curItemConfig["Description"])
+
+	local itemCost = gt.seekNodeByName(self.rootNode, "itemCostValue")
+	itemCost:setString(curItemConfig["CostValue"])
+end
+
+function RechargeLayer:disableBuyBtn()
+	if not self.buyBtn then
+		self.buyBtn = gt.seekNodeByName(self.rootNode, "buyBtn")
+	end
+
+	self.buyBtn:setTouchEnabled(false)
+	self.buyBtn:setBright(false)
+end
+
+function RechargeLayer:enableBuyBtn()
+	if not self.buyBtn then
+		self.buyBtn = gt.seekNodeByName(self.rootNode, "buyBtn")
+	end
+
+	self.buyBtn:setTouchEnabled(true)
+	self.buyBtn:setBright(true)
+end
+
+function RechargeLayer:refreshShopState()
+	self:checkItemLimitState()
+end
+
+function RechargeLayer:closeLayer()
+	gt.removeTargetEventListenerByType(self, gt.EventType.PURCHASE_SUCCESS)
+
+	self:removeAllChildren()
+	self:removeFromParent()
+end
+
+function RechargeLayer:buy()
+	gt.registerEventListener(gt.EventType.PURCHASE_SUCCESS, self, self.refreshShopState)
+	gt.log("----buy item:" .. self.curSelItem)
+	Charge.buy(self.curSelItem)
+end
+
+return RechargeLayer

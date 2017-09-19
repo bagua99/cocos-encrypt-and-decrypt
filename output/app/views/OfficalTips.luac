@@ -1,0 +1,172 @@
+--region app.views.OfficalTips.lua
+--author:liubing
+--desc:  公众号引导界面
+--date: 2017-1-13
+--endregion 
+
+local gt = cc.exports.gt
+
+local OfficalTips = class("OfficalTips",function()
+	return cc.LayerColor:create(cc.c4b(85, 85, 85, 85), gt.winSize.width, gt.winSize.height)
+end)
+
+
+local function copyStrToClipBoard(str)
+	local luaBridge = Tools.getLuaBridge()
+	if gt.isIOSPlatform() then
+		local ok = luaBridge.callStaticMethod("AppController", "copyStr", {copystr = str})
+	elseif gt.isAndroidPlatform() then
+		local ok = luaBridge.callStaticMethod("org/cocos2dx/lua/AppActivity", "copyStr", {str}, "(Ljava/lang/String;)V")
+	end
+end 
+
+
+local function getCopyStrFromClipBoard()
+	local luaBridge = Tools.getLuaBridge()
+	if gt.isIOSPlatform() then
+		local ok ,ret = luaBridge.callStaticMethod("AppController", "getCopyStr")
+	elseif gt.isAndroidPlatform() then
+		local ok ,ret = luaBridge.callStaticMethod("org/cocos2dx/lua/AppActivity","getCopyStr",nil,"()Z")
+	end
+	local labString = ret
+	if labString == nil or string.len(labString) == 0 then
+		labString = ""
+	end
+	if string.len(labString) > 0 then
+		gt.log("labString = "..labString)
+	end
+	return labString
+end 
+
+local MAX_PAGE = 4;
+
+function OfficalTips:ctor()
+	-- 注册节点事件
+	-- 
+	print("OfficalTips:ctor");
+    self:registerScriptHandler(handler(self, self.onNodeEvent))
+	local csbNode = cc.CSLoader:createNode("OfficalTips.csb")
+	csbNode:setPosition(gt.winCenter)
+	self:addChild(csbNode)
+
+	-- 返回按钮
+	local backBtn = gt.seekNodeByName(csbNode, "Btn_back")
+	gt.addBtnPressedListener(backBtn, function()
+		self:removeFromParent()
+	end)
+
+	self.pageView = gt.seekNodeByName(csbNode,"PageView_1");
+	print('type pageView '..type(self.pageView));
+
+	self.pageBeanArrays = {};
+	for i = 1,MAX_PAGE do
+		self.pageBeanArrays[i] = gt.seekNodeByName(csbNode,"CheckBox_Page_"..i);
+		local btnCopyStr =  gt.seekNodeByName(self.pageView,'Button_'..i);
+		gt.addBtnPressedListener(btnCopyStr,function()
+			copyStrToClipBoard("闲来棋牌");
+		end)
+	end 
+
+
+	self.pageView:setCurrentPageIndex(0);
+	--self.manulScrolled = false; --> 
+	self.autoChangeDelta  = 0;
+	self.isPageChanged = false;
+	self.currentPageIndex = self.pageView:getCurrentPageIndex();
+
+
+	-- pageView:onEvent(function()
+	-- 	print("paveView:onEvent");
+	-- end)
+
+	--我去了。。这个函数监听源码里查看了，居然没有地方调用
+	--
+	-- pageView:addEventListener(function(sender, eventType)
+    --     local event = {}
+    --     if eventType == 0 then
+    --         event.name = "TURNING"
+    --     end
+    --     event.target = sender
+    --     --callback(event)
+	-- 	print("pageView:onEvent");
+    -- end)
+
+	
+
+end
+
+function OfficalTips:onNodeEvent(eventName)
+	if "enter" == eventName then
+		self.scheduleHandler = gt.scheduler:scheduleScriptFunc(handler(self, self.update), 0, false)
+		--self.scheduleAutoScrollHandler = gt.scheduler:scheduleScriptFunc(handler(self, self.autoScroll), 2, false)
+
+	elseif "exit" == eventName then
+		gt.scheduler:unscheduleScriptEntry(self.scheduleHandler)
+		--gt.scheduler:unscheduleScriptEntry(self.scheduleAutoScrollHandler)
+	end
+end
+
+function OfficalTips:update(delta)
+	--print("OfficalTips:update");
+	local pageIndex = self.pageView:getCurrentPageIndex();
+	--print("OfficalTips:update"..tostring(pageIndex))
+	if(pageIndex ~= self.currentPageIndex) then
+		if(self.currentPageIndex == 3 and pageIndex ~= 0) then 
+			return; --
+		end  
+		self:pageChanged(pageIndex);
+		self.currentPageIndex = pageIndex;
+	-- elseif(not self.isPageChanged )then 
+	-- 	self.isPageChanged= true;
+	end
+
+	if(self.isPageChanged)then
+		--清空数据
+		self.isPageChanged = false;
+		self.autoChangeDelta = 0;
+	else
+		self.autoChangeDelta = self.autoChangeDelta + delta;
+		if(self.autoChangeDelta > 4) then
+			self:autoScroll();
+		end
+	end 
+
+
+
+end 
+
+function OfficalTips:pageChanged(pageIndex)
+	--if(pageIndex ==0)then 
+	--	self.pageView:setCurrentPageIndex(pageIndex);
+	--else
+		self.pageView:scrollToPage(pageIndex);
+	--end 
+	
+	local len = #self.pageBeanArrays;
+	for i = 1,len  do 
+		if(i == (pageIndex + 1)) then 
+			self.pageBeanArrays[i]:setSelected(true);
+		else
+			self.pageBeanArrays[i]:setSelected(false);
+		end
+	end
+	--self.currentPageIndex = pageIndex;
+	self.isPageChanged = true;
+end 
+
+function OfficalTips:autoScroll()
+	local index = self.currentPageIndex
+	local nextPageIndex = (index + 1) %4 ;
+	print("OfficalTips:autoScroll "..nextPageIndex);
+	self:pageChanged(nextPageIndex);
+end 
+
+function OfficalTips:onTouchBegan(touch, event)
+	return true
+end
+
+function OfficalTips:onTouchEnded(touch, event)
+	--self:removeFromParent()
+end
+
+return OfficalTips

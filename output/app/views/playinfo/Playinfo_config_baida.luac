@@ -1,0 +1,16 @@
+local PlayinfoConfigBaiDa = class("PlayinfoConfigBase", require("app/views/playinfo/Playinfo_config_base"))
+
+function PlayinfoConfigBaiDa:ctor(  )
+	PlayinfoConfigBaiDa.super.ctor(self)
+	self.ruleType[0].desc = "无马"
+	self.ruleType[19].desc = "无花加倍"
+end
+
+function PlayinfoConfigBaiDa:getShowList( )
+	return {
+		18, 20, 27, 17, 30,
+		0, 2, 4, 6,19,10,35,53,
+	}
+end
+
+return PlayinfoConfigBaiDa

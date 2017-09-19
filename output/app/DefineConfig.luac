@@ -1,0 +1,179 @@
+
+local gt = cc.exports.gt
+
+-- 测试服
+gt.TestLoginServer = {ip = "120.76.241.58", port = "5001"}
+
+-- 正式服
+gt.LoginServer		= {ip = "gz.xianlaiyx.com", port = "5091"}
+gt.GateServer		= {}
+
+--默认高防ip
+gt.DefineLoginServer= {ip = "gz.xianlaiyx.com", port = "5091"}
+
+-- 苹果审核用的
+gt.LoginServerUpdateTest = {ip = "gdmj.ixianlai.top", port = "5051"}
+
+
+-- 通用弹出面板
+gt.CommonZOrder = {
+	LOADING_TIPS				= 66,
+	NOTICE_TIPS					= 67,
+	TOUCH_MASK					= 68
+}
+
+gt.PlayZOrder = {
+	MJTABLE						= 1,
+	PLAYER_INFO					= 2,
+	MJTILES_LAYER				= 6,
+	OUTMJTILE_SIGN				= 7,
+	DECISION_BTN				= 8,
+	DECISION_SHOW				= 9,
+	PLAYER_INFO_TIPS			= 10,
+	REPORT						= 16,
+	DISMISS_ROOM				= 17,
+	SETTING						= 18,
+	CHAT						= 20,
+	MJBAR_ANIMATION				= 21,
+	FLIMLAYER           	    = 16,
+	HAIDILAOYUE					= 23,
+	TOP							= 24,
+}
+
+gt.EventType = {
+	NETWORK_ERROR				= 1,
+	BACK_MAIN_SCENE				= 2,
+	APPLY_DIMISS_ROOM			= 3,
+	GM_CHECK_HISTORY			= 4,
+	PURCHASE_SUCCESS			= 5,
+	SHARE_SUCCESS				= 6,
+}
+
+gt.DecisionType = {
+	-- 接炮胡
+	TAKE_CANNON_WIN				= 1,
+	-- 自摸胡
+	SELF_DRAWN_WIN				= 2,
+	-- 明杠
+	BRIGHT_BAR					= 3,
+	-- 暗杠
+	DARK_BAR					= 4,
+	-- 碰
+	PUNG						= 5,
+	-- 吃
+	EAT					        = 6,
+	--眀补
+	BRIGHT_BU                   = 7,
+	--暗补
+	DARK_BU                     = 8
+}
+
+gt.StartDecisionType = {
+	-- 缺一色
+	TYPE_QUEYISE				= 1,
+	-- 板板胡
+	TYPE_BANBANHU				= 2,
+	-- 四喜
+	TYPE_DASIXI					= 3,
+	-- 六六顺
+	TYPE_LIULIUSHUN				= 4
+}
+
+gt.ChatType = {
+	FIX_MSG						= 1,
+	INPUT_MSG					= 2,
+	EMOJI						= 3,
+	VOICE_MSG					= 4,
+}
+
+gt.RoomType = {
+	ROOM_ZHUANZHUAN				= 0,   --转转麻将
+	ROOM_CHANGSHA				= 3,   --长沙麻将
+	--广州麻将
+	ROOM_JIPINGHU				= 9,   --鸡平胡
+	ROOM_TUIDAOHU				= 10,  --推到胡
+	ROOM_YIBAI					= 11,  --一百张
+	ROOM_BAIDA					= 12,  --百搭鸡胡
+	ROOM_ZUOPAI					= 13,  --做牌推倒胡
+	ROOM_CHAOSHAN				= 14,  -- 潮汕麻将
+	ROOM_TUIDAOHU_THREE			= 15,  --三人推倒胡
+	ROOM_HUIZHOUZHUANG			= 16,  --惠州庄
+	ROOM_HONGZHONGWANG 			= 17,  --红中王
+	ROOM_XIANGGANG 				= 18,  --香港
+	ROOM_HUIZHOUZHUANG_BUHUA    = 19,  --惠州庄-补花
+	ROOM_JIHU_BUHUA 			= 20,  --鸡胡补花
+	ROOM_HONGZHONG  			= 21,  --红中麻将
+	ROOM_TUIDAOHU_TWO 			= 22,  --二人推倒胡
+	ROOM_GUANGDONG_JIHU 		= 23,  --广东鸡胡
+	ROOM_MEIZHOU_HONGZHONGBAO   = 24,  --梅州红中宝
+	ROOM_JIEYANG				= 25,
+}
+
+gt.RoomGroup = {
+	{gt.RoomType.ROOM_TUIDAOHU, "tab_tuidao1.png", "tab_tuidao2.png", }, --推倒胡
+	{gt.RoomType.ROOM_JIEYANG,  "tab_jieyang1.png","tab_jieyang2.png",1}, --揭阳麻将
+	{gt.RoomType.ROOM_MEIZHOU_HONGZHONGBAO,"tab_meizhouhongzhongbao1.png","tab_meizhouhongzhongbao2.png"},
+	{gt.RoomType.ROOM_GUANGDONG_JIHU, "tab_guangdongjihu1.png", "tab_guangdongjihu2.png", }, --广东鸡胡
+	{gt.RoomType.ROOM_TUIDAOHU_TWO, "tab_two_tuidao1.png", "tab_two_tuidao2.png", }, --二人推倒胡
+	{gt.RoomType.ROOM_HONGZHONG,"tab_hongzhong1.png","tab_hongzhong2.png",0}, --红中麻将
+	{gt.RoomType.ROOM_JIHU_BUHUA, "tab_jihubuhua1.png", "tab_jihubuhua2.png", }, --推倒胡
+	{gt.RoomType.ROOM_HUIZHOUZHUANG_BUHUA,"tab_huizhouzhuang_buhua_1.png","tab_huizhouzhuang_buhua_2.png"}, --惠州庄-补花
+	{gt.RoomType.ROOM_XIANGGANG,'tab_xianggang1.png','tab_xianggang2.png',},--香港
+	{gt.RoomType.ROOM_HONGZHONGWANG,"tab_hongzhongwang1.png","tab_hongzhongwang2.png",}, --红中王
+	{gt.RoomType.ROOM_HUIZHOUZHUANG,"tab_huizhouzhuang1.png","tab_huizhouzhuang2.png"}, --惠州庄
+	{gt.RoomType.ROOM_TUIDAOHU_THREE,"tab_three_tuidao1.png","tab_three_tuidao2.png"}, --三人推倒胡
+	{gt.RoomType.ROOM_ZUOPAI,"tab_zuopai1.png","tab_zuopai2.png"}, --做牌推倒胡
+	{gt.RoomType.ROOM_CHAOSHAN,"tab_chaoshan1.png","tab_chaoshan2.png"}, --潮汕麻将
+	{gt.RoomType.ROOM_YIBAI,"tab_yibai1.png","tab_yibai2.png"}, --一百张
+	{gt.RoomType.ROOM_BAIDA,"tab_baida1.png","tab_baida2.png"}, --百搭鸡胡
+	{gt.RoomType.ROOM_ZHUANZHUAN,"tab_zhuanzhuan1.png","tab_zhuanzhuan2.png"}, --转转麻将
+	{gt.RoomType.ROOM_JIPINGHU,"tab_jiping1.png","tab_jiping2.png"}, --鸡平胡
+}
+
+
+
+gt.LanguageType = {
+	COMMON 						= 1,
+	YUEYU 						= 2,
+}
+
+gt.OpenAppAction = {
+	ENTERROOM				= "enterroom",
+	REPLAYVIEW				= "replay",
+}
+
+gt.SocketIPStatus = {
+	DEFINE = 0,
+	SAVEIP = 1,
+}
+
+gt.PlayInfoType = {
+	WANFA 	= 1,
+	PAIXING = 2,
+}
+
+-- 购买道具配置文件
+gt.RechargeFile = "Recharge"
+gt.RechargeConfig = {}
+
+gt.AppID = 20001
+gt.Language = cc.UserDefault:getInstance():getIntegerForKey("Language_type", gt.LanguageType.COMMON)--gt.LanguageType.COMMON
+gt.ShieldVoice = cc.UserDefault:getInstance():getBoolForKey("Shield_type")
+gt.enableMoveCard = cc.UserDefault:getInstance():getBoolForKey("moveCardEnable")
+--gt.funnyEnable = cc.UserDefault:getInstance():getBoolForKey("funnyEnable",false)
+gt.funnyEnable = cc.UserDefault:getInstance():getIntegerForKey("funnyEnable",0)
+gt.ReadedCommonMsgKey = "readed_common_msg_key"
+gt.antiCheat = cc.UserDefault:getInstance():getIntegerForKey("antiCheat")
+
+--默认值为1
+gt.headframe = cc.UserDefault:getInstance():getIntegerForKey("headframe",1)
+
+-- 语音id
+gt.audioAppID = "1000965"
+
+-- 语音路径
+gt.audioPath = cc.FileUtils:getInstance():getWritablePath().."guangdong.amr"
+
+-- 语音初始化路径
+gt.audioIntPath = cc.FileUtils:getInstance():getWritablePath()
+

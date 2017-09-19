@@ -1,0 +1,146 @@
+
+local gt = cc.exports.gt
+
+local ReadyPlay = class("ReadyPlay")
+
+function ReadyPlay:ctor(csbNode, paramTbl)
+	self.isRoomCreater = false
+	if paramTbl.playerSeatPos == 0 then
+		-- 0位置是房主
+		self.isRoomCreater = true
+	end
+
+	-- 房间号
+	self.roomID = paramTbl.roomID
+
+	-- 准备节点（子节点：邀请好友，解散房间，返回大厅）
+	local readyPlayNode = gt.seekNodeByName(csbNode, "Node_readyPlay")
+
+	-- 邀请好友
+	local inviteFriendBtn = gt.seekNodeByName(readyPlayNode, "Btn_inviteFriend")
+	gt.addBtnPressedListener(inviteFriendBtn, function()
+		local description = ""
+		if gt.roomType == gt.RoomType.ROOM_JIPINGHU then -- 鸡平胡
+			description = string.format("【鸡平胡】房号:[%d]，%d局，%s，速度来玩吧!", self.roomID, paramTbl.roundMaxCount, paramTbl.playTypeDesc)
+		else -- 长沙麻将
+			description = string.format("【推倒胡】房号:[%d]，%d局，%s，速度来玩吧!", self.roomID, paramTbl.roundMaxCount, paramTbl.playTypeDesc)
+		end
+
+		-- local description = string.format("房号:[%d]%d局%s速度来啊! 闲来麻将", self.roomID, paramTbl.roundMaxCount, paramTbl.playTypeDesc)
+		if gt.isIOSPlatform() then
+			local luaoc = require("cocos/cocos2d/luaoc")
+			local ok = luaoc.callStaticMethod("AppController", "shareURLToWX",
+				{url = gt.getLocationString("LTKey_0051"), title = "闲来广东麻将", description = description})
+		elseif gt.isAndroidPlatform() then
+			local luaj = require("cocos/cocos2d/luaj")
+			local ok = luaj.callStaticMethod("org/cocos2dx/lua/AppActivity", "shareURLToWX",
+				{gt.getLocationString("LTKey_0051"), "闲来广东麻将", description},
+				"(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V")
+		end
+	end)
+
+	if gt.isInReview then
+		inviteFriendBtn:setVisible(false)
+	else
+		inviteFriendBtn:setVisible(true)
+	end
+
+	-- 返回大厅
+	local backSalaBtn = gt.seekNodeByName(readyPlayNode, "Btn_outRoom")
+	gt.addBtnPressedListener(backSalaBtn, function()
+		-- 返回大厅提示
+		local tipsContentKey = "LTKey_0019"
+		if self.isRoomCreater then
+			tipsContentKey = "LTKey_0010"
+		end
+		require("app/views/NoticeTips"):create(
+			gt.getLocationString("LTKey_0009"),
+			gt.getLocationString(tipsContentKey),
+			function()
+				gt.showLoadingTips(gt.getLocationString("LTKey_0016"))
+
+				local msgToSend = {}
+				msgToSend.m_msgId = gt.CG_QUIT_ROOM
+				msgToSend.m_pos = paramTbl.playerSeatPos
+				gt.socketClient:sendMessage(msgToSend)
+			end)
+	end)
+	gt.socketClient:registerMsgListener(gt.GC_QUIT_ROOM, self, self.onRcvQuitRoom)
+
+	-- 解散房间
+	local dimissRoomBtn = gt.seekNodeByName(readyPlayNode, "Btn_dimissRoom")
+
+	local ls_12 = gt.getLocationString("LTKey_0012")
+	if gt.isIOSPlatform() and gt.isInReview then
+		ls_12 = gt.getLocationString("LTKey_0012_1")
+	end
+
+	gt.addBtnPressedListener(dimissRoomBtn, function()
+		require("app/views/NoticeTips"):create(
+			gt.getLocationString("LTKey_0011"),
+			ls_12,
+			function()
+				local msgToSend = {}
+				msgToSend.m_msgId = gt.CG_DISMISS_ROOM
+				msgToSend.m_pos = paramTbl.playerSeatPos
+				gt.socketClient:sendMessage(msgToSend)
+			end)
+	end)
+	gt.socketClient:registerMsgListener(gt.GC_DISMISS_ROOM, self, self.onRcvDismissRoom)
+
+	-- 隐藏非房主无法操作的按钮
+	if not self.isRoomCreater then
+		dimissRoomBtn:setVisible(false)
+	end
+
+	-- 设置按钮
+	local settingBtn = gt.seekNodeByName(readyPlayNode, "Btn_setting_Ready")
+	if settingBtn then
+		gt.addBtnPressedListener(settingBtn, function()
+			local settingPanel = require("app/views/Setting"):create(gt.winCenter)
+			csbNode:getParent():addChild(settingPanel, 666)
+
+			local dismissRoom = gt.seekNodeByName(settingPanel.rootNode, "Btn_dismissRoom")
+			if dismissRoom then
+				dismissRoom:setVisible( false )
+			end
+		end)
+
+		settingBtn:setVisible( false )
+	end
+end
+
+-- start --
+--------------------------------
+-- @class function
+-- @description 返回大厅
+-- end --
+function ReadyPlay:onRcvQuitRoom(msgTbl)
+	gt.removeLoadingTips()
+
+	if msgTbl.m_errorCode == 0 then
+		gt.dispatchEvent(gt.EventType.BACK_MAIN_SCENE, self.isRoomCreater, self.roomID)
+	else
+		-- 提示返回大厅失败
+		require("app/views/NoticeTips"):create(gt.getLocationString("LTKey_0007"), gt.getLocationString("LTKey_0045"), nil, nil, true)
+	end
+end
+
+-- start --
+--------------------------------
+-- @class function
+-- @description 房间创建者解散房间
+-- end --
+function ReadyPlay:onRcvDismissRoom(msgTbl)
+	if msgTbl.m_errorCode == 1 then
+		-- 游戏未开始解散成功
+		gt.dispatchEvent(gt.EventType.BACK_MAIN_SCENE)
+	else
+		-- 游戏中玩家申请解散房间
+		gt.dispatchEvent(gt.EventType.APPLY_DIMISS_ROOM, msgTbl)
+	end
+end
+
+return ReadyPlay
+
+

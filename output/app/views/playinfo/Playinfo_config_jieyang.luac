@@ -1,0 +1,44 @@
+
+local PlayinfoConfigJieyang= class("PlayinfoConfigBase", require("app/views/playinfo/Playinfo_config_base"))
+
+function PlayinfoConfigJieyang:ctor(  )
+	PlayinfoConfigJieyang.super.ctor(self)
+	self.ruleType[0].desc  = "无马"
+        self.ruleType[33].desc = "跟庄1分"
+        self.ruleType[38].desc = "抢杠胡3倍"
+        self.ruleType[39].desc = "杠上开花2倍"
+        self.ruleType[42].desc = "抓马"
+end
+
+function PlayinfoConfigJieyang:getShowList( )
+        return {
+        116,--无封顶        
+        74, --5倍封顶
+        76, --10倍封顶
+
+        12, --可接炮胡
+        113,--10倍听牌可接炮
+        114, --10倍听牌免分
+
+        115, --流局杠算分
+        39, --杠上开花2倍
+        38, --抢杠胡3倍
+
+        33, --跟庄
+        35, --马跟底分
+        42, --抓马
+--
+        7,  --无鬼
+        8,  --白板做鬼
+        51, --红中做鬼
+        9,  --翻鬼
+--
+        0,  --无马
+        2, --买2马
+        4, --买4马
+        6, --买6马
+        67,--买8马
+        80,--买10马
+	}
+end
+return PlayinfoConfigJieyang

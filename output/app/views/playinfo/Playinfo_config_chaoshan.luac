@@ -1,0 +1,35 @@
+local PlayinfoConfigChaoShan = class("PlayinfoConfigBase", require("app/views/playinfo/Playinfo_config_base"))
+
+function PlayinfoConfigChaoShan:ctor(  )
+	PlayinfoConfigChaoShan.super.ctor(self)
+
+	self.ruleType[0].desc = "无马"
+	self.ruleType[16].desc = "七小对2倍"
+	self.ruleType[38].desc = "抢杠胡2倍"
+	self.ruleType[40].desc = "混一色2倍"
+	self.ruleType[24].desc = "清一色2倍"
+	self.ruleType[39].desc = "杠上开花2倍"
+	self.ruleType[32].desc = "豪华4倍"
+	self.ruleType[27].desc = "十三幺10倍"
+	self.ruleType[41].desc = "天地胡10倍"
+	self.ruleType[60].desc = "小三元4倍"
+	self.ruleType[61].desc = "小四喜4倍"
+	self.ruleType[62].desc = "大三元6倍"
+	self.ruleType[63].desc = "大四喜6倍"
+end
+
+function PlayinfoConfigChaoShan:getShowList( )
+	return {
+		12,
+		23, 16, 38, 
+		40, 24, 39, 
+		32, 27, 41,
+		44, 45, 46,
+		35,
+		7, 8, 9,
+		0, 2, 4, 6, 42,53,
+		60,61,62,63,
+	}
+end
+
+return PlayinfoConfigChaoShan

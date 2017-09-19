@@ -1,0 +1,121 @@
+
+local gt = cc.exports.gt
+
+gt.CG_LOGIN					= 1
+gt.GC_LOGIN					= 2
+gt.CG_RECONNECT				= 10
+gt.CG_LOGIN_SERVER			= 11
+gt.GC_LOGIN_SERVER			= 12
+gt.GC_ROOM_CARD				= 13
+gt.GC_MARQUEE				= 14
+gt.CG_HEARTBEAT				= 15
+gt.GC_HEARTBEAT				= 16
+gt.CG_REQUEST_NOTICE		= 17
+gt.GC_REQUEST_NOTICE		= 18
+gt.CG_CREATE_ROOM			= 20
+gt.GC_CREATE_ROOM			= 21
+gt.CG_JOIN_ROOM				= 22
+gt.GC_JOIN_ROOM				= 23
+gt.CG_QUIT_ROOM				= 24
+gt.GC_QUIT_ROOM				= 25
+gt.CG_DISMISS_ROOM			= 26
+gt.GC_DISMISS_ROOM			= 27
+gt.CG_APPLY_DISMISS			= 28
+gt.GC_FREE_PLAY_NEW         = 29
+gt.GC_ENTER_ROOM			= 30
+gt.GC_ADD_PLAYER			= 31
+gt.GC_REMOVE_PLAYER			= 32
+gt.GC_SYNC_ROOM_STATE		= 35
+gt.CG_READY					= 36
+gt.GC_READY					= 37
+gt.GC_OFF_LINE_STATE		= 40
+gt.GC_ROUND_STATE			= 41
+gt.GC_START_GAME			= 50
+gt.GC_TURN_SHOW_MJTILE		= 51
+gt.CG_SHOW_MJTILE			= 52
+gt.GC_SYNC_SHOW_MJTILE		= 53
+gt.GC_MAKE_DECISION			= 54
+gt.CG_PLAYER_DECISION		= 55
+gt.GC_SYNC_MAKE_DECISION	= 56
+gt.CG_CHAT_MSG				= 57
+gt.GC_CHAT_MSG				= 58
+gt.GC_ROUND_REPORT			= 60
+gt.GC_START_DECISION		= 65
+gt.CG_START_PLAYER_DECISION	= 66
+gt.GC_SYNC_START_PLAYER_DECISION= 67
+gt.GC_SYNC_BAR_TWOCARD      = 68
+gt.CG_SYNC_HAIDI			= 69
+gt.CG_CHOOSE_HAIDI			= 70
+gt.CG_TURN_HAIDI			= 71
+gt.GC_ZHANIAO				= 72 -- 扎鸟
+gt.GC_FINAL_REPORT			= 80
+gt.CG_HISTORY_RECORD		= 90
+gt.GC_HISTORY_RECORD		= 91
+gt.CG_REPLAY				= 92
+gt.GC_REPLAY				= 93
+gt.CG_SHARE_REPLAY			= 105
+gt.GC_SHARE_REPLAY			= 106
+gt.CG_SHARE_BTN				= 107
+gt.GC_SHARE_BTN				= 108
+gt.GC_GET_VIDEO				= 109
+gt.GC_COMMONT_NOTICE 		= 110 --后台公告信息
+gt.GC_COMMONT_ROOMFREE 		= 111 --限免活动
+gt.GC_FOLLOWZHUANG			= 112 --跟庄
+gt.GC_FREE_PLAY             = 113 --免费显示列表
+gt.GC_START_GHOST			= 161 --鬼牌
+
+-- 转盘抽奖相关
+gt.GC_LOTTERY				= 94  -- 服务器推送活动相关信息
+gt.CG_GET_GETLOTTERY		= 95  -- 玩家请求抽奖
+gt.GC_RET_GETLOTTERY		= 96  -- 服务器返回此次抽奖结果
+gt.CG_SAVE_PHONENUM			= 97  -- 客户端请求写入电话号码
+gt.GC_SAVE_PHONENUM			= 98  -- 服务器返回写入电话号码结果
+gt.CG_GET_GETLOTTERYRESULT	= 99  -- 玩家请求自己的抽奖结果
+gt.GC_GET_GETLOTTERYRESULT	= 100 -- 服务器返回玩家抽奖结果
+
+gt.CG_FUNNY_PLAY			= 114 -- 发送互动表情
+gt.GC_FUNNY_PLAY			= 115 -- 接收互动表情
+
+--gt.CG_UPDATE_SCORE 			= 115 -- 客户端请求分数
+--服务器显示没有这个消息
+gt.GC_UPDATE_SCORE 			= 116 -- 服务器返回分数  -- 
+
+gt.CG_MODIFY_HEAD_FRAME   =  117    
+-- {
+--    int m_headIconId;
+-- }
+gt.GC_MODIFY_HEAD_RRAME   =  118
+-- {
+--    int m_errorCode;
+--    int m_headIconId
+-- }
+gt.GC_GAIN_NEW_HEADICON  = 119 --获得头像信息
+-- {
+--     int m_headIconId
+-- }
+
+gt.GC_JIEYANG_CATCH_HORSE = 120 --揭阳麻将抓马
+
+gt.CG_SIGNIN_REQ = 162 --发送签到消息请求
+gt.GC_SIGNIN_RES = 163 --签到返回
+
+gt.CG_SIGNIN_INFO_REQ   = 164 --签到信息请求
+gt.GC_SIGNIN_INFO_RES   = 165 --签到信息回复
+
+gt.CG_SECURITY_CODE 		= 121 	--	手机号绑定，发送请求验证码
+gt.GC_SECURITY_CODE 		= 122 	--	手机号绑定，返回请求验证码
+
+gt.CG_PHONE_BIND 		= 124 	--	手机号绑定
+gt.GC_PHONE_BIND 		= 125 	--	手机号绑定
+
+
+gt.GC_FEED_CARD = 127      --玩家自己的补牌信息
+gt.CG_SHARE_SUCCESS = 128	-- 玩家分享成功请求
+gt.GC_SHARE_SUCCESS = 129 	-- 玩家分享成功回复
+
+
+
+
+
+
+

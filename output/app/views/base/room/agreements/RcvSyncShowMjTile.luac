@@ -1,0 +1,144 @@
+--region app.views.base.room.agreements.RcvSyncShowMjTile
+--desc: 广播玩家出牌
+--endregion
+
+local RcvSyncShowMjTile = class("RcvSyncShowMjTile", BaseRoomAgreement)
+
+function RcvSyncShowMjTile:ctor()
+	self:registerMsgListener(gt.GC_SYNC_SHOW_MJTILE, self, self.onRcvSyncShowMjTile)
+end
+
+function RcvSyncShowMjTile:onRcvSyncShowMjTile(msgTbl)
+	--self.m_scene.m_TurnShowMjTile = false;
+	--print('self.m_scene.m_TurnShowMjTile ' ..tostring(self.m_scene.m_TurnShowMjTile));
+	if msgTbl.m_errorCode ~= 0 then
+		gt.socketClient:reloginServer()
+		return
+	end
+	-- 座位号（1，2，3，4）
+	local seatIdx = msgTbl.m_pos + 1
+	local room = self.m_scene:getRoom()
+	local player = room:getPlayer(seatIdx)
+	if not player then
+		gt.socketClient:reloginServer()
+		return
+	end
+
+	self.m_scene:stopRedDragonActions(seatIdx)
+	if(self.m_scene.stopFillupActions ~= nil) then 
+		self.m_scene:stopFillupActions(seatIdx);
+	end 
+	
+	if msgTbl.m_type == 2 then
+		-- 自摸胡
+		self.m_scene:showAllMjTilesWhenWin(seatIdx, msgTbl.m_cardCount, msgTbl.m_cardValue, msgTbl.m_color, msgTbl.m_number)
+		self.m_scene:showDecisionAnimation(seatIdx, Room.DecisionType.SELF_DRAWN_WIN, msgTbl.m_hu)
+	elseif msgTbl.m_type == 1 then
+		-- 显示出的牌
+		if not self.m_scene.m_selfOutMjTitle or seatIdx ~= room:getMainSeatIdx() then
+			self.m_scene:addPreOutMjTiles();
+		end
+		-- 出牌动作
+		local mjTilesReferPos = player:getTilesReferPos()
+		local mjTilePos = mjTilesReferPos.holdStart
+		local realpos = cc.pAdd(mjTilePos, cc.pMul(mjTilesReferPos.holdSpace, player:getHoldTilesTotal()))
+		if seatIdx ~= room:getMainSeatIdx() then
+			if (next(msgTbl.m_think) ~= nil) then
+				local  mj_color = msgTbl.m_think[1][1]
+				local  mj_number = msgTbl.m_think[1][2]
+				self.m_scene:addOutTileAndSignWithAnimate(seatIdx, realpos, mj_color, mj_number)
+			end
+		else
+			if not self.m_scene.m_selfOutMjTitle and (next(msgTbl.m_think) ~= nil) then
+				local  mj_color = msgTbl.m_think[1][1]
+				local  mj_number = msgTbl.m_think[1][2]
+
+				if self.m_scene.m_chooseMjTile == nil then
+					self.m_scene:addOutTileAndSignImmed(seatIdx, mj_color, mj_number)
+				else
+					local mjTileSpr = self.m_scene.m_chooseMjTile.mjTileSpr
+					local tilePos = cc.p(mjTileSpr:getPostion());
+					self.m_scene:addOutTileAndSignWithAnimate(seatIdx, tilePos, mj_color, mj_number)
+				end
+			end
+		end
+
+		if seatIdx == room:getMainSeatIdx() then
+			-- 玩家持有牌中去除打出去的牌
+			if not self.m_scene.m_selfOutMjTitle and next(msgTbl.m_think) ~= nil then
+				local  mj_color = msgTbl.m_think[1][1]
+				local  mj_number = msgTbl.m_think[1][2]
+				if player:removeHoldTileByMJ(mj_color, mj_number) then
+					self.m_scene:sortSelfMjTiles()
+					self.m_scene:clearChoose()
+				else
+					print("移除失败，数据异常，断线重连。。。。")
+					-- gt.socketClient:reloginServer()
+				end				
+			end
+		else
+			player:removeHoldTileLast()
+		end
+
+		-- 记录出牌的上家
+		Tools.logGame("出牌玩家: player["..seatIdx..']');
+		room:setPreShowSeatIdx(seatIdx)
+
+		if (next(msgTbl.m_think) ~= nil) then
+			if (seatIdx == room:getMainSeatIdx() and not self.m_scene.m_selfOutMjTitle) or seatIdx ~= room:getMainSeatIdx() then
+				local  mj_color = msgTbl.m_think[1][1]
+				local  mj_number = msgTbl.m_think[1][2]
+				-- dj revise
+				gt.soundManager:PlayCardSound(player:getSex(), mj_color, mj_number)
+			end
+		end
+
+		if seatIdx == room:getMainSeatIdx() then
+			self.m_scene:setSelfOutMjTile()
+			--检查牌的数量
+			if not player:getCheckCradNum() then
+				gt.socketClient:reloginServer()
+			end
+		end
+	elseif msgTbl.m_type == 3 then
+		-- 暗杠
+		gt.log("     暗杠     ")
+		if (next(msgTbl.m_think) ~= nil) then
+			local  mj_color = msgTbl.m_think[1][1]
+			local  mj_number = msgTbl.m_think[1][2]
+			self.m_scene:addMjTileBar(seatIdx, mj_color, mj_number, false)
+			self.m_scene:hideOtherPlayerMjTiles(seatIdx, true, false)
+			self.m_scene:showDecisionAnimation(seatIdx, Room.DecisionType.DARK_BAR)
+		end
+	elseif msgTbl.m_type == 4 then
+		-- 碰转明杠
+		gt.log("     碰转明杠     ")
+		if (next(msgTbl.m_think) ~= nil) then
+			local  mj_color = msgTbl.m_think[1][1]
+			local  mj_number = msgTbl.m_think[1][2]
+			self.m_scene:changePungToBrightBar(seatIdx, mj_color, mj_number)
+			self.m_scene:showDecisionAnimation(seatIdx, Room.DecisionType.BRIGHT_BAR)
+		end
+	elseif msgTbl.m_type == 7 then
+		-- 暗补
+		gt.log("     暗补     ")
+		if (next(msgTbl.m_think) ~= nil) then
+			local  mj_color = msgTbl.m_think[1][1]
+			local  mj_number = msgTbl.m_think[1][2]
+			self.m_scene:addMjTileBar(seatIdx, mj_color, mj_number, false)
+			self.m_scene:hideOtherPlayerMjTiles(seatIdx, true, false)
+			self.m_scene:showDecisionAnimation(seatIdx, Room.DecisionType.DARK_BU)
+		end
+	elseif msgTbl.m_type == 8 then
+		-- 明补
+		gt.log("     明补     ")
+		if (next(msgTbl.m_think) ~= nil) then
+			local mj_color = msgTbl.m_think[1][1]
+			local mj_number = msgTbl.m_think[1][2]
+			self.m_scene:changePungToBrightBar(seatIdx, mj_color, mj_number)
+			self.m_scene:showDecisionAnimation(seatIdx, Room.DecisionType.BRIGHT_BU)
+		end
+	end
+end
+
+return RcvSyncShowMjTile

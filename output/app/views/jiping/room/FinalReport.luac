@@ -1,0 +1,32 @@
+local FinalReport = class("FinalReport",  BaseFinalReport)
+
+function FinalReport:ctor()
+	FinalReport.super.ctor(self)
+end
+
+function FinalReport:setHuCount(Node_resultDes_jp, rptMsgTbl, seatIdx)
+	-- 转转麻将
+	if not Node_resultDes_jp then
+		return
+	end
+
+	-- 自摸次数
+	local selfDrawnCountLabel = gt.seekNodeByName(Node_resultDes_jp, "Label_zimo_count")
+	selfDrawnCountLabel:setString(tostring(rptMsgTbl.m_zimo[seatIdx]))
+
+	-- 爆胡次数s
+	local takeCannonCountLabel = gt.seekNodeByName(Node_resultDes_jp, "Label_baohu_count")
+	takeCannonCountLabel:setString(tostring((rptMsgTbl.m_baohu and rptMsgTbl.m_baohu[seatIdx]) or "-"))
+
+	-- 总番数
+	local cannonCountLabel = gt.seekNodeByName(Node_resultDes_jp, "Label_fan_count")
+	cannonCountLabel:setString(tostring((rptMsgTbl.m_fannum and rptMsgTbl.m_fannum[seatIdx]) or "-"))
+end
+
+--胡牌类型的名字
+function FinalReport:getHuCountNodeName(  )
+	return "Node_resultDes_jp"
+end
+
+return FinalReport
+

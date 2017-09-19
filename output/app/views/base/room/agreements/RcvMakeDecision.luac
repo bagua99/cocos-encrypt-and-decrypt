@@ -1,0 +1,265 @@
+local RcvMakeDecision = class("RcvMakeDecision", BaseRoomAgreement)
+
+function RcvMakeDecision:ctor()
+	self:registerMsgListener(gt.GC_MAKE_DECISION, self, self.onRcvMakeDecision)
+end
+
+-- @class function
+-- @description 通知玩家决策
+-- end --
+function RcvMakeDecision:onRcvMakeDecision(msgTbl)
+	self.isShowEat = false
+	if msgTbl.m_flag ~= 1 then
+		return false
+	end
+
+	-- 玩家决策
+	self.isPlayerDecision = true
+
+	-- 决策倒计时
+	self.m_scene:playTimeCDStart(msgTbl.m_time)
+	self.m_room = self.m_scene:getRoom()
+
+	local csbLayer = self.m_scene:getCsbLayer()
+	local Node_decision = self.m_scene:getDecisionNode()
+	local width = 250
+	
+
+	-- 玩家决策
+	local decisionTypes = msgTbl.m_think --玩家决策类型
+	-- 最后加入决策"过"选项
+	--table.insert(decisionTypes, 0)  --插入过类型
+	local pass = {0, {}}
+	table.insert(decisionTypes, pass)
+
+	-- 显示对应的决策按键
+	-- local decisionBtnNode = gt.seekNodeByName(self.rootNode, "Node_decisionBtn") --显示所有的按键决策
+	-- decisionBtnNode:setVisible(true)
+
+	-- for _, decisionBtn in ipairs(decisionBtnNode:getChildren()) do
+	-- 	decisionBtn:setVisible(false)
+	-- end
+	-- local Btn_decision_0 = gt.seekNodeByName(decisionBtnNode, "Btn_decision_0")
+	-- local startPosX = Btn_decision_0:getPositionX()
+	-- local posY = Btn_decision_0:getPositionY()
+
+	local noSame = {}
+	for i, v in ipairs(decisionTypes) do
+		local isExist = false
+		table.foreach(noSame, function(k, m)
+			if m[1] == v[1] then
+				isExist = true
+				return false
+			end
+		end)
+		if not isExist then
+			table.insert(noSame, v)
+		end
+	end
+	local posTag = #noSame
+
+	self.m_haveHu = false
+	for i, v in ipairs(noSame) do
+		-- 1-出牌 2-胡，3-暗杠 4-明杠，5-碰，6-吃，7-暗补、8-明补 0-过
+		if v[1] == 2 then
+			self.m_haveHu = true
+		end
+
+		local decisionBtn = self:getDecisionBtn(v[1])
+		posTag = posTag - 1
+		decisionBtn:setTag(v[1])
+
+		local x = -posTag * width
+		decisionBtn:setPosition(cc.p(-posTag * width, 0))
+		Node_decision:addChild(decisionBtn)
+
+		-- 显示要碰，杠，胡的牌
+		local mjTileSpr = self:getMjTileSpr(v[1], msgTbl.m_color, msgTbl.m_number)
+		if mjTileSpr then
+			decisionBtn:addChild(mjTileSpr)
+		end
+
+		-- 响应决策按键事件
+		gt.addBtnPressedListener(decisionBtn, function(sender)
+			if self.m_scene:getGhostAnimation() then
+				return
+			end
+			
+			local function makeDecision(decisionType, m_type)
+				self.m_scene:setPlayerDecision(false)
+				self.isShowEat = false
+
+				Node_decision:removeAllChildren()
+				-- 发送决策消息
+				local msgToSend = {}
+
+				msgToSend.m_msgId = gt.CG_PLAYER_DECISION
+				msgToSend.m_type = decisionType
+				msgToSend.m_think = {{msgTbl.m_color,msgTbl.m_number}}
+				gt.socketClient:sendMessage(msgToSend)
+			end
+
+			local decisionType = sender:getTag()
+			if decisionType == 6 then  --吃牌
+				if self.isShowEat then
+					return
+				end
+				local showMjEatTable = {} --要显示的吃的牌
+				for _, m in pairs(decisionTypes) do
+					if m[1] == 6 then
+						table.insert(showMjEatTable, {m[2][1][2], msgTbl.m_number, m[2][2][2]})
+					end
+				end
+				local function sendEatMssage(result1, result2)
+					self.m_scene:setPlayerDecision(false)
+					self.isShowEat = false
+
+					Node_decision:removeAllChildren()
+					
+					-- 发送决策消息
+					local msgToSend = {}
+					msgToSend.m_msgId = gt.CG_PLAYER_DECISION
+					msgToSend.m_type = 6
+					msgToSend.m_think = {{msgTbl.m_color,result1},{msgTbl.m_color,result2}} -- wxg msgTbl.m_color又是哪里来的?
+					gt.socketClient:sendMessage(msgToSend)
+				end
+
+				if #showMjEatTable == 1 then -- 如果只有一个吃,则直接向服务器发送吃的消息
+					local result = {}
+					for m, eat in pairs(showMjEatTable) do
+						for n = 1, 3 do
+							if msgTbl.m_number ~= showMjEatTable[m][n] then
+								table.insert(result, showMjEatTable[m][n])
+							end
+						end
+					end
+					sendEatMssage(result[1], result[2])
+				else
+
+					local eatBg = cc.Scale9Sprite:create("images/otherImages/tipsbg.png")
+					eatBg:setContentSize(cc.size(#showMjEatTable * 3 * mjTileSpr:getContentSize().width + #showMjEatTable * 25, decisionBtn:getContentSize().height))
+					local menu = cc.Menu:create()
+
+					local pos = 0
+					local mjWidth = 0
+
+					for i, mjNumber in pairs(showMjEatTable) do
+						pos = pos + 1
+						for j = 1, 3 do
+							local mjTileName = string.format("p4s%d_%d.png", msgTbl.m_color, mjNumber[j]) --获取图片
+							local mjTileSpr = cc.Sprite:createWithSpriteFrameName(mjTileName)  --创建精灵
+							if tonumber(mjNumber[j]) == tonumber(msgTbl.m_number) then
+								mjTileSpr:setColor(cc.c3b(255,255,0))
+							end
+							if Tools.isGhost(msgTbl.m_color, mjNumber[j], self.m_room.m_gui) then
+								Tools.setMjTilesAngle( 4, mjTileSpr, gt.anglePngPath )
+							end
+
+							local menuItem = cc.MenuItemSprite:create(mjTileSpr,mjTileSpr) --创建菜单项
+							menuItem:setTag(i)
+
+
+							local function menuCallBack(i, sender)
+								local result = {}
+								for m, eat in pairs(showMjEatTable) do
+									if m == i then
+										for n = 1, 3 do
+											if msgTbl.m_number ~= showMjEatTable[m][n] then
+												table.insert(result,showMjEatTable[m][n])
+											end
+										end
+									end
+								end
+								sendEatMssage(result[1], result[2])
+							end
+							menuItem:registerScriptTapHandler(menuCallBack)
+
+							menuItem:setPosition(cc.p(mjWidth  + (pos - 1) * 10, eatBg:getContentSize().height / 2))
+							menu:addChild(menuItem)
+
+							mjWidth = mjWidth + mjTileSpr:getContentSize().width
+
+						end
+					end
+					eatBg:addChild(menu)
+					if pos == 1 then
+						menu:setPosition(eatBg:getContentSize().width * 0.5 - mjWidth * 0.5 + mjTileSpr:getContentSize().width * 0.5 ,0)
+					elseif pos == 2 then
+						menu:setPosition(eatBg:getContentSize().width * 0.5 - mjWidth * 0.5 + mjTileSpr:getContentSize().width * 0.4 ,0)
+					else
+						menu:setPosition(eatBg:getContentSize().width * 0.5 - mjWidth * 0.5 + mjTileSpr:getContentSize().width * 0.3 ,0)
+					end
+					sender:addChild(eatBg , -10, 5)
+					eatBg:setPosition(0,eatBg:getContentSize().height * 1.5)
+				end
+				self.isShowEat = true
+			elseif decisionType == 2 then
+				for _, m in pairs(decisionTypes) do
+					if m[1] == 2 then
+						self.isPlayerDecision = false
+						-- 隐藏决策按键
+						Node_decision:removeAllChildren()
+						-- 发送决策消息
+						local msgToSend = {}
+						msgToSend.m_msgId = gt.CG_PLAYER_DECISION
+						msgToSend.m_type = decisionType
+						msgToSend.m_think = m[2]
+						gt.socketClient:sendMessage(msgToSend)
+					end
+				end
+			else 
+				if decisionType == 0 and self.m_haveHu then
+					require("app/views/NoticeTips"):create(gt.getLocationString("LTKey_0007"), 
+					gt.getLocationString("LTKey_0043"), function(  )
+						makeDecision(decisionType, 0)
+					end, nil, false)
+				else
+					makeDecision(decisionType, 0)
+				end
+				
+			end
+
+		end)
+	end
+end
+
+function RcvMakeDecision:getMjTileSpr(_value, mjColor, mjNumber)
+	if _value == 0 or _value == 2 then
+		return nil
+	end
+	local mjTileSpr = cc.Sprite:createWithSpriteFrameName(string.format("p4s%d_%d.png",  mjColor, mjNumber))
+	if _value == 7 or _value == 8 then
+		mjTileSpr:setPosition(cc.p(190, 40))
+	else
+		mjTileSpr:setPosition(cc.p(140, 40))
+	end
+
+	if Tools.isGhost(mjColor, mjNumber, self.m_room.m_gui) then
+		Tools.setMjTilesAngle( 4, mjTileSpr, gt.anglePngPath )
+	end
+	
+	return mjTileSpr
+end
+
+
+function RcvMakeDecision:getDecisionBtn(_value)
+	local decisionBtn = nil
+	if _value == 0 then
+		decisionBtn = Tools.createButton(Room.DECISION_NAME.GUO)
+		decisionBtn:setName("Btn_decision_0")
+	elseif _value == 2 then
+		decisionBtn = Tools.createButton(Room.DECISION_NAME.HU)
+		decisionBtn:setName("Btn_decision_1")
+	elseif _value == 3 or _value == 4 then
+		decisionBtn = Tools.createButton(Room.DECISION_NAME.GANG)
+	elseif _value == 5 then
+		decisionBtn = Tools.createButton(Room.DECISION_NAME.PENG)
+	elseif _value == 6 then
+		decisionBtn = Tools.createButton(Room.DECISION_NAME.CHI)
+	elseif _value == 7 or _value == 8 then
+		decisionBtn = Tools.createButton(Room.DECISION_NAME.BUZHANG)
+	end
+	return decisionBtn
+end
+
+return RcvMakeDecision

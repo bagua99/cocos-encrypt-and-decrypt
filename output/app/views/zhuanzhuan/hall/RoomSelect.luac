@@ -1,0 +1,126 @@
+--region app.views.zhuanzhuan.hall.RoomSelect
+--desc: 转转玩法的房间选中，貌似游戏中没有地方用到
+--endregion
+
+
+local RoomSelect = class("RoomSelect", BaseRoomSelect)
+
+function RoomSelect:ctor()
+	RoomSelect.super.ctor(self, Tools.GAME_TYPE[1])
+	self:initZiMoQiangGang()
+	self:initHongZhong()
+	self:initQiXiaoDui()
+end
+
+-- 获取游戏玩法
+function RoomSelect:getPlayType()
+	local result = {}
+	local ChkBox_zimo = gt.seekNodeByName(self.m_csbNode, "ChkBox_zimo")
+	local ChkBox_qianggang = gt.seekNodeByName(self.m_csbNode, "ChkBox_qianggang")
+	if not ChkBox_zimo:isSelected() and not ChkBox_qianggang:isSelected() then
+		result = {3}
+	elseif ChkBox_zimo:isSelected() then
+		result = {1}
+	elseif ChkBox_qianggang:isSelected() then
+		result = {2}
+	end
+	local ChkBox_hongzhong = gt.seekNodeByName(self.m_csbNode, "ChkBox_hongzhong")
+	if ChkBox_hongzhong:isSelected() then
+		table.insert(result, 4)
+	end
+	local ChkBox_qixiaodui = gt.seekNodeByName(self.m_csbNode, "ChkBox_qixiaodui")
+	if ChkBox_qixiaodui:isSelected() then
+		table.insert(result, 5)
+	end
+	return result
+end
+
+-- 发送消息
+function RoomSelect:sendCreateRoom()
+	local msgToSend = {}
+	msgToSend.m_msgId = gt.CG_CREATE_ROOM
+	msgToSend.m_flag = self:getSendRound()
+	msgToSend.m_secret = "123456"
+	msgToSend.m_gold = 1
+	msgToSend.m_state = 0 -- 0转转 3长沙
+	msgToSend.m_playtype = self:getPlayType()
+	msgToSend.m_robotNum = 3
+	msgToSend.m_cardValue = {}
+	msgToSend.m_location = Tools.getLocationStr()
+	msgToSend.m_canInteraction = gt.funnyEnable
+	msgToSend.m_antiCheat = gt.antiCheat
+
+	gt.socketClient:sendMessage(msgToSend)
+end
+
+-- 初始化红中癞子
+function RoomSelect:initHongZhong()
+	local ChkBox_hongzhong = gt.seekNodeByName(self.m_csbNode, "ChkBox_hongzhong")
+	local isHongZhong = Tools.getValue(self.m_gameType .. "hongzhong")
+	if isHongZhong == "true" then
+		ChkBox_hongzhong:setSelected(true)
+	else
+		ChkBox_hongzhong:setSelected(false)
+	end
+	local function checkHongZhong(sender, eventType)
+		if eventType == ccui.CheckBoxEventType.selected then
+			Tools.saveKeyValue(self.m_gameType .. "hongzhong", "true")
+		elseif eventType == ccui.CheckBoxEventType.unselected then
+			Tools.saveKeyValue(self.m_gameType .. "hongzhong", "false")
+		end
+	end
+	ChkBox_hongzhong:addEventListener(checkHongZhong)
+end
+
+-- 初始化七小对
+function RoomSelect:initQiXiaoDui()
+	local ChkBox_qixiaodui = gt.seekNodeByName(self.m_csbNode, "ChkBox_qixiaodui")
+	local isQiXiaoDui = Tools.getValue(self.m_gameType .. "qixiaodui")
+	if isQiXiaoDui == "true" then
+		ChkBox_qixiaodui:setSelected(true)
+	else
+		ChkBox_qixiaodui:setSelected(false)
+	end
+	local function checkQiXiaoDui(sender, eventType)
+		if eventType == ccui.CheckBoxEventType.selected then
+			Tools.saveKeyValue(self.m_gameType .. "qixiaodui", "true")
+		elseif eventType == ccui.CheckBoxEventType.unselected then
+			Tools.saveKeyValue(self.m_gameType .. "qixiaodui", "false")
+		end
+	end
+	ChkBox_qixiaodui:addEventListener(checkQiXiaoDui)
+end
+
+-- 初始化自摸和抢杠胡
+function RoomSelect:initZiMoQiangGang()
+	local ChkBox_zimo = gt.seekNodeByName(self.m_csbNode, "ChkBox_zimo")
+	local ChkBox_qianggang = gt.seekNodeByName(self.m_csbNode, "ChkBox_qianggang")
+	local function checkZiMoQiangGang(sender, eventType)
+		if eventType == ccui.CheckBoxEventType.selected then
+			sender:setSelected(true)
+			if sender:getName() == "ChkBox_zimo" then
+				ChkBox_qianggang:setSelected(false)
+				Tools.saveKeyValue(self.m_gameType .. "zimoqianggang", "zimo")
+			elseif sender:getName() == "ChkBox_qianggang" then
+				ChkBox_zimo:setSelected(false)
+				Tools.saveKeyValue(self.m_gameType .. "zimoqianggang", "qianggang")
+			end
+		elseif eventType == ccui.CheckBoxEventType.unselected then
+		end
+	end
+	ChkBox_zimo:addEventListener(checkZiMoQiangGang)
+	ChkBox_qianggang:addEventListener(checkZiMoQiangGang)
+
+	local zimoqianggangSelect = Tools.getValue(self.m_gameType .. "zimoqianggang")
+	if zimoqianggangSelect ~= "" then
+		checkZiMoQiangGang(
+			gt.seekNodeByName(self.m_csbNode, "ChkBox_" .. zimoqianggangSelect),
+			ccui.CheckBoxEventType.selected)
+	else
+		checkZiMoQiangGang(
+			gt.seekNodeByName(self.m_csbNode, "ChkBox_zimo"),
+			ccui.CheckBoxEventType.selected)
+	end
+end
+
+return RoomSelect

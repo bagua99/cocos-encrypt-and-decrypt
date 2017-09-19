@@ -1,0 +1,18 @@
+local PlayinfoConfigZhuanZhuan = class("PlayinfoConfigBase", require("app/views/playinfo/Playinfo_config_base"))
+
+function PlayinfoConfigZhuanZhuan:ctor(  )
+	PlayinfoConfigZhuanZhuan.super.ctor(self)
+	self.ruleType[2].desc = "2鸟"
+	self.ruleType[4].desc = "4鸟"
+	self.ruleType[6].desc = "6鸟"
+end
+
+function PlayinfoConfigZhuanZhuan:getShowList( )
+	return {
+		11, 13,
+		15, 5, 14,
+		2, 4, 6
+	}
+end
+
+return PlayinfoConfigZhuanZhuan

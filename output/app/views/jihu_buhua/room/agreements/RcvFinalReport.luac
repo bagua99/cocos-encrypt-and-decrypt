@@ -1,0 +1,35 @@
+--region app.views.jihu_buhua.room.agreements.RcvFinalReport
+--收到最终结算的消息
+--endregion 
+
+local RcvFinalReport = class("RcvFinalReport", BaseRcvFinalReport)
+
+function RcvFinalReport:ctor()
+	self:registerMsgListener(gt.GC_FINAL_REPORT, self, self.onRcvFinalReport)
+	self.maCardShowTime = 3
+end
+
+function RcvFinalReport:onRcvFinalReport(msgTbl)
+	self.lastRound = true
+	local room = self.m_scene:getRoom()
+	local players = room:getPlayers()
+	local curRoomPlayers = clone(players)
+
+	local allDelayTimy = 1.5
+	-- 如果有马的话,最后一局,需要多等1.5秒,然后展示总结算
+	if self.m_scene.haveMa then
+		allDelayTimy = allDelayTimy + self.maCardShowTime
+	end
+	local delayTime = cc.DelayTime:create(allDelayTimy)
+	local callFunc = cc.CallFunc:create(function(sender)
+		-- 弹出总结算界面
+		local finalReport = Tools.requireFile("FinalReport", self.m_scene:getGameType(), Tools.BASE_TYPE.ROOM)
+		finalReport:init(curRoomPlayers, msgTbl)
+		self.m_scene:addChild(finalReport, Room.ZOrder.REPORT)
+	end)
+
+	local seqAction = cc.Sequence:create(delayTime, callFunc)
+	self.m_scene:runAction(seqAction)
+end
+
+return RcvFinalReport

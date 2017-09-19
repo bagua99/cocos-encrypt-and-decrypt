@@ -1,0 +1,177 @@
+--region app.views.AgreementPanel
+--desc: 游戏用户协议
+--endregion
+
+local gt = cc.exports.gt
+
+local FONTSIZE = 30
+--local FONTSCOLOR = cc.c3b(102, 38, 0)
+local FONTSCOLOR = cc.c3b(254,205,255);
+local LINESPACING = 10
+local specialWidth = {}
+
+local AgreementPanel = class("AgreementPanel", function()
+	return cc.LayerColor:create(cc.c4b(85, 85, 85, 85), gt.winSize.width, gt.winSize.height)
+end)
+
+function AgreementPanel:ctor()
+	-- 注册节点事件
+	self:registerScriptHandler(handler(self, self.onNodeEvent))
+
+	local csbNode = cc.CSLoader:createNode("AgreementPanel.csb")
+	csbNode:setAnchorPoint(0.5, 0.5)
+	csbNode:setPosition(gt.winCenter)
+	self:addChild(csbNode)
+	self.rootNode = csbNode
+
+	local closeBtn = gt.seekNodeByName(csbNode, "Btn_close")
+	gt.addBtnPressedListener(closeBtn, function()
+		self:removeFromParent()
+	end)
+end
+
+function AgreementPanel:onNodeEvent(eventName)
+	if "enter" == eventName then
+		local listener = cc.EventListenerTouchOneByOne:create()
+		listener:setSwallowTouches(true)
+		listener:registerScriptHandler(handler(self, self.onTouchBegan), cc.Handler.EVENT_TOUCH_BEGAN)
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:addEventListenerWithSceneGraphPriority(listener, self)
+
+		self:requestAgreement()
+	elseif "exit" == eventName then
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:removeEventListenersForTarget(self)
+
+		if self.xhr then
+			self.xhr:unregisterScriptHandler()
+			self.xhr = nil
+		end
+	end
+end
+
+function AgreementPanel:onTouchBegan(touch, event)
+	return true
+end
+
+function AgreementPanel:requestAgreement()
+	local xhr = cc.XMLHttpRequest:new()
+	xhr.responseType = cc.XMLHTTPREQUEST_RESPONSE_STRING
+	xhr:open("GET", "http://update.xlsxmj.com/client/guangdong_message/agreement.txt")
+	local function onReadyStateChanged()
+		if xhr.readyState == 4 then
+			-- gt.log(xhr.response)
+            if xhr.status == 200 then
+                local agreementScrollVw = gt.seekNodeByName(self.rootNode, "ScrollVw_agreement")
+                self.agreementScrollVw = agreementScrollVw
+                self:showAgreement(xhr.response)
+            else
+                gt.log("xhr.readyState is:" .. xhr.readyState .. " xhr.status is: " .. xhr.status)
+            end
+		else
+			gt.log("xhr.readyState is:" .. xhr.readyState .. " xhr.status is: " .. xhr.status)
+		end
+		xhr:unregisterScriptHandler()
+		self.xhr = nil		
+	end
+	xhr:registerScriptHandler(onReadyStateChanged)
+	xhr:send()
+
+	self.xhr = xhr
+end
+
+--根据宽度，切割字符串
+function AgreementPanel:splitMsgForWidth( _str, _fontsize,_width )
+    local fontsize = gt.createTTFLabel("闲", _fontsize):getContentSize()
+    local msgArray = {}
+
+    local frontChar = nil
+    local pos = 0  
+
+    for uchar in string.gfind(_str, "[%z\1-\127\194-\244][\128-\191]*") do
+        if uchar == "\n" then
+            pos = 0
+            -- if frontChar and frontChar == "\n" then
+                msgArray[#msgArray + 1] = " "
+            -- end
+        else
+            if pos >= _width or pos == 0 then
+                msgArray[#msgArray + 1] = uchar
+                if string.len(uchar) > 1 then
+                    pos = fontsize.width
+                else
+                    if specialWidth[uchar] == nil then
+                        specialWidth[uchar] = gt.createTTFLabel(uchar, _fontsize):getContentSize().width
+                    end
+
+                    pos = specialWidth[uchar]
+                end
+            else
+                msgArray[#msgArray] = msgArray[#msgArray] .. uchar
+                if string.len(uchar) > 1 then
+                    pos = pos + fontsize.width
+                else
+                    if specialWidth[uchar] == nil then
+                        specialWidth[uchar] = gt.createTTFLabel(uchar, _fontsize):getContentSize().width
+                    end
+                    
+                    pos = pos + specialWidth[uchar]
+                end
+            end
+        end
+
+        frontChar = uchar        
+    end
+
+    return msgArray
+end
+
+
+function AgreementPanel:showAgreement( _msg )
+	self.m_agreementList = self:splitMsgForWidth(_msg, FONTSIZE, self.agreementScrollVw:getContentSize().width - 40)
+
+	local tableView = cc.TableView:create(self.agreementScrollVw:getContentSize())
+    tableView:setDirection(cc.SCROLLVIEW_DIRECTION_VERTICAL)
+    tableView:setPosition(self.agreementScrollVw:getPosition())
+    tableView:setDelegate()
+    tableView:setVerticalFillOrder(cc.TABLEVIEW_FILL_TOPDOWN)
+    self.rootNode:addChild(tableView)
+
+    --registerScriptHandler functions must be before the reloadData funtion
+    tableView:registerScriptHandler(handler(self, self.numberOfCellsInTableView),cc.NUMBER_OF_CELLS_IN_TABLEVIEW)  
+    tableView:registerScriptHandler(handler(self, self.cellSizeForTable),cc.TABLECELL_SIZE_FOR_INDEX)
+    tableView:registerScriptHandler(handler(self, self.tableCellAtIndex),cc.TABLECELL_SIZE_AT_INDEX)
+    tableView:reloadData()
+
+end
+
+function AgreementPanel:cellSizeForTable(table,idx) 
+    return self.agreementScrollVw:getContentSize().width,FONTSIZE + LINESPACING
+end
+
+function AgreementPanel:tableCellAtIndex(table, idx)
+    local strValue = string.format("%d",idx)
+    local cell = table:dequeueCell()
+    local label = nil
+    if nil == cell then
+    	cell = cc.TableViewCell:new()
+        label = gt.createTTFLabel(self.m_agreementList[idx], FONTSIZE) --cc.Label:createWithSystemFont(strValue, "Helvetica", 20.0)
+        label:setAnchorPoint(cc.p(0,1))
+        label:setPosition(cc.p(0,FONTSIZE + LINESPACING))
+        label:setTextColor(FONTSCOLOR)
+        cell:addChild(label,1, 1)
+    else
+        local label = cell:getChildByTag(1)
+        if nil ~= label then
+            label:setString(self.m_agreementList[idx])
+        end
+    end
+    return cell
+end
+
+function AgreementPanel:numberOfCellsInTableView(table)
+   return #(self.m_agreementList)
+end
+
+return AgreementPanel
+

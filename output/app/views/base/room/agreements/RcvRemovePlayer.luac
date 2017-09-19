@@ -1,0 +1,40 @@
+local RcvRemovePlayer = class("RcvRemovePlayer", BaseRoomAgreement)
+
+-- 移除一个玩家 32
+function RcvRemovePlayer:ctor()
+	self:registerMsgListener(gt.GC_REMOVE_PLAYER, self, self.onRcvRemovePlayer)
+end
+
+function RcvRemovePlayer:onRcvRemovePlayer(msgTbl)
+	--设置房间状态
+	local room = self.m_scene:getRoom()
+	if room:getRoomStatus() == Room.Status.END then
+		return
+	end
+
+	local seatIdx = msgTbl.m_pos + 1
+	local room = self.m_scene:getRoom()
+	local csbLayer = self.m_scene:getCsbLayer()
+	local player = room:getPlayer(seatIdx)
+	-- 隐藏玩家信息
+	local playerInfoNode = gt.seekNodeByName(csbLayer, "Node_playerInfo_" .. player:getDisplayIdx())
+	playerInfoNode:setVisible(false)
+
+	-- 隐藏玩家准备手势
+	local readySignNode = gt.seekNodeByName(csbLayer, "Node_readySign")
+	local readySignSpr = gt.seekNodeByName(readySignNode, "Spr_readySign_" .. player:getDisplayIdx())
+	readySignSpr:setVisible(false)
+
+	-- 取消头像下载监听
+	local headSpr = gt.seekNodeByName(playerInfoNode, "Spr_head")
+	local uistr_pre = "images/otherImages/headframes/"
+	local uistr = player:getDisplayIdx() % 2 == 0  and (uistr_pre.."head_img_female.png") or (uistr_pre..'head_img_male.png');
+	--headSpr:setSpriteFrame((player:getDisplayIdx() % 2 == 0  and "head_img_female.png") or "head_img_male.png" )
+	headSpr:setTexture(uistr);
+	self.m_scene:getPlayerHeadMgr():detach(headSpr)
+
+	-- 去除数据
+	room:removePlayer(seatIdx)
+end
+
+return RcvRemovePlayer

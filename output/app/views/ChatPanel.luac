@@ -1,0 +1,296 @@
+--region app.ChatPanel
+--desc: 聊天框
+--endregion
+
+local gt = cc.exports.gt
+
+local ChatPanel = class("ChatPanel", function()
+	return cc.LayerColor:create(cc.c4b(85, 85, 85, 85), gt.winSize.width, gt.winSize.height)
+end)
+
+function ChatPanel:ctor(msg)
+	-- 注册节点事件
+	self:registerScriptHandler(handler(self, self.onNodeEvent))
+
+	local csbNode = cc.CSLoader:createNode("ChatPanel.csb")
+	csbNode:setPosition(gt.winCenter)
+	self:addChild(csbNode)
+	self.rootNode = csbNode
+	self.msg = msg or {}
+
+	local _inputMsgTxtField = gt.seekNodeByName(csbNode, "TxtField_inputMsg")
+
+	-- 固定短语
+	local fixMsgNode = gt.seekNodeByName(csbNode, "Node_fixMsg")
+	local fixMsgListVw = gt.seekNodeByName(fixMsgNode, "ListVw_fixMsg")
+	for i = 1, 11 do
+		local fixMsgCell = cc.CSLoader:createNode("FixMsgCellLog.csb")
+		local bgSpr = gt.seekNodeByName(fixMsgCell, "Spr_bg")
+		local fixMsgLabel = gt.seekNodeByName(fixMsgCell, "Label_fixMsg")
+		fixMsgLabel:setString(gt.getLocationString("LTKey_0028_" .. i))
+		local fixMsgItem = ccui.Widget:create()
+		fixMsgItem:setTag(i)
+		fixMsgItem:setTouchEnabled(true)
+		fixMsgItem:setContentSize(bgSpr:getContentSize())
+		fixMsgItem:addChild(fixMsgCell)
+		fixMsgItem:addClickEventListener(handler(self, self.fixMsgClickEvent))
+		fixMsgListVw:pushBackCustomItem(fixMsgItem)
+	end
+
+	require("app/ShieldWord")
+
+	local sendBtn = gt.seekNodeByName(csbNode, "Btn_send")
+	gt.addBtnPressedListener(sendBtn, function()
+		local inputMsgTxtField = gt.seekNodeByName(csbNode, "TxtField_inputMsg")
+		local inputString = inputMsgTxtField:getString()
+		if string.len(inputString) > 0 then
+			if gt.CheckShieldWord(inputString) then
+				require("app/views/NoticeTips"):create("提示", "您输入的词语含有敏感词,请重新输入!", nil, nil, true)
+			else
+				self:sendChatMsg(gt.ChatType.INPUT_MSG, 0, inputString)
+			end
+		end
+	end)
+	
+	-- cc.SpriteFrameCache:getInstance():addSpriteFrames("res/sd/images/EmotionOut.plist", "res/sd/images/EmotionOut.pvr.ccz")
+	-- 表情符号新zy
+	local emojiNode = gt.seekNodeByName(csbNode, "Node_emoji_0")
+	emojiNode:setVisible(true)
+	local emojiScrollVw = gt.seekNodeByName(emojiNode, "ScrollVw_emoji")
+	local emojiNameArray = {
+		"biaoqing01.png", "biaoqing02.png", "biaoqing03.png",
+		"biaoqing04.png", "biaoqing05.png", "biaoqing06.png",
+		"biaoqing07.png", "biaoqing08.png", "biaoqing09.png",
+		"biaoqing10.png", "biaoqing11.png", "biaoqing12.png",
+		"biaoqing13.png", "biaoqing14.png", "biaoqing15.png",
+		"biaoqing16.png", "biaoqing17.png", "biaoqing18.png",
+		"biaoqing19.png", "biaoqing20.png", "biaoqing21.png",
+		"biaoqing22.png", "biaoqing23.png", "biaoqing24.png",
+		"biaoqing25.png", "biaoqing26.png", "biaoqing27.png",
+	}
+	local emojiSpr = gt.seekNodeByName(emojiScrollVw, "Spr_emoji")
+	emojiScrollVw:removeChild(emojiSpr)
+	local emojiStartPos = cc.p(emojiSpr:getPosition())
+	local emojiPos = emojiStartPos
+	for i, v in ipairs(emojiNameArray) do
+		local emojiSpr = cc.Sprite:createWithSpriteFrameName(v)
+		local emojiSize = cc.size(170, 165)--emojiSpr:getContentSize()
+		emojiSpr:setScale(0.6)
+		-- emojiSpr:setAnchorPoint(cc.p(0.5, 0.5))
+		emojiSpr:setPosition(emojiSize.width * 0.5, emojiSize.height * 0.5)
+		local emojiWidget = ccui.Widget:create()
+		emojiWidget:setTouchEnabled(true)
+		emojiWidget:setTag(i)
+		emojiWidget:setName(v)
+		emojiWidget:setContentSize(emojiSize)
+		emojiWidget:addChild(emojiSpr)
+		emojiScrollVw:addChild(emojiWidget)
+		emojiWidget:setPosition(emojiPos)
+		emojiWidget:addClickEventListener(handler(self, self.emojiClickEvent))
+
+		local row = math.floor(i / 3)
+		local col = i % 3
+		emojiPos = cc.pAdd(emojiStartPos, cc.p(col * (emojiSize.width - 20), -row * (emojiSize.height - 45)))
+	end
+
+	local recordNode = gt.seekNodeByName(self.rootNode, "Node_emoji")
+	recordNode:setVisible(false)
+	self.m_recordNode = recordNode	
+	-- self:setChatRecord(recordNode)
+
+	local inputMsgTxtField = gt.seekNodeByName(csbNode, "TxtField_inputMsg")
+	inputMsgTxtField:setPlaceHolderColor(cc.c3b(255,255,255))
+	inputMsgTxtField:addEventListener(handler(self, self.TxtFieldClickEvent))
+
+	local msgTabBtn = gt.seekNodeByName(csbNode, "Btn_msgTab")
+	msgTabBtn:setTag(1)
+	msgTabBtn:addClickEventListener(handler(self, self.switchChatTab))
+	local emojiTabBtn = gt.seekNodeByName(csbNode, "Btn_emojiTab")
+	emojiTabBtn:setTag(2)
+	emojiTabBtn:addClickEventListener(handler(self, self.switchChatTab))
+
+	
+	local sprMsgTab_1 = gt.seekNodeByName(msgTabBtn, "Sprite_1")
+	local sprMsgTab_2 = gt.seekNodeByName(msgTabBtn, "Sprite_2")
+	local sprMsgTab_3 = gt.seekNodeByName(msgTabBtn, "Sprite_bg")
+	local sprLogTab_1 = gt.seekNodeByName(emojiTabBtn, "Sprite_1")
+	local sprLogTab_2 = gt.seekNodeByName(emojiTabBtn, "Sprite_2")
+	local sprLogTab_3 = gt.seekNodeByName(emojiTabBtn, "Sprite_bg")
+	self.chatTabBtns = {{msgTabBtn, fixMsgNode, sprMsgTab_1,sprLogTab_2,sprMsgTab_3}, {emojiTabBtn, recordNode, sprLogTab_1,sprMsgTab_2,sprLogTab_3}}
+
+	self:switchChatTab(msgTabBtn)
+end
+
+function ChatPanel:onNodeEvent(eventName)
+	if "enter" == eventName then
+		local listener = cc.EventListenerTouchOneByOne:create()
+		listener:setSwallowTouches(true)
+		listener:registerScriptHandler(handler(self, self.onTouchBegan), cc.Handler.EVENT_TOUCH_BEGAN)
+		listener:registerScriptHandler(handler(self, self.onTouchEnded), cc.Handler.EVENT_TOUCH_ENDED)
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:addEventListenerWithSceneGraphPriority(listener, self)
+	elseif "exit" == eventName then
+		local eventDispatcher = self:getEventDispatcher()
+		eventDispatcher:removeEventListenersForTarget(self)
+	end
+end
+
+function ChatPanel:onTouchBegan(touch, event)
+	return true
+end
+
+function ChatPanel:onTouchEnded(touch, event)
+	self:removeFromParent()
+end
+
+function ChatPanel:switchChatTab(sender)
+	local tabTag = sender:getTag()
+	for i, tabData in ipairs(self.chatTabBtns) do
+		if i == tabTag then
+			-- tabData[1]:setBrightStyle(ccui.BrightStyle.highlight)
+			tabData[2]:setVisible(true)
+			tabData[3]:setVisible(true)
+			tabData[4]:setVisible(true)
+			tabData[5]:setVisible(true)
+
+		else
+			-- tabData[1]:setBrightStyle(ccui.BrightStyle.normal)
+			tabData[2]:setVisible(false)
+			tabData[3]:setVisible(false)
+			tabData[4]:setVisible(false)
+			tabData[5]:setVisible(false)
+		end
+	end
+	
+	if sender:getName() == "Btn_emojiTab" then
+		self:setChatRecord(self.m_recordNode)
+	end
+
+	local fixMsgNode = gt.seekNodeByName(csbNode, "Node_fixMsg")
+	local emojiNode = gt.seekNodeByName(csbNode, "Node_emoji")
+end
+
+function ChatPanel:fixMsgClickEvent(sender, eventType)
+	self:sendChatMsg(gt.ChatType.FIX_MSG, sender:getTag())
+end
+
+function ChatPanel:emojiClickEvent(sender)
+	self:sendChatMsg(gt.ChatType.EMOJI, 0, sender:getName())
+end
+
+function ChatPanel:fixMsgLogClickEvent(sender, eventType)
+	self:sendChatMsg(gt.ChatType.INPUT_MSG,sender:getTag(),self.msg[sender:getTag()].abstract)
+end
+
+function ChatPanel:TxtFieldClickEvent(sender, eventType)
+	if eventType == 0 then
+		if gt.isIOSPlatform() then
+			local moveTo = cc.MoveTo:create(0.5,cc.p(0,300))
+			self:runAction(moveTo)
+		end
+	elseif eventType == 1 then
+		if gt.isIOSPlatform() then
+			local moveTo = cc.MoveTo:create(0.5,cc.p(0,0))
+			self:runAction(moveTo)
+		end
+	end
+ end 
+
+function ChatPanel:sendChatMsg(chatType, chatIdx, chatString)
+	chatIdx = chatIdx or 1
+	chatString = chatString or ""
+
+	local msgToSend = {}
+	msgToSend.m_msgId = gt.CG_CHAT_MSG
+	msgToSend.m_type = chatType
+	msgToSend.m_id = chatIdx
+	msgToSend.m_msg = chatString
+	gt.socketClient:sendMessage(msgToSend)
+	cc.Director:getInstance():getOpenGLView():setIMEKeyboardState(false)
+	self:removeFromParent()
+end
+
+--聊天记录
+function ChatPanel:setChatRecord( _viewNode )
+	local fixMsgListVw = gt.seekNodeByName(_viewNode, "ListVw_fixMsg")
+	if self.msg and #self.msg  > 0 then
+		if #fixMsgListVw:getItems() > 0 then
+			return
+		end
+		-- for i = #self.msg, 1, -1 do
+		for i=1, #self.msg do
+			local fixMsgCell = cc.CSLoader:createNode("FixMsgCellLogLayer.csb")
+			local mineNode = gt.seekNodeByName(fixMsgCell, "Node_mine")
+			mineNode:setVisible(self.msg[i].m_isMine)
+			local otherNode = gt.seekNodeByName(fixMsgCell, "Node_other")
+			otherNode:setVisible(not self.msg[i].m_isMine)
+			self:setChatRecordCell(i, self.msg[i], (self.msg[i].m_isMine and mineNode ) or otherNode )
+
+			local fixMsgItem = ccui.Widget:create()
+			fixMsgItem:setTag(i)
+			fixMsgItem:setContentSize(fixMsgCell:getContentSize())
+			fixMsgItem:addChild(fixMsgCell)
+			fixMsgListVw:pushBackCustomItem(fixMsgItem)
+		end
+		fixMsgListVw:jumpToBottom()
+	end
+end
+
+--设置聊天内容
+function ChatPanel:setChatRecordCell( _index, _msgTable, _msgNode )
+	if not _msgTable or not _msgNode then
+		return
+	end
+
+	--设置头像
+	local headSpr = gt.seekNodeByName(_msgNode, "spr_head")
+	Tools.setHeardTexture(headSpr, _msgTable.m_uid)
+
+	local msgNode = gt.seekNodeByName(_msgNode, "Node_msg")
+	local voiceNode = gt.seekNodeByName(_msgNode, "Node_yuyin")
+	msgNode:setVisible(_msgTable.m_type ~= gt.ChatType.VOICE_MSG)
+	voiceNode:setVisible(_msgTable.m_type == gt.ChatType.VOICE_MSG)
+
+	if _msgTable.m_type == gt.ChatType.VOICE_MSG then --设置语音信息
+		require("json")
+		local curUrl = string.gsub(_msgTable.m_musicUrl,"\\","")
+		local respJson = json.decode(curUrl)
+		local videoTime = tonumber(respJson.duration)
+
+		local numberTTF = gt.seekNodeByName(_msgNode, "Text_yuyin_num")
+		numberTTF:setString((videoTime > 0 and videoTime or 1) .. '"')
+
+		local voicePanel = gt.seekNodeByName(_msgNode, "Panel_yuyin")
+		voicePanel:addClickEventListener(function( sender )
+			gt.socketClient:dispatchMessage(_msgTable)
+			cc.Director:getInstance():getOpenGLView():setIMEKeyboardState(false)
+			self:removeFromParent()
+		end)
+		voicePanel:setSwallowTouches(false)
+	else --设置聊天记录
+		local msgTTF = gt.seekNodeByName(_msgNode, "Text_text")
+		
+		if _msgTable.m_type == gt.ChatType.FIX_MSG then
+			msgTTF:setString(gt.getLocationString("LTKey_0028_" .. _msgTable.m_id)) 
+		elseif _msgTable.m_type == gt.ChatType.INPUT_MSG then
+			msgTTF:setString(_msgTable.m_msg)			
+		end
+
+		local ttfSize = msgTTF:getContentSize()
+		if ttfSize.width > 280 then
+			msgTTF:ignoreContentAdaptWithSize(false)
+			msgTTF:setTextAreaSize(cc.size(280, 55))
+		end	
+
+		-- local msgPanel = gt.seekNodeByName(_msgNode, "Panel_msg")
+		-- msgPanel:addClickEventListener(function ( ... )
+		-- 	gt.socketClient:dispatchMessage(_msgTable)
+		-- 	cc.Director:getInstance():getOpenGLView():setIMEKeyboardState(false)
+		-- 	self:removeFromParent()
+		-- end)
+	end
+end
+
+return ChatPanel
+
+

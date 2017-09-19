@@ -1,0 +1,337 @@
+--
+-- Author: Yang Liu
+-- Date: 2016-02-22 15:23:46
+--
+-- module("Charge", package.seeall)
+
+local gt = cc.exports.gt
+cc.exports.Charge = {
+	
+}
+
+local mt = {}
+
+local Json = require("json")
+
+function Charge.buy(id_)
+	if not gt.isInReview and ( not gt.unionid or string.len(gt.unionid) == 0 )then
+		require("app/views/NoticeTips"):create("购买失败", "无法购买，请您重新登陆游戏后购买", nil, nil, true)
+		return
+	end
+
+	Charge.openMaskLayer()
+
+	if mt.payResultHandler then
+		gt.scheduler:unscheduleScriptEntry(mt.payResultHandler)
+		mt.payResultHandler = nil
+		Charge.updateOrderState("IAP_DELETE_ORDER")
+	end
+
+	local luaBridge = require("cocos/cocos2d/luaoc")
+	luaBridge.callStaticMethod("AppController", "resetPayResult")
+
+	mt.requestCount = 0
+	mt.itemid = id_
+	local RechargeConfig = gt.RechargeConfig
+	mt.chargeTable = RechargeConfig[mt.itemid]
+	
+	Charge.createPreOrder()
+end
+
+function Charge.pay()
+	gt.sdkBridge.pay(mt.chargeTable["Cost"], nil,  mt.itemid)
+	Charge.updateOrderState("IAP_CREATE_ORDER")
+
+	Charge.handlePayMessage()
+end
+
+function Charge.createPreOrder()
+	local function createResponse()
+		mt.xhr:unregisterScriptHandler()
+		if mt.xhr.readyState == 4 and (mt.xhr.status >= 200 and mt.xhr.status < 207) then
+			local response = Json.decode(mt.xhr.response)
+			dump(response, "----createResponse")
+			if tonumber(response.code) == 0 then
+				if response.msg == "success" then
+					mt.preOrderNo = response.data.preOrderNo
+					mt.purchaseKey = response.data.purchaseKey
+					Charge.pay()
+				end
+			elseif tonumber(response.code) == -1 then
+				gt.log("------接口调用失败")
+				Charge.createPreOrder()
+			end
+		elseif mt.xhr.readyState == 1 and mt.xhr.status == 0 then
+			gt.log("------请求失败")
+			Charge.createPreOrder()
+		end
+	end
+
+	local productId = mt.chargeTable["AppStore"]
+	local createOrderUrl = string.format("%s?serverCode=%s&userId=%s&productNumber=%s&payWay=%s&count=1", gt.createOrderUrl, gt.serverCode, gt.playerData.uid, productId, gt.sdkBridge.payWay)
+	dump("----create order url" .. createOrderUrl)
+	if not mt.xhr then
+        mt.xhr = cc.XMLHttpRequest:new()
+        mt.xhr.timeout = 10 -- 设置超时时间
+    end
+    mt.xhr.responseType = cc.XMLHTTPREQUEST_RESPONSE_JSON
+    mt.xhr:open("POST", createOrderUrl)
+    mt.xhr:registerScriptHandler(createResponse)
+    mt.xhr:send()
+end
+
+function Charge.deletePreOrder()
+	local function deleteOrderResponse()
+		mt.xhr:unregisterScriptHandler()
+		if mt.xhr.readyState == 4 and (mt.xhr.status >= 200 and mt.xhr.status < 207) then
+			local response = Json.decode(mt.xhr.response)
+			dump(response, "----createResponse")
+			if tonumber(response.code) == 0 then
+				if response.msg == "success" then
+					gt.log("----预订单删除成功")
+					Charge.updateOrderState("IAP_DELETE_ORDER")
+				end
+			elseif tonumber(response.code) == -1 then
+				gt.log("------接口调用失败")
+				Charge.deletePreOrder()
+			end
+		elseif mt.xhr.readyState == 1 and mt.xhr.status == 0 then
+			gt.log("------请求失败")
+			Charge.deletePreOrder()
+		end
+	end
+
+	if not mt.preOrderNo or not mt.purchaseKey then
+		local curOrder = cc.UserDefault:getInstance():getStringForKey("IAP_ORDER")
+		mt.preOrderNo = curOrder.preOrderNo or ""
+		mt.purchaseKey = curOrder.purchaseKey or ""
+	end
+
+	local deleteOrderUrl = string.format("%s?serverCode=%s&userId=%s&preOrderNo=%s&purchaseKey=%s&payWay=%s", gt.deleteOrderUrl, gt.serverCode, gt.playerData.uid, mt.preOrderNo, mt.purchaseKey, gt.sdkBridge.payWay)
+	dump("----delete order url" .. deleteOrderUrl)
+	if not mt.xhr then
+        mt.xhr = cc.XMLHttpRequest:new()
+        mt.xhr.timeout = 10 -- 设置超时时间
+    end
+    mt.xhr.responseType = cc.XMLHTTPREQUEST_RESPONSE_JSON
+    mt.xhr:open("POST", deleteOrderUrl)
+    mt.xhr:registerScriptHandler(deleteOrderResponse)
+    mt.xhr:send()
+end
+
+
+function Charge.openMaskLayer()
+	if not mt.maskLayer then
+		mt.maskLayer = gt.createMaskLayer()
+		local runningscene = cc.Director:getInstance():getRunningScene()
+		runningscene:addChild(mt.maskLayer, 300)
+	end
+end
+
+function Charge.closeMaskLayer()
+	gt.isRecharging = false
+	if mt.maskLayer then
+		mt.maskLayer:removeFromParent()
+		mt.maskLayer = nil
+	end
+end
+
+function Charge.handlePayMessage()
+	local getPayResult = function ()
+		local luaBridge = require("cocos/cocos2d/luaoc")
+		local ok, ret = luaBridge.callStaticMethod("AppController", "getPayResult")
+
+		if string.len(ret) > 0 and mt.checkPayResult then
+			gt.log("_______the ret is .." .. ret)
+
+			mt.checkPayResult = false
+			local response = Json.decode(ret)
+			local event = response.event
+			mt.chargeData = response.chargeData
+
+			gt.log("-----event:" .. event)
+
+			if event == "PAY_SUCCESS" then
+				Charge.updateOrderState("IAP_PAY_SUCCESS")
+				Charge.requestPayFromServer()
+			elseif event == "PURCHASE_UNPURCHASE" then
+				Charge.deletePreOrder()
+				Charge.closeMaskLayer()				
+				require("app/views/NoticeTips"):create("购买失败", "该商品无法购买~", nil, nil, true)
+			elseif event == "PURCHASE_DISABLE" then
+				Charge.deletePreOrder()
+				Charge.closeMaskLayer()
+				require("app/views/NoticeTips"):create("购买失败", "您的设备已关闭内购，请去通用—访问限制中设置", nil, nil, true)
+			elseif event == "PURCHASE_CANCEL" then
+				Charge.deletePreOrder()
+				Charge.closeMaskLayer()
+			end
+			gt.scheduler:unscheduleScriptEntry(mt.payResultHandler)
+			mt.payResultHandler = nil
+
+		end
+	end
+	mt.checkPayResult = true
+	if mt.payResultHandler then
+		gt.scheduler:unscheduleScriptEntry(mt.payResultHandler)
+		mt.payResultHandler = nil
+	end
+	mt.payResultHandler = gt.scheduler:scheduleScriptFunc(getPayResult, 0, false)
+end
+
+--服务器验证
+function Charge.requestPayFromServer()
+	local function payResponse()
+		mt.xhr:unregisterScriptHandler()
+		if mt.xhr.readyState == 4 and (mt.xhr.status >= 200 and mt.xhr.status < 207) then
+			local response = Json.decode(mt.xhr.response)
+			dump(response, "----验证结果")
+			if response.code == 0 then
+				local result = response.data.result 
+				if result == 0 or result == "0" then
+					gt.log("-----购买成功")
+					Charge.closeMaskLayer()
+					gt.dispatchEvent(gt.EventType.PURCHASE_SUCCESS)
+					require("app/views/NoticeTips"):create("购买成功", "购买成功，祝您游戏愉快！", nil, nil, true)
+				else
+					gt.log("-----购买失败")
+					Charge.closeMaskLayer()
+					require("app/views/NoticeTips"):create("购买失败", "购买失败，请联系客服", nil, nil, true)
+				end
+				
+			elseif response.code == "-1" then
+				gt.log("-----购买失败")
+				Charge.closeMaskLayer()
+				require("app/views/NoticeTips"):create("购买失败", "购买失败，请联系客服", nil, nil, true)
+			end
+
+			Charge.completeTransaction()
+			Charge.deletePreOrder()
+		elseif mt.xhr.readyState == 1 and mt.xhr.status == 0 then
+			gt.log("------请求失败：")
+			Charge.requestPayFromServer()
+		end
+	end
+
+	local chargeData = mt.chargeData
+	local limitState = "purchaseLimited"
+	local productId = mt.chargeTable["AppStore"]
+	local unionid = cc.UserDefault:getInstance():getStringForKey( "WX_Uuid")
+	if not unionid or unionid == "" then
+		unionid = "local"
+	end
+
+	local payURL = string.format("%s?receipt=%s&serverCode=%s&userId=%s&unionId=%s&playerType=%s&isPurchaseLimit=%s&productNumber=%s&payWay=%s", gt.payUrl, chargeData, gt.serverCode, gt.playerData.uid, unionid, gt.playerData.playerType or "P", limitState, productId, gt.sdkBridge.payWay)
+	dump("----验证url" .. payURL)
+
+	if not mt.xhr then
+        mt.xhr = cc.XMLHttpRequest:new()
+        -- mt.xhr:retain()
+        mt.xhr.timeout = 10 -- 设置超时时间
+    end
+    mt.xhr.responseType = cc.XMLHTTPREQUEST_RESPONSE_JSON
+    mt.xhr:open("POST", payURL)
+    mt.xhr:registerScriptHandler(payResponse)
+    mt.xhr:send()
+end
+
+function Charge.completeTransaction()
+	local luaBridge = require("cocos/cocos2d/luaoc")
+	luaBridge.callStaticMethod("AppController", "postMessage", {event = "PAY_COMPLETE"})
+
+	local luaBridge = require("cocos/cocos2d/luaoc")
+	luaBridge.callStaticMethod("AppController", "resetPayResult")
+end
+
+--未完成订单状态更新
+function Charge.updateOrderState(state_)
+	gt.log("---------updateOrderState:" .. state_)
+	local curOrder = cc.UserDefault:getInstance():getStringForKey("IAP_ORDER")
+	if not curOrder then
+		curOrder = ""
+	end
+
+	if state_ == "IAP_CREATE_ORDER" then  --创建订单
+		curOrder = Json.encode({itemId = mt.itemid, state = state_, preOrderNo = mt.preOrderNo, purchaseKey = mt.purchaseKey})
+	elseif state_ == "IAP_DELETE_ORDER" then --取消订单
+		curOrder = ""
+	else
+		if state_ == "IAP_PAY_SUCCESS" then  --支付成功尚未验证
+			curOrder = Json.encode({itemId = mt.itemid, state = state_, preOrderNo = mt.preOrderNo, purchaseKey = mt.purchaseKey, receipt = mt.chargeData})
+		elseif state_ == "IAP_ORDER_COMPLETE" then --验证通过，订单完成
+			curOrder = ""
+		end
+	end
+
+	cc.UserDefault:getInstance():setStringForKey("IAP_ORDER", curOrder)
+	cc.UserDefault:getInstance():flush()
+end
+
+function Charge.getItemIdFromProductId(productId)
+	local itemid = nil 
+	local RechargeConfig = gt.RechargeConfig
+	for i = 1, #RechargeConfig do
+		local tmpItem = RechargeConfig[i]
+		if tmpItem["AppStore"] == productId then
+			itemid = i
+			break
+		end
+	end
+
+	return itemid
+end
+
+function Charge.checkUncompleteOrder()
+	local function searchResponse()
+		mt.xhr:unregisterScriptHandler()
+		if mt.xhr.readyState == 4 and (mt.xhr.status >= 200 and mt.xhr.status < 207) then
+			-- Charge.completeTransaction()
+			local response = Json.decode(mt.xhr.response)
+			dump(response, "----查询结果")
+			local result = response.msg 
+			if result == "success" then
+				local luaBridge = require("cocos/cocos2d/luaoc")
+				local ok, ret = luaBridge.callStaticMethod("AppController", "getPayResult")
+				if string.len(ret) == 0 then
+					gt.log("------appstore已完成订单删除，未知原因导致服务器预订单未删除，直接删除")
+					Charge.deletePreOrder()
+					return	
+				else
+					mt.itemid = Charge.getItemIdFromProductId(response.data.productNumber)
+					local RechargeConfig = gt.RechargeConfig
+					mt.chargeTable = RechargeConfig[mt.itemid]
+					Charge.handlePayMessage()	
+				end
+			else
+				local luaBridge = require("cocos/cocos2d/luaoc")
+				local ok, ret = luaBridge.callStaticMethod("AppController", "getPayResult")
+				if string.len(ret) > 0 then
+					gt.log("------服务器已完成订单删除，但苹果订单未删除，直接删除")
+					Charge.completeTransaction()
+					return		
+				end
+			end
+		elseif mt.xhr.readyState == 1 and mt.xhr.status == 0 then
+			gt.log("------请求失败")
+		end
+	end
+
+	if not mt.preOrderNo or not mt.purchaseKey then
+		local curOrder = cc.UserDefault:getInstance():getStringForKey("IAP_ORDER")
+		mt.preOrderNo = curOrder.preOrderNo or ""
+		mt.purchaseKey = curOrder.purchaseKey or ""
+	end
+
+	local searchUrl = string.format("%s?serverCode=%s&userId=%s&preOrderNo=%s&purchaseKey=%s&payWay=%s", gt.searchOrderUrl, gt.serverCode, gt.playerData.uid, mt.preOrderNo, mt.purchaseKey, gt.sdkBridge.payWay)
+	dump("----验证url" .. searchUrl)
+	if not mt.xhr then
+        mt.xhr = cc.XMLHttpRequest:new()
+        mt.xhr.timeout = 10 -- 设置超时时间
+    end
+    mt.xhr.responseType = cc.XMLHTTPREQUEST_RESPONSE_JSON
+    mt.xhr:open("POST", searchUrl)
+    mt.xhr:registerScriptHandler(searchResponse)
+    mt.xhr:send()
+end
+
+return Charge

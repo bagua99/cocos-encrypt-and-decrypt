@@ -1,0 +1,190 @@
+		--region app.views.hongzhong.RoomOptions
+--author: 
+--desc:  红中玩法选择界面
+--
+--endregion
+
+local _mod = ...;  --使用的是这种格式  app/views/...
+_mod= string.gsub(_mod,"%/","%.");
+local config = import('.config',_mod); --> 导入这个文件
+
+local Wanfa_Type = config.Wanfa_Type;
+local Maihu_Type = config.Maihu_Type;
+local Zhama_Type = config.Zhama_Type;
+local defaultConfig = config.defaltConfig;
+
+local userDefault = cc.UserDefault:getInstance()
+local RoomOptions = class("RoomOptions", BaseRoomOptions)
+
+
+function RoomOptions:ctor()
+	self.csbNode = cc.CSLoader:createNode("res/views/guangdong/CreateHongzhong.csb")
+	self:addChild(self.csbNode)
+	self.disColor = cc.c3b(170,170,170)
+	self.super.ctor(self)
+	self:initNode()
+end
+
+
+function RoomOptions:initNode()
+	self:initMaihu()	
+	self:initZhama()
+end
+
+
+--玩法
+function RoomOptions:initWanfa()
+	self.playWanfa = defaultConfig.wanfa;--{1, 2, 3, 4, 5, 6, 7}
+	local wan = Tools.getValue(defaultConfig.WANFA_KEY)
+	if wan ~= "" then
+		wan = string.split(wan, ",")
+		for i = 1, #wan do
+			self.playWanfa[i] = tonumber(wan[i])
+		end
+	end
+
+	-- 设置玩法按钮状态
+	local function _setSelectWanfa(index, check)
+		self.wanfaNodes[index].check:setSelected(check or false)
+		self:refreshCheckOutline(self.wanfaNodes[index].label, check or false)
+		if check then
+			self.playWanfa[index] = index
+		elseif check == false then
+			self.playWanfa[index] = 0
+		end
+	end
+
+	--checkbox 点击事件 
+	local function _checkBoxWanfa( sender, eventType )
+		if eventType == ccui.CheckBoxEventType.selected then
+			_setSelectWanfa(sender.index, true)
+		elseif eventType == ccui.CheckBoxEventType.unselected then
+			 _setSelectWanfa(sender.index, false)			
+		end
+		Tools.saveKeyValue(defaultConfig.WANFA_KEY, table.concat(self.playWanfa, ","));
+	end
+
+	self.wanfaNodes = self:getNodes(self.csbNode, "wanfa", #Wanfa_Type)
+	for i, v in ipairs(self.wanfaNodes) do
+		if self.playWanfa[i] == i then
+			_setSelectWanfa(i, true)
+		else
+			_setSelectWanfa(i)
+		end
+		v.check.index = i
+		v.check:addEventListener(_checkBoxWanfa)
+		v.panel:addClickEventListener(function(  )
+			if v.check:isSelected() then
+				_checkBoxWanfa(v.check, ccui.CheckBoxEventType.unselected)
+			else
+				_checkBoxWanfa(v.check, ccui.CheckBoxEventType.selected)
+			end
+		end)
+	end
+end
+
+
+function RoomOptions:initMaihu()
+
+	self.playMaihu = userDefault:getIntegerForKey(defaultConfig.MAIHU_KEY,defaultConfig.maihu)
+	local function _setSelectMaihu(index, check)
+		self.maihuNodes[index].check:setSelected(check or false)
+		self:refreshCheckOutline(self.maihuNodes[index].label, check or false)
+		if check then
+			self.playMaihu = index
+			Tools.saveKeyValue(defaultConfig.MAIHU_KEY, self.playMaihu)
+		end
+	end
+
+	local function _checkBoxMaihu( sender, eventType )
+		if eventType == ccui.CheckBoxEventType.selected then
+			_setSelectMaihu(self.playMaihu, false)
+			_setSelectMaihu(sender.index, true)	
+		elseif eventType == ccui.CheckBoxEventType.unselected then
+			
+		end
+		
+	end
+
+
+	self.maihuNodes = self:getNodes(self.csbNode, "maihu", #Maihu_Type)
+	for i, v in ipairs(self.maihuNodes) do	
+		if self.playMaihu == i then
+			_setSelectMaihu(i, true)
+		else
+			_setSelectMaihu(i)
+		end
+		
+		v.check.index = i
+		v.check:addEventListener(_checkBoxMaihu)
+		v.panel:addClickEventListener(function(  )
+			if v.check:isSelected() then
+				_checkBoxMaihu(v.check, ccui.CheckBoxEventType.unselected)
+			else
+				_checkBoxMaihu(v.check, ccui.CheckBoxEventType.selected)
+			end
+		end)
+	end
+end
+
+
+function RoomOptions:initZhama()
+
+	self.playeZhama = userDefault:getIntegerForKey(defaultConfig.ZHAMA_KEY,defaultConfig.zhama)
+
+	local function _setSelectZhama(index, check)
+		self.zhamaNodes[index].check:setSelected(check or false)
+		self:refreshCheckOutline(self.zhamaNodes[index].label, check or false)
+		if check then
+			self.playeZhama = index
+			userDefault:setIntegerForKey(defaultConfig.ZHAMA_KEY, index)
+		end
+	end
+
+	local function _checkBoxZhama( sender, eventType )
+		if eventType == ccui.CheckBoxEventType.selected then
+			_setSelectZhama(self.playeZhama, false)
+			_setSelectZhama(sender.index, true)	
+		elseif eventType == ccui.CheckBoxEventType.unselected then
+			sender:setSelected(true)
+		end
+	end
+
+	self.zhamaNodes = self:getNodes(self.csbNode, "zhama", #Zhama_Type)
+	for i, v in ipairs(self.zhamaNodes) do		
+		if self.playeZhama == i then
+			_setSelectZhama(i, true)
+		else
+			_setSelectZhama(i)
+		end
+		
+		v.check.index = i
+		v.check:addEventListener(_checkBoxZhama)
+
+		v.panel:addClickEventListener(function(  )
+			if not v.check:isSelected() then
+				_checkBoxZhama(v.check, ccui.CheckBoxEventType.selected)
+			end
+		end)
+	end
+end
+
+function RoomOptions:getStatu()
+	return config.RoomType;
+end
+
+
+function RoomOptions:getPlayType()
+	local _typeList = {}
+		
+	for k, v in pairs(self.playWanfa) do
+		if v ~= 0 then
+			table.insert(_typeList, Wanfa_Type[v])
+		end
+	end
+	table.insert(_typeList, Maihu_Type[self.playMaihu])
+	table.insert(_typeList, Zhama_Type[self.playeZhama])
+	return _typeList
+end
+
+return RoomOptions

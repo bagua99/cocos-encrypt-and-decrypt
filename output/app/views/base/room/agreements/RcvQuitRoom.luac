@@ -1,0 +1,18 @@
+local RcvQuitRoom = class("RcvQuitRoom", BaseRoomAgreement)
+
+-- 返回大厅 25
+function RcvQuitRoom:ctor()
+	self:registerMsgListener(gt.GC_QUIT_ROOM, self, self.onRcvQuitRoom)
+end
+
+function RcvQuitRoom:onRcvQuitRoom(msgTbl)
+	gt.removeLoadingTips()
+	if msgTbl.m_errorCode == 0 then
+		self.m_scene:backHall()
+	else
+		-- 提示返回大厅失败
+		require("app/views/NoticeTips"):create(gt.getLocationString("LTKey_0007"), gt.getLocationString("LTKey_0045"), nil, nil, true)
+	end
+end
+
+return RcvQuitRoom
