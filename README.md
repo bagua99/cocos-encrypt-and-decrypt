@@ -16,7 +16,7 @@
 2、解压出闲来广东麻将guangdongmj.rar拷贝assets\src_et目录源代码到input目录
 
 3、编辑encrypt.bat,设置签名和密钥 (xxxteaTool.exe input output SQLLiteData mXjv7U5dUl1aMTVV_xianlai 1 .plist;.wav;.mp3;)
-   input是载入目录,output输出目录,SQLLiteData签名,mXjv7U5dUl1aMTVV_xianlai密钥,1解密,.plist;.wav;.mp3;过滤文件
+   input是载入目录,output输出目录,SQLLiteData签名,mXjv7U5dUl1aMTVV_xianlai密钥,1加密,.plist;.wav;.mp3;过滤文件
 
 
 加密解密不限lua文件,适用所有xxxtea加密算法
